@@ -14,6 +14,8 @@ from keras.utils import to_categorical
 from nanonet.features import *
 from nanonet.util import all_nmers
 from keras.optimizers import SGD
+from sklearn.metrics import mean_squared_error
+from sklearn.preprocessing import MinMaxScaler
 
 from timeit import default_timer as timer
 
@@ -54,16 +56,17 @@ def grab_s3_files(bucket_path, s3bool=False):
             if key.name[-5:] == "fast5":
                 file_paths.append(os.path.join("s3://", bucket[0], key.name))
         return file_paths
-
     else:
         onlyfiles = [os.path.join(os.path.abspath(bucket_path), f) for f in os.listdir(bucket_path) if os.path.isfile(os.path.join(os.path.abspath(bucket_path), f)) \
         if f[-5:] == "fast5"]
         # print(onlyfiles)
-
         return onlyfiles
 
-def get_features(fast5_file, kmer_length=5, window=[-1,0,1]):
-    return events_to_features(get_events_ont_mapping(fast5_file, kmer_len=kmer_length), window=window)
+def get_features(fast5_file, kmer_length=5, window=[-1,0,1], events=False):
+    if events == False:
+        return events_to_features(get_events_ont_mapping(fast5_file, kmer_len=kmer_length), window=window)
+    else:
+        return get_events_ont_mapping(fast5_file, kmer_len=kmer_length)
 
 def number_kmers(labels, alphabet='ACGT', length=5, rev_map=False):
     kmers = all_nmers(length, alpha=alphabet)
@@ -87,12 +90,12 @@ def create_training_input(fast5_files):
         np.concatenate((labels, get_labels(fast5)))
     # print(features[0])
     # print(labels[0])
-
-    return features, labels
-
+    return features.reshape(features.shape[0], 1, features.shape[1]), labels
 
 
-def train(X_train, y_train, X_test, y_test):
+
+def simpleLSTM(X_train, y_train, X_test, y_test):
+    """This works"""
     # fix random seed for reproducibility
     np.random.seed(7)
     print(X_train)
@@ -100,26 +103,62 @@ def train(X_train, y_train, X_test, y_test):
     # truncate and pad input sequences
     embedding_vecor_length = 12
     model = Sequential()
-    model.add(Dense(128, input_dim=embedding_vecor_length, use_bias=True, activation='relu',))
-    model.add(LSTM(100, input_shape=(128)))
+    model.add(LSTM(10, batch_input_shape=(1, X_train.shape[1], X_train.shape[2]), stateful=True))
     model.add(Dense(1025, activation='softmax'))
     # model.add(Dense(1, activation='softmax'))
     sgd = SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
-    model.compile(optimizer=sgd,
-              loss='categorical_crossentropy',
-              metrics=['accuracy'])
-    print(y_train[0])
+    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+    # model.add(Dense(1))
+    # model.compile(loss='mean_squared_error', optimizer='adam')
+
+    # print(y_train[0])
     y_train = to_categorical(y_train, num_classes=1025)
-    print(y_train[0])
+    # print(y_train[0])
     y_test = to_categorical(y_test, num_classes=1025)
 
     print(model.summary())
-    model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=1, batch_size=64)
+    for i in range(3):
+        # model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=1, batch_size=1, shuffle=False)
+        model.fit(X_train, y_train, epochs=1, batch_size=1, shuffle=False)
+        model.reset_states()
 
     # Final evaluation of the model
-
-    scores = model.evaluate(X_test, y_test, verbose=0)
+    scores = model.evaluate(X_test, y_test, verbose=0, batch_size=1)
     print("Accuracy: %.2f%%" % (scores[1]*100))
+    return model
+
+def simpleLSTM(X_train, y_train, X_test, y_test):
+    # fix random seed for reproducibility
+    np.random.seed(7)
+    print(X_train)
+    print(y_train)
+    # truncate and pad input sequences
+    embedding_vecor_length = 12
+    model = Sequential()
+    model.add(LSTM(10, batch_input_shape=(1, X_train.shape[1], X_train.shape[2]), stateful=True))
+    model.add(Dense(1025, activation='softmax'))
+    # model.add(Dense(1, activation='softmax'))
+    sgd = SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
+    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+    # model.add(Dense(1))
+    # model.compile(loss='mean_squared_error', optimizer='adam')
+
+    # print(y_train[0])
+    y_train = to_categorical(y_train, num_classes=1025)
+    # print(y_train[0])
+    y_test = to_categorical(y_test, num_classes=1025)
+
+    print(model.summary())
+    for i in range(3):
+        # model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=1, batch_size=1, shuffle=False)
+        model.fit(X_train, y_train, epochs=1, batch_size=1, shuffle=False)
+        model.reset_states()
+
+    # Final evaluation of the model
+    scores = model.evaluate(X_test, y_test, verbose=0, batch_size=1)
+    print("Accuracy: %.2f%%" % (scores[1]*100))
+    return model
+
 
 def train_example():
     # fix random seed for reproducibility
@@ -141,12 +180,22 @@ def train_example():
     model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
     print(model.summary())
     model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=3, batch_size=64)
-
     # Final evaluation of the model
-
     scores = model.evaluate(X_test, y_test, verbose=0)
     print("Accuracy: %.2f%%" % (scores[1]*100))
 
+def scale(train, test):
+    """http://machinelearningmastery.com/time-series-forecasting-long-short-term-memory-network-python/"""
+    # fit scaler
+    scaler = MinMaxScaler(feature_range=(-1, 1))
+    scaler = scaler.fit(train)
+    # transform train
+    train = train.reshape(train.shape[0], train.shape[1])
+    train_scaled = scaler.transform(train)
+    # transform test
+    test = test.reshape(test.shape[0], test.shape[1])
+    test_scaled = scaler.transform(test)
+    return scaler, train_scaled, test_scaled
 
 def main():
     start = timer()
@@ -159,7 +208,16 @@ def main():
     testing_files = grab_s3_files(testing)
     train_features, train_labels = create_training_input(training_files)
     test_features, test_labels = create_training_input(testing_files)
-    train(train_features, train_labels, test_features, test_labels)
+    # print(train_features[0], train_labels[0])
+    # scaler = MinMaxScaler(feature_range=(-1, 1))
+    # scaler = scaler.fit(train_features)
+    # train = train_features.reshape(train_features.shape[0], train_features.shape[1])
+    # train_scaled = scaler.transform(train)
+    # print(train_scaled[0])
+    # train_features = train_features.reshape(train_features.shape[0], 1, train_features.shape[1])
+    # test_features = test_features.reshape(test_features.shape[0], 1, test_features.shape[1])
+
+    simpleLSTM(train_features[:100], train_labels[:100], test_features[:100], test_labels[:100])
 
     # print(features)
     # print(labels)
