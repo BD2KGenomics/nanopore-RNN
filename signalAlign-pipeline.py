@@ -133,14 +133,13 @@ opening.close()
 
 # # 3.c Run buildHdpUtil to build an hdp model
 
-# buildHdpUtil -T ~/nanonet-scott/signalAlign/models/testModelR9_5mer_acegt_template.model -C ~/nanonet-scott/signalAlign/models/testModelR9_5mer_acegt_complement.model -v hdp-build/hdp-temp.hdp -w hdp-build/hdp-comp.hdp -l allAssignments-concatenated/50-ofEachKmer.tsv --verbose --oneD -p 10 -a 5 -n 15000 -I 30 -t 100 -s 50 -e 140 -k 1800 -g 1 -r 1 -j 1 -y 1 -i 1 -u 1
+# buildHdpUtil -T ~/nanonet-scott/signalAlign/models/testModelR9_5mer_acegt_template.model -C ~/nanonet-scott/signalAlign/models/testModelR9_5mer_acegt_complement.model -v hdp-build-temp/hdp-temp.hdp -w hdp-build-comp/hdp-comp.hdp -l allAssignments-concatenated/50-ofEachKmer.tsv --verbose -p 10 -a 5 -n 15000 -I 30 -t 100 -s 50 -e 140 -k 1800 -g 1 -r 1 -j 1 -y 1 -i 1 -u 1
 
 
 # # 4. create a BED file C->X 
 
-# In[97]:
-
 # Bed file C=>X
+# + strand
 ref_edited = open("../GGG/test_sequences/no-N.txt", "r")
 seq_string = ''.join(ref_edited)
 output = open("../GGG/test_sequences/C-to-X.bed", "w")
@@ -148,10 +147,11 @@ for i in range(len(seq_string)):
     if seq_string.startswith('CCAGG', i):
         output.write("gi_ecoli"+ "\t" + np.str(i + 1) + "\t" + "+" + "\t" + "C" +"\t" + "X" + "\n")
     elif seq_string.startswith('CCTGG', i):
-        output.write("gi_ecoli"+ "\t" + np.str(i + 1) + "\t" + "+" + "\t" + "C" +"\t" + "X" + "\n") 
+        output.write("gi_ecoli"+ "\t" + np.str(i + 1) + "\t" + "+" + "\t" + "C" +"\t" + "X" + "\n")
 output.close()
 ref_edited.close()
 
+# - strand
 opening = open("../GGG/test_sequences/C-to-X.bed", "a")
 
 for i in range(len(seq_string)):
@@ -165,4 +165,4 @@ opening.close()
 # # 5. run signalAlign again with
 # ## 1)hdp model, 2) hmm model, 3) c->x bed file
 
-# runSignalAlign -d Path-to-fast5 -r Path-to-reference -o output-location -p Path-to-BED-C-to-X.bed -f full -T ~/nanonet-scott/signalAlign/models/testModelR9_5mer_acegt_template.model -C ~/nanonet-scott/signalAlign/models/testModelR9_5mer_acegt_complement.model -tH path-to-hdpmodel --2d
+# runSignalAlign -d 08_05_16_R9_gEcoli_2D_500 -r E.coli_K12.fasta-modified.fasta -o SA-final/ -p C-to-X.bed -f full -x cytosine2 -T ~/nanonet-scott/signalAlign/models/testModelR9_5mer_acegt_template.model -C ~/nanonet-scott/signalAlign/models/testModelR9_5mer_acegt_complement.model -tH hdp-build-temp/hdp-temp.hdp -cH hdp-build-comp/hdp-comp.hdp -smt=threeStateHdp --2d
