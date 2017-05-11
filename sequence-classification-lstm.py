@@ -16,6 +16,7 @@ from nanonet.util import all_nmers
 from keras.optimizers import SGD
 from sklearn.metrics import mean_squared_error
 from sklearn.preprocessing import MinMaxScaler
+from keras.layers import Bidirectional
 
 from timeit import default_timer as timer
 
@@ -90,11 +91,11 @@ def create_training_input(fast5_files):
         np.concatenate((labels, get_labels(fast5)))
     # print(features[0])
     # print(labels[0])
-    return features.reshape(features.shape[0], 1, features.shape[1]), labels
+    return features, labels
 
 
 
-def simpleLSTM(X_train, y_train, X_test, y_test):
+def simpleLSTM(X_train, y_train, X_test, y_test, epochs=10):
     """This works"""
     # fix random seed for reproducibility
     np.random.seed(7)
@@ -107,7 +108,7 @@ def simpleLSTM(X_train, y_train, X_test, y_test):
     model.add(Dense(1025, activation='softmax'))
     # model.add(Dense(1, activation='softmax'))
     sgd = SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
-    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+    model.compile(optimizer=sgd, loss='categorical_crossentropy', metrics=['accuracy'])
     # model.add(Dense(1))
     # model.compile(loss='mean_squared_error', optimizer='adam')
 
@@ -117,17 +118,21 @@ def simpleLSTM(X_train, y_train, X_test, y_test):
     y_test = to_categorical(y_test, num_classes=1025)
 
     print(model.summary())
-    for i in range(3):
-        # model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=1, batch_size=1, shuffle=False)
-        model.fit(X_train, y_train, epochs=1, batch_size=1, shuffle=False)
-        model.reset_states()
-
+    counter = 0
+    for i in range(epochs):
+        if counter % 10 == 0:
+            model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=1, batch_size=1, shuffle=False)
+        else:
+            model.fit(X_train, y_train, epochs=1, batch_size=1, shuffle=False)
+            model.reset_states()
+        counter += 1
     # Final evaluation of the model
     scores = model.evaluate(X_test, y_test, verbose=0, batch_size=1)
     print("Accuracy: %.2f%%" % (scores[1]*100))
     return model
 
-def simpleLSTM(X_train, y_train, X_test, y_test):
+def BLSTM(X_train, y_train, X_test, y_test, epochs=10):
+    """This works"""
     # fix random seed for reproducibility
     np.random.seed(7)
     print(X_train)
@@ -135,25 +140,31 @@ def simpleLSTM(X_train, y_train, X_test, y_test):
     # truncate and pad input sequences
     embedding_vecor_length = 12
     model = Sequential()
-    model.add(LSTM(10, batch_input_shape=(1, X_train.shape[1], X_train.shape[2]), stateful=True))
+    model.add(Bidirectional(LSTM(128, stateful=True), batch_input_shape=(X_train.shape[0], X_train.shape[1])))
+    model.add(Dense(64, activation='tanh'))
+    model.add(LSTM(128))
+    model.add(Dense(64, activation='tanh'))
     model.add(Dense(1025, activation='softmax'))
     # model.add(Dense(1, activation='softmax'))
     sgd = SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
-    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+    model.compile(optimizer=sgd, loss='categorical_crossentropy', metrics=['accuracy'])
     # model.add(Dense(1))
     # model.compile(loss='mean_squared_error', optimizer='adam')
 
-    # print(y_train[0])
+    print(y_train[0])
     y_train = to_categorical(y_train, num_classes=1025)
-    # print(y_train[0])
+    print(y_train[0])
     y_test = to_categorical(y_test, num_classes=1025)
 
     print(model.summary())
-    for i in range(3):
-        # model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=1, batch_size=1, shuffle=False)
-        model.fit(X_train, y_train, epochs=1, batch_size=1, shuffle=False)
-        model.reset_states()
-
+    counter = 0
+    for i in range(epochs):
+        if counter % 10 == 0:
+            model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=1, batch_size=1, shuffle=False)
+        else:
+            model.fit(X_train, y_train, epochs=1, batch_size=1, shuffle=False)
+            model.reset_states()
+        counter += 1
     # Final evaluation of the model
     scores = model.evaluate(X_test, y_test, verbose=0, batch_size=1)
     print("Accuracy: %.2f%%" % (scores[1]*100))
@@ -200,9 +211,9 @@ def scale(train, test):
 def main():
     start = timer()
 
-    training = "/Users/andrewbailey/personal_git/labWork/davidHaussler/embed_signalalign/two_labeled_files/"
+    training = sys.argv[1]
 
-    testing = "/Users/andrewbailey/personal_git/labWork/davidHaussler/embed_signalalign/two_labeled_files/"
+    testing = sys.argv[2]
 
     training_files = grab_s3_files(training)
     testing_files = grab_s3_files(testing)
@@ -216,8 +227,30 @@ def main():
     # print(train_scaled[0])
     # train_features = train_features.reshape(train_features.shape[0], 1, train_features.shape[1])
     # test_features = test_features.reshape(test_features.shape[0], 1, test_features.shape[1])
+    ### This part works ####
+    # train_features = train_features.reshape(train_features.shape[0], 1, train_features.shape[1])
+    test_features = test_features.reshape(test_features.shape[0], 1, test_features.shape[1])
+    # model = simpleLSTM(train_features, train_labels, test_features, test_labels, epochs=int(sys.argv[3]))
+    ### Testing BLSTM
+    print(test_features.shape)
+    print(test_labels[0])
+    test_labels = to_categorical(test_labels, num_classes=1025)
+    print(test_labels[0])
+    print(test_labels.shape)
+    # model = BLSTM(train_features[:100], train_labels[:100], test_features[:100], test_labels[:100], epochs=int(sys.argv[3]))
+    # with open("model.json", "w") as json_file:
+    #     json_file.write(model.to_json())
+    # model.save_weights("model.h5")
+    # print("Saved model to disk")
 
-    simpleLSTM(train_features[:100], train_labels[:100], test_features[:100], test_labels[:100])
+
+    # json_file = open('model.json', 'r')
+    # loaded_model_json = json_file.read()
+    # json_file.close()
+    # loaded_model = model_from_json(loaded_model_json)
+    # # load weights into new model
+    # loaded_model.load_weights("model.h5")
+    # print("Loaded model from disk")
 
     # print(features)
     # print(labels)
