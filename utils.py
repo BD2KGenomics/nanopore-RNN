@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-This is a place for test scripts and utility functions to be placed
+This is a place for small scripts and utility functions to be placed
 """
 ########################################################################
 # File: utils.py
@@ -85,12 +85,12 @@ def check_events(directory):
 def main():
     """Test the methods"""
     start = timer()
-    file1 = "/Users/andrewbailey/nanopore-RNN/temp/tempFiles_alignment/132de6a8-df1e-468f-848b-abc960e1fc76_Basecall_2D_template.sm.backward.tsv"
+    file1 = """/Users/andrewbailey/nanopore-RNN/temp/tempFiles_alignment/132de6a8-df1e-468f-848b-abc960e1fc76_Basecall_2D_template.sm.backward.tsv"""
     dir1 = "/Users/andrewbailey/nanopore-RNN/temp/tempFiles_alignment/"
-    print(len(grab_s3_files("bailey-nanonet/fast5files2", ext="a")))
+    # print(len(grab_s3_files("bailey-nanonet/fast5files2", ext="a")))
     # check_events(dir1)
-    print(len(list_dir(dir1, ext="a")))
-    # print(find_skipped_events(file1))
+    # print(len(list_dir(dir1, ext="a")))
+    print(find_skipped_events(file1))
     stop = timer()
     print("Running Time = {} seconds".format(stop-start), file=sys.stderr)
 
