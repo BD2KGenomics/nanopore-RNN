@@ -4,6 +4,8 @@
 from __future__ import print_function
 import sys
 import numpy as np
+from utils import grab_s3_files
+
 from keras.datasets import imdb
 from keras.models import Sequential
 from keras.layers import Dense
@@ -17,7 +19,6 @@ from keras.optimizers import SGD
 from sklearn.metrics import mean_squared_error
 from sklearn.preprocessing import MinMaxScaler
 from keras.layers import Bidirectional
-
 from timeit import default_timer as timer
 
 
