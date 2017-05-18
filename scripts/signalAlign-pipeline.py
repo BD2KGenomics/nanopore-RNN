@@ -1,15 +1,17 @@
-# # SignalAlign pipeline
+#!/usr/bin/env python
+"""
+1) Creating a Bed file:
 
-import numpy as np
+2) pre-processing the refrence sequence by removing "\n" and the > line
+
+3) creating a BED file which replaces the second C in CC(A/T)GG motif to E for temp and comp
+
+"""
 import glob
 import random
+import numpy as np
 
 
-# # 1. Creating a Bed file:
-# 
-# 1) pre-processing the refrence sequence by removing "\n" and the > line
-# 
-# 2) creating a BED file which replaces the second C in CC(A/T)GG motif to E for temp and comp
 
 
 
@@ -64,7 +66,7 @@ opening.close()
 
 
 # # 2.a Shell command for running signalAlign on gEoli
-# 
+#
 
 # runSignalAlign -d 08_05_16_R9_gEcoli_2D_500 -r E.coli_K12.fasta-modified.fasta -o 08_05_16_R9_gEcoli_2D_500-op-assign/ -f assignments -T ~/nanonet-scott/signalAlign/models/testModelR9_5mer_acegt_template.model -C ~/nanonet-scott/signalAlign/models/testModelR9_5mer_acegt_complement.model -p C-to-E.bed --2d
 # *note threshold can be set to 0 with this flag -t = 0
@@ -136,7 +138,7 @@ opening.close()
 # buildHdpUtil -T ~/nanonet-scott/signalAlign/models/testModelR9_5mer_acegt_template.model -C ~/nanonet-scott/signalAlign/models/testModelR9_5mer_acegt_complement.model -v hdp-build-temp/hdp-temp.hdp -w hdp-build-comp/hdp-comp.hdp -l allAssignments-concatenated/50-ofEachKmer.tsv --verbose -p 10 -a 5 -n 15000 -I 30 -t 100 -s 50 -e 140 -k 1800 -g 1 -r 1 -j 1 -y 1 -i 1 -u 1
 
 
-# # 4. create a BED file C->X 
+# # 4. create a BED file C->X
 
 # Bed file C=>X
 # + strand

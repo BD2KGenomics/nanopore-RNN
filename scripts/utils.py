@@ -6,7 +6,7 @@ This is a place for small scripts and utility functions
 # File: utils.py
 #  executable: utils.py
 # Purpose: maintain some simple functions as needed
-    # TODO make sure all events are represented from output from signalalign
+#   make sure all events are represented from output from signalalign
 
 #   stderr: errors and status
 #   stdout:
@@ -18,6 +18,7 @@ from timeit import default_timer as timer
 import sys
 import os
 import boto
+from error import PathError
 
 def find_skipped_events(filepath):
     """Find if there are any skipped events in a signalalign file or an event align file"""
@@ -81,16 +82,38 @@ def check_events(directory):
     print("{} files had missing events".format(counter))
     return good_files
 
+def project_folder():
+    """Find the project folder path from any script"""
+    current = os.path.abspath(__file__).split("/")
+    path = '/'.join(current[:current.index("nanopore-RNN")+1])
+    if os.path.exists(path):
+        return path
+    else:
+        PathError("Path to directory does not exist!")
+
+def get_project_file(localpath):
+    """Get the path to an internal project file"""
+    if localpath != "":
+        if not localpath.startswith('/'):
+            localpath = '/'+localpath
+    path = project_folder()+localpath
+    if os.path.isfile(path):
+        return path
+    else:
+        raise PathError("Path to file does not exist!")
+
+
+
 
 def main():
     """Test the methods"""
     start = timer()
-    file1 = """/Users/andrewbailey/nanopore-RNN/temp/tempFiles_alignment/132de6a8-df1e-468f-848b-abc960e1fc76_Basecall_2D_template.sm.backward.tsv"""
-    dir1 = "/Users/andrewbailey/nanopore-RNN/temp/tempFiles_alignment/"
+    # file1 = """/Users/andrewbailey/nanopore-RNN/temp/tempFiles_alignment/132de6a8-df1e-468f-848b-abc960e1fc76_Basecall_2D_template.sm.backward.tsv"""
+    # dir1 = "/Users/andrewbailey/nanopore-RNN/temp/tempFiles_alignment/"
     # print(len(grab_s3_files("bailey-nanonet/fast5files2", ext="a")))
     # check_events(dir1)
     # print(len(list_dir(dir1, ext="a")))
-    print(find_skipped_events(file1))
+    # print(find_skipped_events(file1))
     stop = timer()
     print("Running Time = {} seconds".format(stop-start), file=sys.stderr)
 

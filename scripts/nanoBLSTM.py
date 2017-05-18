@@ -1,5 +1,23 @@
 #!/usr/bin/env python
-# http://machinelearningmastery.com/sequence-classification-lstm-recurrent-neural-networks-python-keras/
+"""
+A testing script for the creation of a neural net
+"""
+########################################################################
+# File:nanoBLSTM.py
+#  executable: nanoBLSTM.py
+# Purpose: build a neural net
+
+
+#   stderr: errors and status
+#   stdout:
+#
+# Author: Andrew Bailey
+# History: 4/19/2017 Created
+# NOTE:
+# I will be using some ideas and code from this blog post
+ #(http://machinelearningmastery.com/sequence-classification-lstm-recurrent-neural-networks-python-keras/)
+########################################################################
+
 
 from __future__ import print_function
 import sys
@@ -13,7 +31,7 @@ from keras.layers import LSTM
 from keras.layers.embeddings import Embedding
 from keras.preprocessing import sequence
 from keras.utils import to_categorical
-from nanonet.features import *
+from nanonet.nanonet.features import *
 from nanonet.util import all_nmers
 from keras.optimizers import SGD
 from sklearn.metrics import mean_squared_error
@@ -262,6 +280,6 @@ def main():
 
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
     main()
     raise SystemExit
