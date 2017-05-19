@@ -15,12 +15,12 @@ import sys
 from collections import defaultdict
 from timeit import default_timer as timer
 import csv
-from utils import get_project_file, project_folder
+import itertools
+from utils import get_project_file, project_folder, sum_to_one
 import h5py
 import numpy as np
 import numpy.lib.recfunctions
-import itertools
-
+from nanonet.features import events_to_features as nanonet_features
 
 def scrape_fast5_events(fast5_file, fields=None):
     """Scrape a fast5 file for event information"""
@@ -28,7 +28,7 @@ def scrape_fast5_events(fast5_file, fields=None):
     # TODO May want to have error checking when grabbing fields
     assert fast5_file.endswith("fast5")
     if fields is None:
-        fields = ["mean", "start", "stdv", "length", "model_state", "move"]
+        fields = ["mean", "start", "stdv", "length"]
     with h5py.File(fast5_file, 'r+') as fast5:
         template = fast5.get("Analyses/Basecall_1D_000/BaseCalled_template/Events").value
     template = np.array(template)
@@ -40,6 +40,7 @@ def scrape_signalalign(tsv1):
     # NOTE Memory constraints and concerns regarding reading in a very long
     #       sequence. Write to file?
     # TODO Needs more testing/ error checking with different signalalign outputs
+    # NOTE if deepnano labels work best we may want to change data structure
     labels = defaultdict(list)
     with open(tsv1) as tsv:
         reader = csv.reader(tsv, delimiter="\t")
@@ -60,10 +61,10 @@ def scrape_signalalign(tsv1):
                 break
     return labels
 
-# TODO make same method?
 def scrape_eventalign(tsv1):
     """Grab all the event kmers from the signal align output and record probability"""
-    data = dict()
+    # TODO make same method?
+    data = list()
     with open(tsv1) as tsv:
         reader = csv.reader(tsv, delimiter="\t")
         for line in reader:
@@ -83,27 +84,36 @@ def prepare_training_file(fast5, tsv, eventalign=False):
     else:
         kmers = scrape_signalalign(tsv)
     events = scrape_fast5_events(fast5)
-    # TODO create these methods
     labels = create_labels(kmers)
-    features = create_features(events)
+    features = create_features(events, deepnano=True)
     final = match_label_with_feature(features, labels)
     return final
 
 def match_label_with_feature(features, labels):
     """Match indexed label with correct event"""
-    # TODO Match indexed label with correct event
+    
     return False
 
-def create_labels(kmers, prob=True, small=False, length=5, alphabet="ATGC"):
+def create_labels(kmers, prob=False, deepnano=False, length=5, alphabet="ATGC"):
     """Create labels from kmers"""
     # create probability vector
-    if prob:
-        labels = create_labels(kmers, alphabet=alphabet, length=length)
-    elif small:
-        labels = create_labels(kmers, alphabet=alphabet, length=length, prob=False)
+    if deepnano:
+        # this method is not built yet
+        create_deepnano_labels(kmers, alphabet=alphabet)
+    else:
+        # create categorical vector with probability or simple binary classification
+        labels = create_kmer_labels(kmers, alphabet=alphabet, length=length, prob=prob)
     return labels
 
-def create_prob_labels(kmers, alphabet="ATGC", length=5, prob=False):
+def create_deepnano_labels(kmers, alphabet="ATGC"):
+    """Create labels like deepnano (XX, NX, NN) where X in {alphabet} and N
+    is an unknown character"""
+    # TODO Still need to know the exact shape of the label vector
+    for index, kmer_list in kmers.items():
+        pass
+    return False
+
+def create_kmer_labels(kmers, alphabet="ATGC", length=5, prob=False):
     """Create probability label vector from dictionary of kmers"""
     # create a dictionary for kmers and the location within a vector
     kmer_dict = getkmer_dict(alphabet=alphabet, length=length)
@@ -128,8 +138,6 @@ def getkmer_dict(alphabet="ATGC", length=5, flip=False):
         # Kmers are keys, index are values
         dictionary = dict(zip(fwd_map, range(len(fwd_map))))
     return dictionary
-
-
 
 def create_prob_vector(kmer_list, kmer_dict, length=5):
     """Create a vector with given alphabet"""
@@ -157,63 +165,49 @@ def create_categorical_vector(kmer_list, kmer_dict, length=5):
     vector[kmer_dict[final_kmer]] = 1
     return vector
 
-
 def create_vector(kmer_list, kmer_dict, length=5, prob=False):
-    """Create a vector with given alphabet"""
+    """Decide which method to use to create a vector with given alphabet from a list of kmers"""
     if prob:
         vector = create_prob_vector(kmer_list, kmer_dict, length=length)
     else:
         vector = create_categorical_vector(kmer_list, kmer_dict, length=length)
     return vector
 
-def sum_to_one(vector):
-    """Make sure a vector sums to one, if not, create diffuse vector"""
-    total = sum(vector)
-    if total != 1:
-        if total > 1:
-            # NOTE Do we want to deal with vectors with probability over 1?
-            pass
-        else:
-            # NOTE this is pretty slow so maybe remove it?
-            leftover = 1 - total
-            amount_to_add = leftover/ (len(vector) - np.count_nonzero(vector))
-            for index, prob in enumerate(vector):
-                if prob == 0:
-                    vector[index] = amount_to_add
-    return vector
-
-
-def create_features(events, basic=True, other_option=False):
+def create_features(events, basic=False, nanonet=False, deepnano=False):
     """Create features from events"""
-    # TODO create features from event numpy array
     if basic:
         features = basic_method(events)
-    elif other_option:
-        features = other_method(events)
+    elif nanonet:
+        features = nanonet_features(events)
+    elif deepnano:
+        features = deepnano_events(events)
     return features
+
+def deepnano_events(events, shift=1, scale=1, scale_sd=1):
+    """Replicating deepnano's feature definition"""
+    new_events = []
+    for event in events:
+        # TODO deal with shift, scale and scale_sd
+        # mean = (event["mean"] - shift) / scale
+        # stdv = event["stdv"] / scale_sd
+        mean = event["mean"]
+        stdv = event["stdv"]
+        length = event["length"]
+        new_events.append(preproc_event(mean, stdv, length))
+    return np.asarray(new_events)
+
+def preproc_event(mean, std, length):
+    "Normalizing event information for deepnano feature generation"
+    mean = mean / 100.0 - 0.66
+    std = std - 1
+    return [mean, mean*mean, std, length]
 
 def basic_method(events):
     """Create features """
-    # TODO create features from event numpy array
-    return False
-
-def other_method(events):
-    """Create features """
-    # TODO create features from event numpy array
-    return False
+    return events
 
 
-def add_field(np_struct_array, descr):
-    """Return a new array that is like the structured numpy array, but has additional fields.
 
-    descr looks like descr=[('test', '<i8')]
-    """
-    if np_struct_array.dtype.fields is None:
-        raise ValueError("Must be a structured numpy array")
-    new = numpy.zeros(np_struct_array.shape, dtype=np_struct_array.dtype.descr + descr)
-    for name in np_struct_array.dtype.names:
-        new[name] = np_struct_array[name]
-    return new
 
 
 def main():
@@ -228,7 +222,10 @@ def main():
 
     print(fast5_file)
     events = scrape_fast5_events(fast5_file)
+    kmers = scrape_signalalign(signalalign_file)
     print(events[0])
+    print(kmers[100])
+
     # np.savez(project_folder()+"/events", events)
     # np.load(project_folder()+"/events.npz")
 
