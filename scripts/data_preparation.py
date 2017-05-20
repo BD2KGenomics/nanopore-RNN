@@ -5,7 +5,8 @@
 #  executable: data_preparation.py
 # Purpose: Give multiple options to create features from event information
 #           and create multiple ways to create labels
-# TODO Implement scraping into signalAlign C code so we can just ouptut what #      we need directly from signalAlign
+# TODO Implement scraping into signalAlign C code so we can just ouptut what
+#      we need directly from signalAlign
 # Author: Andrew Bailey
 # History: 05/17/17 Created
 ########################################################################
@@ -40,8 +41,9 @@ def scrape_signalalign(tsv1):
     # NOTE Memory constraints and concerns regarding reading in a very long
     #       sequence. Write to file?
     # TODO Needs more testing/ error checking with different signalalign outputs
+    # NOTE This takes way too long to scrape the data
     # NOTE if deepnano labels work best we may want to change data structure
-    labels = defaultdict(list)
+    kmers = defaultdict(list)
     with open(tsv1) as tsv:
         reader = csv.reader(tsv, delimiter="\t")
         # NOTE Hardcoded column information from signalalign
@@ -54,12 +56,11 @@ def scrape_signalalign(tsv1):
             strand = line[4]
             event_index = int(line[5])
             prob = float(line[12])
-            if prob != 0:
-                labels[event_index].append((kmer, prob))
+            kmers[event_index].append((kmer, prob))
             # only grab template strand
             if strand == "c":
                 break
-    return labels
+    return kmers
 
 def scrape_eventalign(tsv1):
     """Grab all the event kmers from the signal align output and record probability"""
@@ -91,8 +92,17 @@ def prepare_training_file(fast5, tsv, eventalign=False):
 
 def match_label_with_feature(features, labels):
     """Match indexed label with correct event"""
-    
-    return False
+    final_matrix = []
+    prev_counter = -1
+    for index, label in sorted(labels.items()):
+        counter = index
+        if prev_counter != -1:
+            if counter != prev_counter+1:
+                # TODO Create error message and break program
+                print("This should be an error, Raise error message?", file=sys.stderr)
+        final_matrix.append([features[index], label])
+        prev_counter = index
+    return final_matrix
 
 def create_labels(kmers, prob=False, deepnano=False, length=5, alphabet="ATGC"):
     """Create labels from kmers"""
@@ -158,7 +168,7 @@ def create_categorical_vector(kmer_list, kmer_dict, length=5):
     # check all kmers for most probable
     for kmer in kmer_list:
         trimmed_kmer = kmer[0][-length:]
-        if kmer[1] > highest:
+        if kmer[1] >= highest:
             highest = kmer[1]
             final_kmer = trimmed_kmer
     # put most probable into vector
@@ -178,7 +188,7 @@ def create_features(events, basic=False, nanonet=False, deepnano=False):
     if basic:
         features = basic_method(events)
     elif nanonet:
-        features = nanonet_features(events)
+        features = nanonet_features(events).tolist()
     elif deepnano:
         features = deepnano_events(events)
     return features
@@ -194,7 +204,7 @@ def deepnano_events(events, shift=1, scale=1, scale_sd=1):
         stdv = event["stdv"]
         length = event["length"]
         new_events.append(preproc_event(mean, stdv, length))
-    return np.asarray(new_events)
+    return new_events
 
 def preproc_event(mean, std, length):
     "Normalizing event information for deepnano feature generation"
@@ -220,14 +230,18 @@ def main():
     signalalign_file = \
     get_project_file("/temp/tempFiles_alignment/132de6a8-df1e-468f-848b-abc960e1fc76_Basecall_2D_template.sm.backward.tsv")
 
-    print(fast5_file)
-    events = scrape_fast5_events(fast5_file)
-    kmers = scrape_signalalign(signalalign_file)
-    print(events[0])
-    print(kmers[100])
+    # print(fast5_file)
+    # events = scrape_fast5_events(fast5_file)
+    # kmers = scrape_signalalign(signalalign_file)
+    # print(events[0])
+    # print(kmers[100])
 
-    # np.savez(project_folder()+"/events", events)
-    # np.load(project_folder()+"/events.npz")
+    training_file = prepare_training_file(fast5_file, signalalign_file)
+    # TODO Make this part work!
+    # TODO Make function to create a file from an array
+    # TODO make a function to bundule this stuff
+    np.savez(project_folder()+"/events", training_file)
+    np.load(project_folder()+"/events.npz")
 
     stop = timer()
     print("Running Time = {} seconds".format(stop-start), file=sys.stderr)

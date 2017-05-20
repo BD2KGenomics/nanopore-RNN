@@ -21,8 +21,8 @@ import boto
 from error import PathError
 import numpy as np
 
-def find_skipped_events(filepath):
-    """Find if there are any skipped events in a signalalign file or an event align file"""
+def no_skipped_events(filepath):
+    """Find if there are any skipped events in a signalalign file"""
     # this is quite slow but it works
     set1 = set()
     with open(filepath, 'r') as file_handle:
@@ -32,6 +32,7 @@ def find_skipped_events(filepath):
 
 def check_sequential(list_of_integers):
     """Make sure there are no gaps in a list of integers"""
+    # returns true if there are no gaps
     return bool(sorted(list_of_integers) == list(range(min(list_of_integers),\
      max(list_of_integers)+1)))
 
@@ -75,7 +76,7 @@ def check_events(directory):
     good_files = []
     # make sure each file has all events
     for file1 in list_dir(directory, ext="tsv"):
-        if find_skipped_events(file1):
+        if no_skipped_events(file1):
             good_files.append(file1)
         else:
             counter += 1
