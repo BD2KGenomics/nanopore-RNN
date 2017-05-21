@@ -7,6 +7,7 @@
 #           and create multiple ways to create labels
 # TODO Implement scraping into signalAlign C code so we can just ouptut what
 #      we need directly from signalAlign
+# TODO Create updates on when things are being completed
 # Author: Andrew Bailey
 # History: 05/17/17 Created
 ########################################################################
@@ -17,6 +18,7 @@ from collections import defaultdict
 from timeit import default_timer as timer
 import csv
 import itertools
+import os
 from utils import get_project_file, project_folder, sum_to_one
 import h5py
 import numpy as np
@@ -216,9 +218,14 @@ def basic_method(events):
     """Create features """
     return events
 
-
-
-
+def save_training_file(fast5_file, signalalign_file, output_name, output_dir=project_folder()):
+    #TODO Pass arguments through using **kwargs 
+    """Create training file and save it as an .npy file"""
+    assert os.path.isdir(output_dir)
+    output_file = os.path.join(output_dir, output_name)
+    training_file = prepare_training_file(fast5_file, signalalign_file)
+    np.save(output_file, training_file)
+    return output_file
 
 def main():
     """Mainly used for testing the methods within data_preparation.py"""
@@ -230,18 +237,10 @@ def main():
     signalalign_file = \
     get_project_file("/temp/tempFiles_alignment/132de6a8-df1e-468f-848b-abc960e1fc76_Basecall_2D_template.sm.backward.tsv")
 
-    # print(fast5_file)
-    # events = scrape_fast5_events(fast5_file)
-    # kmers = scrape_signalalign(signalalign_file)
-    # print(events[0])
-    # print(kmers[100])
-
-    training_file = prepare_training_file(fast5_file, signalalign_file)
-    # TODO Make this part work!
-    # TODO Make function to create a file from an array
-    # TODO make a function to bundule this stuff
-    np.savez(project_folder()+"/events", training_file)
-    np.load(project_folder()+"/events.npz")
+    save_training_file(fast5_file, signalalign_file, "testing")
+    # training_file = prepare_training_file(fast5_file, signalalign_file)
+    # np.save(project_folder()+"/events", training_file)
+    # np.load(project_folder()+"/events.npy")
 
     stop = timer()
     print("Running Time = {} seconds".format(stop-start), file=sys.stderr)
