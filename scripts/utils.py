@@ -20,6 +20,10 @@ import os
 import boto
 from error import PathError
 
+import numpy as np
+from Bio.Seq import Seq
+from Bio.Alphabet import generic_dna
+
 def find_skipped_events(filepath):
     """Find if there are any skipped events in a signalalign file or an event align file"""
     # this is quite slow but it works
@@ -101,6 +105,54 @@ def get_project_file(localpath):
         return path
     else:
         raise PathError("Path to file does not exist!")
+#signalAlign
+def get_refrence_andEdit(referencePath, reference_Modified_Path):
+    '''Get fast5 file and remove \n from the ends'''
+    with open(reference_Modified_Path, 'w') as outfile, open(referencePath, 'r') as infile:
+        for line in infile:
+            if ">" in line:
+                outfile.write(line)
+            else:
+                T = line.rstrip()
+                outfile.write(T)
+
+def get_motif_complement(motif):
+    '''get the complement of a motif'''
+    dna = Seq(motif)
+    motif_complement = str(dna.complement())
+    return motif_complement
+
+def make_Bed_file (reference_modified_Path, BED_file_path, motif1,modified_motif1,modified_motif1_comp, alphabet, motif2 = False, modified_motif2 = False, modified_motif2_comp = False):
+    sequence_list = ""
+    seq_name = ""
+    string1 = motif1[[i for i in range(len(motif1)) if motif1[i] != modified_motif1[i]][0]]
+    motif1_comp = get_motif_complement(motif1)
+    with open(reference_modified_Path, 'r') as infile:
+        for line in infile:
+            if ">" in line:
+                 seq_name = seq_name + line.rsplit()[0].split(">")[1]
+            else:
+                sequence_list = sequence_list + line
+    with open(BED_file_path, "w") as output:
+        motif1_replaced = sequence_list.replace(motif1, modified_motif1)
+        motif1_position = [m.start() for m in re.finditer('M', motif1_replaced)]
+        motif1_comp_replaced = sequence_list.replace(motif1_comp, modified_motif1_comp)
+        motif1_comp_position = [m.start() for m in re.finditer('M', motif1_comp_replaced)]
+        if motif2 == False:
+            for i in motif1_position:
+                output.write(seq_name + "\t" + np.str(i) + "\t" + "+" + "\t" + string1 +"\t" + alphabet + "\n")
+            for i in motif1_comp_position:
+                output.write(seq_name + "\t" + np.str(i) + "\t" + "-" + "\t" + string1 +"\t" + alphabet + "\n")
+        elif motif2 != False:
+            motif2_comp = get_motif_complement(motif2)
+            motif_1and2_replaced = motif1_replaced.replace(motif2, modified_motif2)
+            motif_1and2_positions = [m.start() for m in re.finditer('M', motif_1and2_replaced)]
+            motif_1and2_comp_replaced = motif1_comp_replaced.replace(motif2_comp, modified_motif2_comp)
+            motif_1and2_comp_positions = [m.start() for m in re.finditer('M', motif_1and2_comp_replaced)]
+            for i in motif_1and2_positions:
+                output.write(seq_name + "\t" + np.str(i) + "\t" + "+" + "\t" + string1 +"\t" + alphabet + "\n")
+            for i in motif_1and2_comp_positions:
+                output.write(seq_name + "\t" + np.str(i) + "\t" + "-" + "\t" + string1 +"\t" + "E" + "\n")
 
 
 
