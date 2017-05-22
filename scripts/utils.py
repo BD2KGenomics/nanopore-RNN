@@ -23,6 +23,8 @@ from error import PathError
 import numpy as np
 from Bio.Seq import Seq
 from Bio.Alphabet import generic_dna
+import glob
+import random
 
 def find_skipped_events(filepath):
     """Find if there are any skipped events in a signalalign file or an event align file"""
@@ -154,6 +156,39 @@ def make_Bed_file (reference_modified_Path, BED_file_path, motif1,modified_motif
             for i in motif_1and2_comp_positions:
                 output.write(seq_name + "\t" + np.str(i) + "\t" + "-" + "\t" + string1 +"\t" + "E" + "\n")
 
+## Concatenate control and experimental assignments
+def concatenate_assignments (assignments_path1, assignments_path2, output):
+    '''concatenates control and experimental assignments'''
+    read_files = glob.glob(assignments_path1 + "/*.assignments") + glob.glob(assignments_path2 + "/*.assignments")
+    with open(output, "w") as outfile:
+        for f in read_files:
+            with open(f, "rb") as infile:
+                outfile.write(infile.read())
+
+## for each kmer in assignmnets get 50 assignment or less
+def get_sample_from_assignments(concatenated_assignmnets_path, sampled_assignments):
+    kmerDict = dict()
+    with open(concatenated_assignmnets_path, "r") as infile:
+        for i in infile:
+            key = i.split("\t")[0]
+            value = "\t".join(i.split("\t")[1:])
+            if kmerDict.has_key(key):
+                kmerDict[key].append(value)
+            else:
+                kmerDict[key] = [value]
+    with open(sampled_assignments, "w") as outfile:
+        for key, value in kmerDict.iteritems():
+            mylist = kmerDict[key]
+            if len(mylist) >= 50:
+                rand_smpl = [mylist[i] for i in random.sample(range(len(mylist)),50)]
+                for g in rand_smpl:
+                    string = ''.join(g)
+                    outfile.write(key + "\t" + string)
+            elif len(mylist) < 50:
+                rand_smpl = [mylist[i] for i in random.sample(range(len(mylist)),len(mylist))]
+                for g in rand_smpl:
+                    string = ''.join(g)
+                    outfile.write(key + "\t" + string)
 
 
 
