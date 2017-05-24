@@ -219,7 +219,7 @@ def basic_method(events):
     return events
 
 def save_training_file(fast5_file, signalalign_file, output_name, output_dir=project_folder()):
-    #TODO Pass arguments through using **kwargs 
+    #TODO Pass arguments through using **kwargs
     """Create training file and save it as an .npy file"""
     assert os.path.isdir(output_dir)
     output_file = os.path.join(output_dir, output_name)
