@@ -11,7 +11,7 @@ This is a place for small scripts and utility functions
 #   stderr: errors and status
 #   stdout:
 #
-# Author: Andrew Bailey
+# Author: Andrew Bailey, Rojin Safavi
 # History: 5/16/2017 Created
 from __future__ import print_function
 from timeit import default_timer as timer
@@ -110,6 +110,7 @@ def get_project_file(localpath):
         return path
     else:
         raise PathError("Path to file does not exist!")
+
 #signalAlign
 def get_refrence_andEdit(referencePath, reference_Modified_Path):
     '''Get fast5 file and remove \n from the ends'''
@@ -169,7 +170,7 @@ def concatenate_assignments (assignments_path1, assignments_path2, output):
                 outfile.write(infile.read())
 
 ## for each kmer in assignmnets get 50 assignment or less
-def get_sample_from_assignments(concatenated_assignmnets_path, sampled_assignments):
+def get_sample_assignments(concatenated_assignmnets_path, sampled_assignments):
     kmerDict = dict()
     with open(concatenated_assignmnets_path, "r") as infile:
         for i in infile:
