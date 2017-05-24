@@ -19,6 +19,8 @@ import sys
 import os
 import boto
 from error import PathError
+import numpy as np
+
 
 import numpy as np
 from Bio.Seq import Seq
@@ -26,8 +28,8 @@ from Bio.Alphabet import generic_dna
 import glob
 import random
 
-def find_skipped_events(filepath):
-    """Find if there are any skipped events in a signalalign file or an event align file"""
+def no_skipped_events(filepath):
+    """Find if there are any skipped events in a signalalign file"""
     # this is quite slow but it works
     set1 = set()
     with open(filepath, 'r') as file_handle:
@@ -37,6 +39,7 @@ def find_skipped_events(filepath):
 
 def check_sequential(list_of_integers):
     """Make sure there are no gaps in a list of integers"""
+    # returns true if there are no gaps
     return bool(sorted(list_of_integers) == list(range(min(list_of_integers),\
      max(list_of_integers)+1)))
 
@@ -80,7 +83,7 @@ def check_events(directory):
     good_files = []
     # make sure each file has all events
     for file1 in list_dir(directory, ext="tsv"):
-        if find_skipped_events(file1):
+        if no_skipped_events(file1):
             good_files.append(file1)
         else:
             counter += 1
@@ -190,7 +193,34 @@ def get_sample_from_assignments(concatenated_assignmnets_path, sampled_assignmen
                     string = ''.join(g)
                     outfile.write(key + "\t" + string)
 
+                
+def sum_to_one(vector):
+    """Make sure a vector sums to one, if not, create diffuse vector"""
+    total = sum(vector)
+    if total != 1:
+        if total > 1:
+            # NOTE Do we want to deal with vectors with probability over 1?
+            pass
+        else:
+            # NOTE this is pretty slow so maybe remove it?
+            leftover = 1 - total
+            amount_to_add = leftover/ (len(vector) - np.count_nonzero(vector))
+            for index, prob in enumerate(vector):
+                if prob == 0:
+                    vector[index] = amount_to_add
+    return vector
 
+
+def add_field(np_struct_array, descr):
+    """Return a new array that is like the structured numpy array, but has additional fields.
+    descr looks like descr=[('test', '<i8')]
+    """
+    if np_struct_array.dtype.fields is None:
+        raise ValueError("Must be a structured numpy array")
+    new = np.zeros(np_struct_array.shape, dtype=np_struct_array.dtype.descr + descr)
+    for name in np_struct_array.dtype.names:
+        new[name] = np_struct_array[name]
+    return new
 
 def main():
     """Test the methods"""
