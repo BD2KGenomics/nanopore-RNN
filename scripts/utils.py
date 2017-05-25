@@ -128,7 +128,10 @@ def get_motif_complement(motif):
     motif_complement = str(dna.complement())
     return motif_complement
 
-def make_Bed_file (reference_modified_Path, BED_file_path, motif1,modified_motif1,modified_motif1_comp, alphabet, motif2 = False, modified_motif2 = False, modified_motif2_comp = False):
+def make_Bed_file (reference_modified_Path, BED_file_path, motif1,modified_motif1,modified_motif1_comp, character, motif2 = False, modified_motif2 = False, modified_motif2_comp = False):
+'''add **kwarg to allow more motif
+alphabet can either be E or X
+'''
     sequence_list = ""
     seq_name = ""
     string1 = motif1[[i for i in range(len(motif1)) if motif1[i] != modified_motif1[i]][0]]
@@ -146,9 +149,9 @@ def make_Bed_file (reference_modified_Path, BED_file_path, motif1,modified_motif
         motif1_comp_position = [m.start() for m in re.finditer('M', motif1_comp_replaced)]
         if motif2 == False:
             for i in motif1_position:
-                output.write(seq_name + "\t" + np.str(i) + "\t" + "+" + "\t" + string1 +"\t" + alphabet + "\n")
+                output.write(seq_name + "\t" + np.str(i) + "\t" + "+" + "\t" + string1 +"\t" + character + "\n")
             for i in motif1_comp_position:
-                output.write(seq_name + "\t" + np.str(i) + "\t" + "-" + "\t" + string1 +"\t" + alphabet + "\n")
+                output.write(seq_name + "\t" + np.str(i) + "\t" + "-" + "\t" + string1 +"\t" + character + "\n")
         elif motif2 != False:
             motif2_comp = get_motif_complement(motif2)
             motif_1and2_replaced = motif1_replaced.replace(motif2, modified_motif2)
@@ -156,9 +159,9 @@ def make_Bed_file (reference_modified_Path, BED_file_path, motif1,modified_motif
             motif_1and2_comp_replaced = motif1_comp_replaced.replace(motif2_comp, modified_motif2_comp)
             motif_1and2_comp_positions = [m.start() for m in re.finditer('M', motif_1and2_comp_replaced)]
             for i in motif_1and2_positions:
-                output.write(seq_name + "\t" + np.str(i) + "\t" + "+" + "\t" + string1 +"\t" + alphabet + "\n")
+                output.write(seq_name + "\t" + np.str(i) + "\t" + "+" + "\t" + string1 +"\t" + character + "\n")
             for i in motif_1and2_comp_positions:
-                output.write(seq_name + "\t" + np.str(i) + "\t" + "-" + "\t" + string1 +"\t" + "E" + "\n")
+                output.write(seq_name + "\t" + np.str(i) + "\t" + "-" + "\t" + string1 +"\t" + character + "\n")
 
 ## Concatenate control and experimental assignments
 def concatenate_assignments (assignments_path1, assignments_path2, output):
@@ -194,7 +197,7 @@ def get_sample_assignments(concatenated_assignmnets_path, sampled_assignments):
                     string = ''.join(g)
                     outfile.write(key + "\t" + string)
 
-                
+
 def sum_to_one(vector):
     """Make sure a vector sums to one, if not, create diffuse vector"""
     total = sum(vector)
