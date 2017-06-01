@@ -264,7 +264,6 @@ class Data:
         batch = self.queue.get(wait)
         features = batch[:, 0]
         labels = batch[:, 1]
-        features = np.asanyarray
         features = np.asarray([np.asarray(features[n]) for n in range(len(features))])
         labels = np.asarray([np.asarray(labels[n]) for n in range(len(labels))])
         return features, labels
