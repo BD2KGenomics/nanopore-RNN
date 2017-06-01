@@ -12,7 +12,7 @@ This is a place for small scripts and utility functions
 #   stdout:
 #
 # Author: Rojin Safavi
-# History: 5/16/2017 Created
+# History: 06/01/2017 Created
 import sys
 import os
 import numpy as np
@@ -62,13 +62,14 @@ def make_bed_file(ref_modified_path, bed_path, char, *args):
         modified_nuc = replace_nucleotide(motif, modified)
         seq_str_fwd = seq_str_fwd.replace(motif, modified)
         seq_str_bwd = seq_str_bwd.replace(motif_comp, modified_comp)
-        with open(bed_path, "a") as outfile:
-            nuc_positions = nuc_position(seq_str_fwd)
-            for pos in nuc_positions:
-                outfile.write(seq_name + "\t" + np.str(pos) + "\t" + "+" + "\t" + modified_nuc +"\t" + char + "\n")
-            nuc_positions = nuc_position(seq_str_bwd)
-            for pos in nuc_positions:
-                outfile.write(seq_name + "\t" + np.str(pos) + "\t" + "-" + "\t" + modified_nuc +"\t" + char + "\n")
+    with open(bed_path, "a") as outfile:
+        nuc_positions = nuc_position(seq_str_fwd)
+        for pos in nuc_positions:
+            outfile.write(seq_name + "\t" + np.str(pos) + "\t" + "+" + "\t" + modified_nuc +"\t" + char + "\n")
+        nuc_positions = nuc_position(seq_str_bwd)
+        for pos in nuc_positions:
+            outfile.write(seq_name + "\t" + np.str(pos) + "\t" + "-" + "\t" + modified_nuc +"\t" + char + "\n")
+
 ## Concatenate control and experimental assignments
 def concat_assignments (assignments_path1, assignments_path2, output):
     '''concatenates control and experimental assignments'''
