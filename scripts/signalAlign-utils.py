@@ -22,6 +22,16 @@ import glob
 import random
 import re
 
+def get_refrence_andEdit(referencePath, reference_Modified_Path):
+    '''Get fast5 file and remove \n from the ends'''
+    with open(reference_Modified_Path, 'w') as outfile, open(referencePath, 'r') as infile:
+        for line in infile:
+            if ">" in line:
+                outfile.write(line)
+            else:
+                T = line.rstrip()
+                outfile.write(T)
+
 def get_motif_complement(motif):
     '''get the complement of a motif, cuurrently works with A,T,C,G,E,X,O
     ex: the complement of ATCO is TAGO'''
@@ -31,7 +41,7 @@ def get_motif_complement(motif):
 
 def get_motif_REVcomplement(motif):
     '''get the complement of a motif, cuurrently works with A,T,C,G,E,X,O
-    ex: the complement of ATCO is TAGO'''
+    ex: the REVcomplement of ATCO is OGAT'''
     dna = Seq(motif)
     motif_REVcomplement = str(dna.reverse_complement())
     return motif_REVcomplement
@@ -47,15 +57,24 @@ def store_seq_and_name(reference_modified_Path):
                 sequence_list = sequence_list + line
     return seq_name,sequence_list
 
+
 def replace_nucleotide(motif, modified):
+    '''compares motifs and modifed motif and
+        tells you what nucleotide is modified
+        ex: (“CCAGG”,“CFAGG”) => C'''
     modified_nuc = motif[[x for x in range(len(motif)) if motif[x] != modified[x]][0]]
     return modified_nuc
 
 def nuc_position(seq_str):
+    '''Finds all positions of specific character
+        withing sequence'''
     motif_position = [m.start() for m in re.finditer('F', seq_str)]
     return motif_position
 
 def make_bed_file(ref_modified_path, bed_path, char, *args):
+    ''' NOTE: USE "F" CHAR TO DISTINGUISH MODIFIED POSITION WITHIN MOTIF
+        NOTE: CHAR can be E or X
+        ex: x : args = [(“CCAGG”,“CFAGG”), (“CCTGG”,“CFTGG”)]'''
     seq_str_fwd = store_seq_and_name(ref_modified_path)[1]
     seq_name = store_seq_and_name(ref_modified_path)[0]
     seq_str_bwd = store_seq_and_name(ref_modified_path)[1]
@@ -64,7 +83,6 @@ def make_bed_file(ref_modified_path, bed_path, char, *args):
         modified = pair[1]
         motif_comp = get_motif_REVcomplement(motif)
         modified_comp = get_motif_REVcomplement(modified)
-        '''outputs the nucleotide that is been modified, it can be A,T,C, or G'''
         modified_nuc = replace_nucleotide(motif, modified)
         seq_str_fwd = seq_str_fwd.replace(motif, modified)
         seq_str_bwd = seq_str_bwd.replace(motif_comp, modified_comp)
@@ -77,7 +95,7 @@ def make_bed_file(ref_modified_path, bed_path, char, *args):
             outfile.write(seq_name + "\t" + np.str(pos) + "\t" + "-" + "\t" + modified_nuc +"\t" + char + "\n")
 
 ## Concatenate control and experimental assignments
-## concatenate non methylated and methylated assignments
+## ex : concatenation of non methylated and methylated assignments
 def concat_assignments (assignments_path1, assignments_path2, output):
     '''concatenates control and experimental assignments'''
     read_files = glob.glob(assignments_path1 + "/*.assignments") + glob.glob(assignments_path2 + "/*.assignments")
