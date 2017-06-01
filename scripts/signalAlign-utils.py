@@ -22,13 +22,19 @@ import glob
 import random
 import re
 
-
 def get_motif_complement(motif):
     '''get the complement of a motif, cuurrently works with A,T,C,G,E,X,O
     ex: the complement of ATCO is TAGO'''
     dna = Seq(motif)
     motif_complement = str(dna.complement())
     return motif_complement
+
+def get_motif_REVcomplement(motif):
+    '''get the complement of a motif, cuurrently works with A,T,C,G,E,X,O
+    ex: the complement of ATCO is TAGO'''
+    dna = Seq(motif)
+    motif_REVcomplement = str(dna.reverse_complement())
+    return motif_REVcomplement
 
 def store_seq_and_name(reference_modified_Path):
     sequence_list = ""
@@ -56,8 +62,8 @@ def make_bed_file(ref_modified_path, bed_path, char, *args):
     for pair in args:
         motif = pair[0]
         modified = pair[1]
-        motif_comp = get_motif_complement(motif)
-        modified_comp = get_motif_complement(modified)
+        motif_comp = get_motif_REVcomplement(motif)
+        modified_comp = get_motif_REVcomplement(modified)
         '''outputs the nucleotide that is been modified, it can be A,T,C, or G'''
         modified_nuc = replace_nucleotide(motif, modified)
         seq_str_fwd = seq_str_fwd.replace(motif, modified)
@@ -71,6 +77,7 @@ def make_bed_file(ref_modified_path, bed_path, char, *args):
             outfile.write(seq_name + "\t" + np.str(pos) + "\t" + "-" + "\t" + modified_nuc +"\t" + char + "\n")
 
 ## Concatenate control and experimental assignments
+## concatenate non methylated and methylated assignments
 def concat_assignments (assignments_path1, assignments_path2, output):
     '''concatenates control and experimental assignments'''
     read_files = glob.glob(assignments_path1 + "/*.assignments") + glob.glob(assignments_path2 + "/*.assignments")
