@@ -11,15 +11,24 @@ This is a place for small scripts and utility functions
 #   stderr: errors and status
 #   stdout:
 #
-# Author: Andrew Bailey
+# Author: Andrew Bailey, Rojin Safavi
 # History: 5/16/2017 Created
 from __future__ import print_function
 from timeit import default_timer as timer
 import sys
 import os
+import re
+import glob
+import random
 import boto
 from error import PathError
 import numpy as np
+from Bio.Seq import Seq
+from multiprocessing import Process, Queue
+
+# from Bio.Alphabet import generic_dna
+#TODO create debug function and verbose options
+
 
 def no_skipped_events(filepath):
     """Find if there are any skipped events in a signalalign file"""
@@ -58,7 +67,7 @@ def grab_s3_files(bucket_path, ext=""):
     return file_paths
 
 def list_dir(path, ext=""):
-    """get all fast5 file paths from local directory"""
+    """get all file paths from local directory with extention"""
     if ext == "":
         onlyfiles = [os.path.join(os.path.abspath(path), f) for f in \
         os.listdir(path) if \
@@ -98,11 +107,91 @@ def get_project_file(localpath):
     if localpath != "":
         if not localpath.startswith('/'):
             localpath = '/'+localpath
-    path = project_folder()+localpath
+    path = os.path.join(project_folder()+localpath)
     if os.path.isfile(path):
         return path
     else:
         raise PathError("Path to file does not exist!")
+
+def testfast5():
+    """Get the path to one of our test fast5 files"""
+    return get_project_file("test-files/r9/canonical/AlexisLucattini_20160918_FNFAD24297_MN19582_sequencing_run_E_COLI_NON_MTHYLTD_R9_77950_ch146_read1209_strand1.fast5")
+
+#signalAlign
+def remove_fasta_newlines(reference_path, reference_modified_path):
+    """Get fasta file and remove \n from the ends"""
+    with open(reference_modified_path, 'w') as outfile, open(reference_path, 'r') as infile:
+        for line in infile:
+            if ">" in line:
+                outfile.write(line)
+            else:
+                newline = line.rstrip()
+                outfile.write(newline)
+
+def get_motif_complement(motif):
+    """get the complement of a motif"""
+    dna = Seq(motif)
+    motif_complement = str(dna.complement())
+    return motif_complement
+
+def make_bed_file(reference_modified_path, bed_file_path, motif1, modified_motif1, modified_motif1_comp, replace):
+    """This method does something"""
+    sequence_list = str()
+    seq_name = str()
+    string1 = motif1[[i for i in range(len(motif1)) if motif1[i] != modified_motif1[i]][0]]
+    print(string1)
+    motif1_comp = get_motif_complement(motif1)
+    with open(reference_modified_path, 'r') as infile:
+        for line in infile:
+            if ">" in line:
+                seq_name = seq_name + line.rsplit()[0].split(">")[1]
+            else:
+                sequence_list = sequence_list + line
+    with open(bed_file_path, "w") as output:
+        motif1_replaced = sequence_list.replace(motif1, modified_motif1)
+        motif1_position = [m.start() for m in re.finditer(replace, motif1_replaced)]
+        motif1_comp_replaced = sequence_list.replace(replace, modified_motif1_comp)
+        motif1_comp_position = [m.start() for m in re.finditer(replace, motif1_comp_replaced)]
+        for i in motif1_position:
+            output.write(seq_name + "\t" + np.str(i) + "\t" + "+" + "\t" + string1 + "\t" + replace + "\n")
+        for i in motif1_comp_position:
+            output.write(seq_name + "\t" + np.str(i) + "\t" + "-" + "\t" + string1 +"\t" + replace + "\n")
+
+## Concatenate control and experimental assignments
+def concatenate_assignments(assignments_path1, assignments_path2, output):
+    """concatenates control and experimental assignments"""
+    read_files = glob.glob(assignments_path1 + "/*.assignments") +\
+    glob.glob(assignments_path2 + "/*.assignments")
+    with open(output, "w") as outfile:
+        for file1 in read_files:
+            with open(file1, "rb") as infile:
+                outfile.write(infile.read())
+
+## for each kmer in assignmnets get 50 assignment or less
+def get_sample_assignments(concatenated_assignmnets_path, sampled_assignments):
+    kmerDict = dict()
+    with open(concatenated_assignmnets_path, "r") as infile:
+        for i in infile:
+            key = i.split("\t")[0]
+            value = "\t".join(i.split("\t")[1:])
+            if kmerDict.has_key(key):
+                kmerDict[key].append(value)
+            else:
+                kmerDict[key] = [value]
+    with open(sampled_assignments, "w") as outfile:
+        for key, value in kmerDict.iteritems():
+            mylist = kmerDict[key]
+            if len(mylist) >= 50:
+                rand_smpl = [mylist[i] for i in random.sample(range(len(mylist)),50)]
+                for g in rand_smpl:
+                    string = ''.join(g)
+                    outfile.write(key + "\t" + string)
+            elif len(mylist) < 50:
+                rand_smpl = [mylist[i] for i in random.sample(range(len(mylist)),len(mylist))]
+                for g in rand_smpl:
+                    string = ''.join(g)
+                    outfile.write(key + "\t" + string)
+
 
 def sum_to_one(vector):
     """Make sure a vector sums to one, if not, create diffuse vector"""
@@ -120,10 +209,8 @@ def sum_to_one(vector):
                     vector[index] = amount_to_add
     return vector
 
-
 def add_field(np_struct_array, descr):
     """Return a new array that is like the structured numpy array, but has additional fields.
-
     descr looks like descr=[('test', '<i8')]
     """
     if np_struct_array.dtype.fields is None:
@@ -132,6 +219,116 @@ def add_field(np_struct_array, descr):
     for name in np_struct_array.dtype.names:
         new[name] = np_struct_array[name]
     return new
+
+
+class Data:
+    """Object to manage data for shuffling data inputs"""
+    def __init__(self, file_list, batch_size, queue_size, verbose=False, pad=0, trim=True):
+        self.file_list = file_list
+        self.num_files = len(self.file_list)
+        self.queue = Queue(maxsize=queue_size)
+        self.file_index = 0
+        self.batch_size = batch_size
+        self.verbose = verbose
+        self.process1 = Process(target=self.load_data, args=())
+        self.pad = pad
+        self.trim = trim
+
+    def shuffle(self):
+        """Shuffle the input file order"""
+        if self.verbose:
+            print("Shuffle data files", file=sys.stderr)
+        np.random.shuffle(self.file_list)
+        return True
+
+    def add_to_queue(self, batch, wait=True, pad=0):
+        """Add a batch to the queue"""
+        if pad > 0:
+            # print(batch[-1])
+            batch = self.pad_with_zeros(batch, pad=pad)
+            # print(batch[-1])
+        self.queue.put(batch, wait)
+
+    def pad_with_zeros(self, matrix, pad=0):
+        """Pad an array with zeros so it has the correct shape for the batch"""
+        column1 = len(matrix[0][0])
+        column2 = len(matrix[0][1])
+        one_row = np.array([[np.zeros([column1]), np.zeros([column2])]])
+        new_rows = np.repeat(one_row, pad, axis=0)
+        # print(new_rows.shape)
+        return np.append(matrix, new_rows, axis=0)
+
+
+    def get_batch(self, wait=True):
+        """Get a batch from the queue"""
+        batch = self.queue.get(wait)
+        features = batch[:, 0]
+        labels = batch[:, 1]
+        features = np.asarray([np.asarray(features[n]) for n in range(len(features))])
+        labels = np.asarray([np.asarray(labels[n]) for n in range(len(labels))])
+        return features, labels
+
+    def create_batches(self, data):
+        """Create batches from input data array"""
+        num_batches = (len(data) // self.batch_size)
+        pad = self.batch_size - (len(data) % self.batch_size)
+        if self.verbose:
+            print("{} batches in this file".format(num_batches), file=sys.stderr)
+        batch_number = 0
+        more_data = True
+        index_1 = 0
+        index_2 = self.batch_size
+        self.new_read = np.array([pad])
+        while more_data:
+            next_in = data[index_1:index_2]
+            self.add_to_queue(next_in)
+            batch_number += 1
+            index_1 += self.batch_size
+            index_2 += self.batch_size
+            if batch_number == num_batches:
+                self.add_to_queue(np.array([[str(pad), str(pad)]]))
+                if not self.trim:
+                    next_in = data[index_1:index_2]
+                    # print(np.array([pad]))
+                    self.add_to_queue(next_in, pad=pad)
+                more_data = False
+        return True
+
+    def read_in_file(self):
+        """Read in file from file list"""
+        data = np.load(self.file_list[self.file_index])
+        self.create_batches(data)
+        return True
+
+    def load_data(self):
+        """Create neverending loop of adding to queue and shuffling files"""
+        counter = 0
+        while counter <= 10:
+            self.read_in_file()
+            self.file_index += 1
+            if self.verbose:
+                print("File Index = {}".format(self.file_index), file=sys.stderr)
+            if self.file_index == self.num_files:
+                self.shuffle()
+                self.file_index = 0
+        return True
+
+    def start(self):
+        """Start background process to keep queue filled"""
+        self.process1.start()
+        return True
+
+    def end(self):
+        """End bacground process"""
+        self.process1.terminate()
+        return True
+
+def merge_two_dicts(dict1, dict2):
+    """Given two dicts, merge them into a new dict as a shallow copy.
+    source:https://stackoverflow.com/questions/38987/how-to-merge-two-python-dictionaries-in-a-single-expression"""
+    final = dict1.copy()
+    final.update(dict2)
+    return final
 
 
 def main():
@@ -143,6 +340,16 @@ def main():
     # check_events(dir1)
     # print(len(list_dir(dir1, ext="a")))
     # print(find_skipped_events(file1))
+    ref_seq = get_project_file("/reference-sequences/ecoli_k12_mg1655.fa")
+    reference_modified_path = get_project_file("/reference-sequences/ecoli_k12_mg1655.fa1")
+    # remove_fasta_newlines(ref_seq, ref_seq+"1")
+    bed_file_path = project_folder()+"/testing/test.bed"
+    motif1 = "CCAGG"
+    motif2 = "CCTGG"
+    modified_motif1 = "CEAGG"
+    modified_motif1_comp = "CEAGG"
+    replace = "E"
+    make_bed_file(reference_modified_path, bed_file_path, motif1, modified_motif1, modified_motif1_comp, replace)
     stop = timer()
     print("Running Time = {} seconds".format(stop-start), file=sys.stderr)
 

@@ -19,15 +19,14 @@ import os
 from timeit import default_timer as timer
 from datetime import datetime
 import itertools
+import traceback
 import numpy as np
-from utils import project_folder, merge_two_dicts
+from utils import project_folder, merge_two_dicts, Data, list_dir
 import tensorflow as tf
 from tensorflow.contrib import rnn
 
 class BuildGraph():
     """Build a tensorflow network graph."""
-    #TODO make it possible to change the prediciton function, cost and optimizer
-    #   by creating functions for each of those
     def __init__(self, n_input, n_classes, learning_rate, n_steps=1,\
     layer_sizes=tuple([100]), forget_bias=5.0):
         self.x = tf.placeholder("float", [None, n_steps, n_input], name='x')
@@ -43,10 +42,13 @@ class BuildGraph():
         self.output_states = []
         # layer placeholders
         self.layers = []
+        self.seq_len = tf.placeholder(tf.int32, [None], name="batch_size")
 
         outputs = self.create_deep_blstm()
-        # outputs = self.blstm(self.x, layer_name="layer1", n_hidden=layer_sizes[0], forget_bias=5.0)
-        # outputs = self.blstm(outputs, layer_name="layer2", n_hidden=layer_sizes[0], forget_bias=5.0)
+        # outputs = self.blstm(self.x, layer_name="layer1", n_hidden=layer_sizes[0], \
+        # forget_bias=5.0)
+        # outputs = self.blstm(outputs, layer_name="layer2", n_hidden=layer_sizes[0], \
+        # forget_bias=5.0)
 
 
         self.last_output = outputs[:, 0, :]
@@ -91,9 +93,9 @@ class BuildGraph():
 
     def optimizer_function(self):
         """Create optimizer function"""
-        global_step = tf.Variable(0, name='global_step', trainable=False)
+        self.global_step = tf.Variable(0, name='global_step', trainable=False)
         return tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.cost, \
-         global_step=global_step)
+         global_step=self.global_step)
 
     def accuracy_function(self):
         """Create accuracy function to calculate accuracy of the prediction"""
@@ -125,7 +127,6 @@ class BuildGraph():
             lstm_layer2 = tf.placeholder("float", [None, n_hidden], name="forward.H")
             lstm_layer3 = tf.placeholder("float", [None, n_hidden], name="backward.C")
             lstm_layer4 = tf.placeholder("float", [None, n_hidden], name="backward.H")
-            self.seq_len = tf.placeholder(tf.int32, [None], name="batch_size")
             self.layers.extend([lstm_layer1, lstm_layer2, lstm_layer3, lstm_layer4])
 
             forward_state = rnn.LSTMStateTuple(lstm_layer1, lstm_layer2)
@@ -172,90 +173,155 @@ def main():
     """Control the flow of the program"""
     start = timer()
     # load data
-    training = np.load(project_folder()+"/testing.npy")
-    # grab labels
-    labels = training[:, 1]
-    # grab feature vectors
-    features = training[:, 0]
-    # find the length of the label vector
-    label_len = len(labels[0])
-    feature_len = len(features[0])
-    # convert the inputs into numpy arrays
-    features2 = np.asarray([np.asarray(features[x]) for x in range(len(features))])
-    labels2 = np.asarray([np.asarray(labels[x]) for x in range(len(labels))])
-
     # TODO make hyperparameters a json file
     # Parameters
     learning_rate = 0.001
-    training_iters = 10000
+    training_iters = 100000
     batch_size = 100
     display_step = 10
-    # Network Parameters
-    n_input = feature_len
     n_steps = 1 # one vector per timestep
-    layer_sizes = tuple([100]) # hidden layer num of features
-    n_classes = label_len
+    layer_sizes = tuple([100, 100]) # hidden layer num of features
+    training_dir = project_folder()+"/training"
+    training_files = list_dir(training_dir, ext="npy")
+    # create data instances
+    training = Data(training_files, batch_size, queue_size=10, verbose=True)
+    testing = Data(training_files, batch_size, queue_size=10)
+    training.start()
+    testing.start()
 
-    batch1_x = features2[:batch_size]
-    batch1_y = labels2[:batch_size]
-    batch1_x = batch1_x.reshape((batch_size, n_steps, n_input))
-    # train_seq_len = np.ones(batch_size) * seq_length
+    try:
+        # grab labels
+        features, labels = training.get_batch()
+        batch1_y = labels
+        batch1_x = features
+        print(type(features))
+        print(type(features[0]))
+        print(type(features[:, 0]))
 
-    model = BuildGraph(n_input, n_classes, learning_rate)
-    x = model.x
-    y = model.y
-    cost = model.cost
-    accuracy = model.accuracy
-    merged_summaries = model.merged_summaries
-    optimizer = model.optimizer
-    init = model.init
-    run_optimizer = [optimizer]+ model.output_states
+        print("num_features = ", len(features))
+        print("batch1_x.shape", batch1_x.shape)
+        print("features.shape", features.shape)
+        print("batch1_y.shape", batch1_y.shape)
 
-    # Launch the graph
-    with tf.Session() as sess:
-        logfolder_path = os.path.join(project_folder(), 'logs/', datetime.now().strftime("%m%b-%d-%Hh-%Mm"))
-        test_writer = tf.summary.FileWriter((logfolder_path), sess.graph)
-        sess.run(init)
-        step = 1
-        kwargs = dict(zip(model.layers, [np.zeros([batch_size, layer_sizes[0]])]*len(model.layers)))
-        # Keep training until reach max iterations
-        while step * batch_size < training_iters:
-            # Run optimization op (backprop)
+        # grab feature vectors
+        # find the length of the label vector
+        # print(features, labels)
+        label_len = len(labels[0])
+        feature_len = len(features[0])
+        n_input = feature_len
+        n_classes = label_len
+
+        # convert the inputs into numpy arrays
+        print("label_len", label_len)
+        print("feature_len", feature_len)
+        features = features.reshape((batch_size, n_steps, n_input))
+
+        # train_seq_len = np.ones(batch_size) * seq_length
+
+        model = BuildGraph(n_input, n_classes, learning_rate, layer_sizes=layer_sizes)
+        x = model.x
+        y = model.y
+        seq_len = model.seq_len
+        cost = model.cost
+        accuracy = model.accuracy
+        merged_summaries = model.merged_summaries
+        optimizer = model.optimizer
+        # define what we want from the optimizer run
+        run_optimizer = [optimizer]+ model.output_states
+        init = model.init
+        # Launch the graph
+        with tf.Session() as sess:
+            logfolder_path = os.path.join(project_folder(), 'logs/', \
+                            datetime.now().strftime("%m%b-%d-%Hh-%Mm"))
+            test_writer = tf.summary.FileWriter((logfolder_path), sess.graph)
+            sess.run(init)
+            step = 1
+            # initialize states with zeros
+            new_read = False
+            states = dict(zip(model.layers, [np.zeros([batch_size, layer_sizes[0]])]\
+                    *len(model.layers)))
+            # Keep training until reach max iterations
+            while step * batch_size < training_iters:
+                # get new batch of data
+                features1, labels = training.get_batch()
+                # check if end of file and new read coming up
+                if isinstance(features1[0], basestring):
+                    # next batch is padded with zeros so pass that info to model
+                    # batch_size = int(features1[0])
+                    features1, labels = training.get_batch()
+                    # print("new batch size =", batch_size)
+                    # remember that the read after will be from a new read
+                    new_read = True
+                # reshape input into the shape the model wants
+                features = features1.reshape((len(features1), n_steps, n_input))
+                # feed inputs, seq_len and hidden states to the networks
+                inputs1 = {x: features, y: labels}
+                feed_dict = merge_two_dicts(states, inputs1)
+                # Run optimization op (backprop)
+                output_states = sess.run(run_optimizer, feed_dict=feed_dict)
+                # print(output_states[0])
+                # first output is None from the optimizer
+                # the rest are hidden and cell states from the lstms
+                output_states = list(itertools.chain.from_iterable(output_states[1:]))
+
+                if new_read:
+                    # create new zero hidden states if new read
+                    states = dict(zip(model.layers, [np.zeros([batch_size, \
+                            layer_sizes[0]])]*len(model.layers)))
+                    new_read = False
+                    # batch_size = len(features)
+                    # print("new batch size =", batch_size)
+                else:
+                    states = dict(zip(model.layers, output_states))
+
+
+                if step % display_step == 0:
+                    # Calculate batch loss and accuracy
+                    run_metadata = tf.RunMetadata()
+                    acc, summary, loss = sess.run([accuracy, merged_summaries, cost], \
+                    feed_dict=feed_dict, run_metadata=run_metadata)
+                    # add summary statistics
+                    test_writer.add_summary(summary, step)
+                    print("Iter " + str(step*batch_size) + ", Minibatch Loss= " + \
+                          "{:.6f}".format(loss) + ", Training Accuracy= " + \
+                          "{:.5f}".format(acc))
+                step += 1
+            print("Optimization Finished!")
+            # Calculate accuracy for a bunch of test data
+            features, labels = testing.get_batch()
+            batch1_x = np.asarray([np.asarray(features[n]) for n in range(len(features))])
+            batch1_x = batch1_x.reshape((len(features), n_steps, n_input))
+            batch1_y = np.asarray([np.asarray(labels[n]) for n in range(len(labels))])
+
+            states = dict(zip(model.layers, [np.zeros([batch_size, \
+                        layer_sizes[0]])]*len(model.layers)))
             inputs1 = {x: batch1_x, y: batch1_y}
-            feed_dict = merge_two_dicts(kwargs, inputs1)
+            feed_dict = merge_two_dicts(states, inputs1)
 
-            layers = sess.run(run_optimizer, feed_dict=feed_dict)
+            saver = tf.train.Saver(max_to_keep=4, keep_checkpoint_every_n_hours=2)
+            saver.save(sess, project_folder()+'/testing/my_test_model', \
+                        global_step=model.global_step)
 
-            layers2 = list(itertools.chain.from_iterable(layers[1:]))
-            kwargs = dict(zip(model.layers, layers2))
-            print("layer1", layers2[0][0][0])
-            print("layer2", layers2[1][0][0])
+            print("Testing Accuracy: {}".format(sess.run(accuracy, feed_dict=feed_dict)))
+            test_writer.close()
 
-            # if next_read:
-            #     sess.run(clear_state)
+    except Exception as error:
+        training.end()
+        testing.end()
+        exc_info = sys.exc_info()
+        traceback.print_exception(*exc_info)
+        # print(sys.exc_info(), file=sys.stderr)
+        raise error
 
-            if step % display_step == 0:
-                # Calculate batch loss and accuracy
-                run_metadata = tf.RunMetadata()
-                acc, summary, loss = sess.run([accuracy, merged_summaries, cost], \
-                feed_dict=feed_dict, run_metadata=run_metadata)
-                # add summary statistics
-                test_writer.add_summary(summary, step)
-                print("Iter " + str(step*batch_size) + ", Minibatch Loss= " + \
-                      "{:.6f}".format(loss) + ", Training Accuracy= " + \
-                      "{:.5f}".format(acc))
-            step += 1
-        print("Optimization Finished!")
-        # Calculate accuracy for 128 mnist test images
-        # test_len = 128
-        kwargs = dict(zip(model.layers, [np.zeros([batch_size, layer_sizes[0]])]*len(model.layers)))
-        inputs1 = {x: batch1_x, y: batch1_y}
-        feed_dict = merge_two_dicts(kwargs, inputs1)
-
-        print("Testing Accuracy: {}".format(sess.run(accuracy, feed_dict=feed_dict)))
-        test_writer.close()
+    training.end()
+    testing.end()
+    # end the batch updating
     stop = timer()
     print("Running Time = {} seconds".format(stop-start), file=sys.stderr)
+
+
+
+
 
 if __name__ == "__main__":
     main()

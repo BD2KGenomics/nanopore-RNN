@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2.7
 """Create features and labels from alignment kmers"""
 ########################################################################
 # File: data_preparation.py
@@ -43,7 +43,7 @@ def scrape_signalalign(tsv1):
     # NOTE Memory constraints and concerns regarding reading in a very long
     #       sequence. Write to file?
     # TODO Needs more testing/ error checking with different signalalign outputs
-    # NOTE This takes way too long to scrape the data
+    # NOTE This takes way too long to scrape the data if threshold = 0
     # NOTE if deepnano labels work best we may want to change data structure
     kmers = defaultdict(list)
     with open(tsv1) as tsv:
@@ -67,44 +67,56 @@ def scrape_signalalign(tsv1):
 def scrape_eventalign(tsv1):
     """Grab all the event kmers from the signal align output and record probability"""
     # TODO make same method?
-    data = list()
-    with open(tsv1) as tsv:
-        reader = csv.reader(tsv, delimiter="\t")
-        for line in reader:
-            chromosome = np.string_(line[0])
-            seq_pos = int(line[1])
-            kmer = np.string_(line[15])
-            name = line[3]
-            template = line[4]
-            event_index = int(line[5])
-            prob = float(line[12])
+    # data = list()
+    # with open(tsv1) as tsv:
+    #     reader = csv.reader(tsv, delimiter="\t")
+    #     for line in reader:
     return False
 
-def prepare_training_file(fast5, tsv, eventalign=False):
+def prepare_training_file(fast5, tsv, eventalign=False, prob=False, length=5, alphabet="ATGC", nanonet=True, deepnano=False):
     """Gather event information from fast5 file and kmer labels from eventalign or signalalign"""
     if eventalign:
         kmers = scrape_eventalign(tsv)
     else:
         kmers = scrape_signalalign(tsv)
     events = scrape_fast5_events(fast5)
-    labels = create_labels(kmers)
-    features = create_features(events, deepnano=True)
-    final = match_label_with_feature(features, labels)
+    labels = create_labels(kmers, prob=prob, length=length, alphabet=alphabet)
+    features = create_features(events, deepnano=deepnano, nanonet=nanonet)
+    final = match_label_with_feature(features, labels, prob=prob, length=length, alphabet=alphabet)
     return final
 
-def match_label_with_feature(features, labels):
+def match_label_with_feature(features, labels, prob=False, length=5, alphabet="ATGC"):
     """Match indexed label with correct event"""
+    # TODO fix the data type so that everything is a nparray
     final_matrix = []
     prev_counter = -1
     for index, label in sorted(labels.items()):
         counter = index
         if prev_counter != -1:
             if counter != prev_counter+1:
-                # TODO Create error message and break program
-                print("This should be an error, Raise error message?", file=sys.stderr)
+                null = create_null_label(length=length, alphabet=alphabet)
+                final_matrix.append([features[prev_counter+1], null])
         final_matrix.append([features[index], label])
         prev_counter = index
+    final_matrix = np.asanyarray(final_matrix)
+    print(type(final_matrix))
+    print(type(final_matrix[:, 1]))
+    print(type(final_matrix[:, 1][0]))
+    print(type(final_matrix[:, 1][0][0]))
+    print(final_matrix[:, 1].shape)
+    print(type(final_matrix[:, 0]))
+    print(type(final_matrix[:, 0][0]))
+    print(type(final_matrix[:, 0][0][0]))
+    print((final_matrix[:, 0].shape))
+    print(final_matrix.shape)
     return final_matrix
+
+def create_null_label(length=5, alphabet="ATGC"):
+    """For unlabelled events from signalalign create a vector with last item in vector as 1"""
+    vector_len = (len(alphabet)**length)
+    vector = numpy.zeros(vector_len+1)
+    vector[vector_len] = 1
+    return vector
 
 def create_labels(kmers, prob=False, deepnano=False, length=5, alphabet="ATGC"):
     """Create labels from kmers"""
@@ -121,8 +133,8 @@ def create_deepnano_labels(kmers, alphabet="ATGC"):
     """Create labels like deepnano (XX, NX, NN) where X in {alphabet} and N
     is an unknown character"""
     # TODO Still need to know the exact shape of the label vector
-    for index, kmer_list in kmers.items():
-        pass
+    # for index, kmer_list in kmers.items():
+    #     pass
     return False
 
 def create_kmer_labels(kmers, alphabet="ATGC", length=5, prob=False):
@@ -152,19 +164,18 @@ def getkmer_dict(alphabet="ATGC", length=5, flip=False):
     return dictionary
 
 def create_prob_vector(kmer_list, kmer_dict, length=5):
-    """Create a vector with given alphabet"""
-    vector = numpy.zeros(len(kmer_dict))
+    """Create a probability vector with given alphabet dictionary and length"""
+    vector = numpy.zeros(len(kmer_dict)+1)
     for kmer in kmer_list:
         trimmed_kmer = kmer[0][-length:]
         vector[kmer_dict[trimmed_kmer]] = kmer[1]
     # make sure vector sums to one if less than one
-    # NOTE we could use sklearn module normalize which makes a unit vector
-    vector = sum_to_one(vector)
+    # vector = sum_to_one(vector)
     return vector
 
 def create_categorical_vector(kmer_list, kmer_dict, length=5):
     """Create a vector with given alphabet"""
-    vector = numpy.zeros(len(kmer_dict))
+    vector = numpy.zeros(len(kmer_dict)+1)
     highest = 0
     final_kmer = str()
     # check all kmers for most probable
@@ -185,12 +196,10 @@ def create_vector(kmer_list, kmer_dict, length=5, prob=False):
         vector = create_categorical_vector(kmer_list, kmer_dict, length=length)
     return vector
 
-def create_features(events, basic=False, nanonet=False, deepnano=False):
+def create_features(events, nanonet=False, deepnano=False):
     """Create features from events"""
-    if basic:
-        features = basic_method(events)
-    elif nanonet:
-        features = nanonet_features(events).tolist()
+    if nanonet:
+        features = nanonet_features(events)
     elif deepnano:
         features = deepnano_events(events)
     return features
@@ -206,6 +215,7 @@ def deepnano_events(events, shift=1, scale=1, scale_sd=1):
         stdv = event["stdv"]
         length = event["length"]
         new_events.append(preproc_event(mean, stdv, length))
+    new_events = np.asarray(new_events)
     return new_events
 
 def preproc_event(mean, std, length):
@@ -214,30 +224,31 @@ def preproc_event(mean, std, length):
     std = std - 1
     return [mean, mean*mean, std, length]
 
-def basic_method(events):
-    """Create features """
-    return events
-
-def save_training_file(fast5_file, signalalign_file, output_name, output_dir=project_folder()):
+def save_training_file(fast5_file, signalalign_file, output_name, output_dir=project_folder(), kwargs=dict()):
     #TODO Pass arguments through using **kwargs
     """Create training file and save it as an .npy file"""
     assert os.path.isdir(output_dir)
     output_file = os.path.join(output_dir, output_name)
-    training_file = prepare_training_file(fast5_file, signalalign_file)
+    training_file = prepare_training_file(fast5_file, signalalign_file, **kwargs)
+    # print(training_file[0])
     np.save(output_file, training_file)
     return output_file
 
 def main():
     """Mainly used for testing the methods within data_preparation.py"""
     start = timer()
-
+    #
     fast5_file = \
     get_project_file("test-files/r9/canonical/AlexisLucattini_20160918_FNFAD24297_MN19582_sequencing_run_E_COLI_NON_MTHYLTD_R9_77950_ch146_read1209_strand1.fast5")
-
+    #
     signalalign_file = \
     get_project_file("/temp/tempFiles_alignment/132de6a8-df1e-468f-848b-abc960e1fc76_Basecall_2D_template.sm.backward.tsv")
-
-    save_training_file(fast5_file, signalalign_file, "testing")
+    #
+    kwargs = {"eventalign": False, "prob":True, "length": 5, "alphabet": "ATGCE", "nanonet": True, "deepnano": False}
+    #
+    save_training_file(fast5_file, signalalign_file, "testing", kwargs=kwargs)
+    # print(getkmer_dict()["TTTTT"])
+    # create_kmer_labels({1:[["TTTTT", 1]]})
     # training_file = prepare_training_file(fast5_file, signalalign_file)
     # np.save(project_folder()+"/events", training_file)
     # np.load(project_folder()+"/events.npy")
