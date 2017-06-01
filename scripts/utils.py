@@ -20,11 +20,11 @@ import os
 import re
 import glob
 import random
+from multiprocessing import Process, Queue
 import boto
 from error import PathError
 import numpy as np
 from Bio.Seq import Seq
-from multiprocessing import Process, Queue
 
 # from Bio.Alphabet import generic_dna
 #TODO create debug function and verbose options
@@ -116,7 +116,6 @@ def get_project_file(localpath):
 def testfast5():
     """Get the path to one of our test fast5 files"""
     return get_project_file("test-files/r9/canonical/AlexisLucattini_20160918_FNFAD24297_MN19582_sequencing_run_E_COLI_NON_MTHYLTD_R9_77950_ch146_read1209_strand1.fast5")
-
 #signalAlign
 def remove_fasta_newlines(reference_path, reference_modified_path):
     """Get fasta file and remove \n from the ends"""
@@ -249,7 +248,8 @@ class Data:
             # print(batch[-1])
         self.queue.put(batch, wait)
 
-    def pad_with_zeros(self, matrix, pad=0):
+    @staticmethod
+    def pad_with_zeros(matrix, pad=0):
         """Pad an array with zeros so it has the correct shape for the batch"""
         column1 = len(matrix[0][0])
         column2 = len(matrix[0][1])
@@ -264,6 +264,7 @@ class Data:
         batch = self.queue.get(wait)
         features = batch[:, 0]
         labels = batch[:, 1]
+        features = np.asanyarray
         features = np.asarray([np.asarray(features[n]) for n in range(len(features))])
         labels = np.asarray([np.asarray(labels[n]) for n in range(len(labels))])
         return features, labels
@@ -278,7 +279,6 @@ class Data:
         more_data = True
         index_1 = 0
         index_2 = self.batch_size
-        self.new_read = np.array([pad])
         while more_data:
             next_in = data[index_1:index_2]
             self.add_to_queue(next_in)
@@ -330,7 +330,6 @@ def merge_two_dicts(dict1, dict2):
     final.update(dict2)
     return final
 
-
 def main():
     """Test the methods"""
     start = timer()
@@ -341,13 +340,13 @@ def main():
     # print(len(list_dir(dir1, ext="a")))
     # print(find_skipped_events(file1))
     ref_seq = get_project_file("/reference-sequences/ecoli_k12_mg1655.fa")
-    reference_modified_path = get_project_file("/reference-sequences/ecoli_k12_mg1655.fa1")
+    reference_modified_path = get_project_file("/reference-sequences/ecoli_k12_mg1655_modified.fa")
     # remove_fasta_newlines(ref_seq, ref_seq+"1")
-    bed_file_path = project_folder()+"/testing/test.bed"
+    bed_file_path = project_folder()+"/reference-sequences/CCAGG_modified.bed"
     motif1 = "CCAGG"
-    motif2 = "CCTGG"
+    # motif2 = "CCTGG"
     modified_motif1 = "CEAGG"
-    modified_motif1_comp = "CEAGG"
+    modified_motif1_comp = "GGTCC"
     replace = "E"
     make_bed_file(reference_modified_path, bed_file_path, motif1, modified_motif1, modified_motif1_comp, replace)
     stop = timer()

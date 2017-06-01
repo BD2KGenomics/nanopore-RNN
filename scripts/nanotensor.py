@@ -17,44 +17,58 @@ import numpy as np
 from nanonet.fast5 import Fast5
 from nanonet.eventdetection.filters import minknow_event_detect, compute_sum_sumsq, compute_tstat, short_long_peak_detector
 from utils import testfast5, list_dir, project_folder, Data
-from data_preparation import save_training_file
+from data_preparation import TrainingData
+from multiprocessing import Process
 
 
-def create_training_data_from_log(log_file, file_prefix, kwargs, output_dir=project_folder()+"/training"):
+def create_training_data(fast5_file, signalalign_file, kwargs,\
+        output_name="file", output_dir=project_folder()+"/training2"):
     """Create npy training files"""
-    counter = 0
-    with open(log_file, 'r') as log:
-        for line in log:
-            line = line.rstrip().split('\t')
-            fast5 = line[0]
-            tsv = line[1]
-            output_name = file_prefix+str(counter)
-            save_training_file(fast5, tsv, output_name, output_dir=output_dir, kwargs=kwargs)
-            counter += 1
-            print("Saved {}.npy".format(output_name), file=sys.stderr)
+    data = TrainingData(fast5_file, signalalign_file, **kwargs)
+    data.save_training_file(output_name, output_dir=output_dir)
     return True
 
 
 def main():
     """Main docstring"""
     start = timer()
-    # output_name = "file"
-    # log_file = "/Users/andrewbailey/data/log-file.1"
-    # kwargs = {"eventalign": False, "prob":True, "length": 5, "alphabet": "ATGC", "nanonet": False, "deepnano": True}
-    #
-    # create_training_data_from_log(log_file, output_name, kwargs, output_dir=project_folder()+"/training")
+    output_name = "file"
+    log_file = "/Users/andrewbailey/data/log-file.1"
+    kwargs = {"prob":True, "kmer_len": 5, "alphabet": "ATGC", "nanonet": True}
+
+    # create_training_data(fast5, tsv, kwargs, output_dir=project_folder()+"/training")
+    jobs = []
+
+    counter = 0
+    with open(log_file, 'r') as log:
+        for line in log:
+            line = line.rstrip().split('\t')
+            fast5 = line[0]
+            tsv = line[1]
+            output_name = output_name+str(counter)
+            process = Process(target=create_training_data, args=(fast5, \
+             tsv, kwargs, output_name, project_folder() + "/training2"))
+            jobs.append(process)
+            counter += 1
+
+    for j in jobs:
+        j.start()
+
+    for j in jobs:
+        j.join()
+
 
     # get training files
-    training_dir = project_folder()
-    training_files = list_dir(training_dir, ext="npy")
-    print(training_files)
-    # create data instances
-    training = Data(training_files, 100, queue_size=10, verbose=True)
-    testing = Data(training_files, 100, queue_size=10)
-    training.start()
-    testing.start()
-    training.end()
-    testing.end()
+    # training_dir = project_folder()
+    # training_files = list_dir(training_dir, ext="npy")
+    # print(training_files)
+    # # create data instances
+    # training = Data(training_files, 100, queue_size=10, verbose=True)
+    # testing = Data(training_files, 100, queue_size=10)
+    # training.start()
+    # testing.start()
+    # training.end()
+    # testing.end()
 
 
     stop = timer()
