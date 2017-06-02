@@ -96,9 +96,9 @@ def make_bed_file(ref_modified_path, bed_path, char, *args):
 
 ## Concatenate control and experimental assignments
 ## ex : concatenation of non methylated and methylated assignments
-def concat_assignments (assignments_path1, assignments_path2, output):
+def concat_assignments (assignments_path1, assignments_path2, output, op_prefix):
     '''concatenates control and experimental assignments'''
-    read_files = glob.glob(assignments_path1 + "/*.assignments") + glob.glob(assignments_path2 + "/*.assignments")
+    read_files = glob.glob(assignments_path1 + "/*." + op_prefix) + glob.glob(assignments_path2 + "/*." + op_prefix)
     with open(output, "w") as outfile:
         for f in read_files:
             with open(f, "rb") as infile:
