@@ -28,9 +28,15 @@ from tensorflow.contrib import rnn
 class BuildGraph():
     """Build a tensorflow network graph."""
     def __init__(self, n_input, n_classes, learning_rate, n_steps=1,\
-    layer_sizes=tuple([100]), forget_bias=5.0):
-        self.x = tf.placeholder("float", [None, n_steps, n_input], name='x')
-        self.y = tf.placeholder("float", [None, n_classes], name='y')
+    layer_sizes=tuple([100]), forget_bias=5.0, batch_size=100):
+        # TODO get variable batch size
+
+        self.batch_size = batch_size
+        self.x = tf.placeholder("float", [self.batch_size, n_steps, n_input], name='x')
+        self.y = tf.placeholder("float", [self.batch_size, n_steps, n_classes], name='y')
+
+        self.y_flat = tf.reshape(self.y, [-1, n_classes])
+        print(self.y_flat.shape)
         self.n_layers = len(layer_sizes)
         self.layer_sizes = layer_sizes
         self.n_input = n_input
@@ -42,20 +48,25 @@ class BuildGraph():
         self.output_states = []
         # layer placeholders
         self.layers = []
-        self.seq_len = tf.placeholder(tf.int32, [None], name="batch_size")
-
-        outputs = self.create_deep_blstm()
-        # outputs = self.blstm(self.x, layer_name="layer1", n_hidden=layer_sizes[0], \
-        # forget_bias=5.0)
+        # self.seq_len = tf.placeholder(tf.int32, [None], name="batch_size")
+        # self.batch_size = tf.Variable()
+        # outputs = self.create_deep_blstm()
+        outputs = self.blstm(self.x, layer_name="layer1", n_hidden=layer_sizes[0], \
+        forget_bias=5.0)
         # outputs = self.blstm(outputs, layer_name="layer2", n_hidden=layer_sizes[0], \
         # forget_bias=5.0)
 
-
-        self.last_output = outputs[:, 0, :]
+        # clear_state = tf.group(
+        #     tf.assign(forward_state, tf.zeros([layer_sizes[0]])),
+        #     tf.assign(backward_state, tf.zeros([layer_sizes[0]])))
+        print("output.shape", outputs.shape)
+        self.rnn_outputs_flat = tf.reshape(outputs, [-1, 2*layer_sizes[-1]])
+        print("rnn_outputs_flat.shape", self.rnn_outputs_flat.shape)
         # Linear activation, using rnn inner loop last output
         self.pred = self.create_prediction_layer()
+        print(self.pred)
         # Define loss and optimizer
-        self.cost = self.cost_function()
+        self.cost = self.cost_function_prob()
         self.optimizer = self.optimizer_function()
         # Evaluate model
         self.correct_pred = self.prediction_function()
@@ -64,14 +75,11 @@ class BuildGraph():
         self.merged_summaries = tf.summary.merge_all()
         # Initializing the variables
         self.init = tf.global_variables_initializer()
-        # clear_state = tf.group(
-        #     tf.assign(forward_state, tf.zeros([layer_sizes[0]])),
-        #     tf.assign(backward_state, tf.zeros([layer_sizes[0]])))
 
     def create_prediction_layer(self):
         """Create a prediction layer from output of blstm layers"""
         with tf.name_scope("predition"):
-            pred = self.fulconn_layer(self.last_output, self.n_classes)
+            pred = self.fulconn_layer(self.rnn_outputs_flat, self.n_classes)
             # print("pred shape", pred.shape)
             self.variable_summaries(pred)
         return pred
@@ -79,15 +87,36 @@ class BuildGraph():
     def prediction_function(self):
         """Compare predicions with label to calculate number correct"""
         with tf.name_scope("correct_pred"):
-            correct_pred = tf.equal(tf.argmax(self.pred, 1), tf.argmax(self.y, 1))
+            correct_pred = tf.equal(tf.argmax(self.pred, 1), tf.argmax(self.y_flat, 1))
             # self.variable_summaries(correct_pred)
         return correct_pred
 
-    def cost_function(self):
+    def cost_function_prob(self):
         """Create a cost function for optimizer"""
         with tf.name_scope("cost"):
-            cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=self.pred,\
-             labels=self.y))
+            loss = tf.reshape(tf.nn.softmax_cross_entropy_with_logits(logits=self.pred,\
+                labels=self.y_flat), [self.batch_size, self.n_steps])
+            cost = tf.reduce_mean(loss)
+            self.variable_summaries(cost)
+        return cost
+
+    def cost_function_binary(self):
+        """Create a cost function for optimizer"""
+        with tf.name_scope("cost"):
+            loss = tf.reshape(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.pred,\
+                labels=self.y_flat), [self.batch_size, self.n_steps])
+            cost = tf.reduce_mean(loss)
+            self.variable_summaries(cost)
+        return cost
+
+    def cost_function_with_mask(self):
+        """Create a cost function for optimizer"""
+        # TODO create a cost function with a defined mask for padded input sequences
+        with tf.name_scope("cost"):
+            cost = tf.reduce_mean(tf.nn.sparse.softmax_cross_entropy_with_logits(logits=self.pred,\
+                labels=self.y_flat))
+            # mask = tf.sign(tf.to_float(self.y_flat))
+            # masked_losses = mask * losses
             self.variable_summaries(cost)
         return cost
 
@@ -113,6 +142,19 @@ class BuildGraph():
             n_hidden=self.layer_sizes[number], forget_bias=self.forget_bias)
         return input1
 
+    def get_state_update_op(self, state_variables, new_states):
+        """Update the state with new values"""
+        # Add an operation to update the train states with the last state tensors
+        update_ops = []
+        for state_variable, new_state in zip(state_variables, new_states):
+            # Assign the new state to the state variables on this layer
+            update_ops.extend([state_variable[0].assign(new_state[0]),
+                               state_variable[1].assign(new_state[1])])
+        # Return a tuple in order to combine all update_ops into a single operation.
+        # The tuple's actual value should not be used.
+        return tf.tuple(update_ops)
+
+
     def blstm(self, input_vector, layer_name="blstm_layer1", n_hidden=128, forget_bias=5.0):
         """Create a bidirectional LSTM using code from the example at
          https://github.com/aymericdamien/TensorFlow-Examples/blob/master/examples/3_NeuralNetworks/bidirectional_rnn.py"""
@@ -122,20 +164,29 @@ class BuildGraph():
             lstm_fw_cell = rnn.LSTMCell(n_hidden, forget_bias=forget_bias, state_is_tuple=True)
             # Backward direction cell
             lstm_bw_cell = rnn.LSTMCell(n_hidden, forget_bias=forget_bias, state_is_tuple=True)
-            # print(lstm_bw_cell.state_size)
-            lstm_layer1 = tf.placeholder("float", [None, n_hidden], name="forward.C")
-            lstm_layer2 = tf.placeholder("float", [None, n_hidden], name="forward.H")
-            lstm_layer3 = tf.placeholder("float", [None, n_hidden], name="backward.C")
-            lstm_layer4 = tf.placeholder("float", [None, n_hidden], name="backward.H")
-            self.layers.extend([lstm_layer1, lstm_layer2, lstm_layer3, lstm_layer4])
 
-            forward_state = rnn.LSTMStateTuple(lstm_layer1, lstm_layer2)
-            backward_state = rnn.LSTMStateTuple(lstm_layer3, lstm_layer4)
+            # forward states
+            fw_state_c, fw_state_h = lstm_fw_cell.zero_state(self.batch_size, tf.float32)
+            lstm_fw_cell_states = rnn.LSTMStateTuple(
+                tf.Variable(fw_state_c, trainable=False, name="forward_c"),
+                tf.Variable(fw_state_h, trainable=False, name="forward_h"))
+
+            # backward states
+            bw_state_c, bw_state_h = lstm_bw_cell.zero_state(self.batch_size, tf.float32)
+            lstm_bw_cell_states = rnn.LSTMStateTuple(
+                tf.Variable(bw_state_c, trainable=False, name="backward_c"),
+                tf.Variable(bw_state_h, trainable=False, name="backward_h"))
+
+            # self.reset_fw = self.get_state_update_op(lstm_fw_cell_states, (fw_state_c, fw_state_h))
+            # self.reset_bw = self.get_state_update_op(lstm_bw_cell_states, (bw_state_c, bw_state_h))
 
             outputs, output_states = tf.nn.bidirectional_dynamic_rnn(lstm_fw_cell, \
-            lstm_bw_cell, input_vector, dtype=tf.float32, initial_state_fw=forward_state, \
-            initial_state_bw=backward_state)
-            self.output_states.extend(output_states)
+            lstm_bw_cell, input_vector, dtype=tf.float32, initial_state_fw=lstm_fw_cell_states, \
+            initial_state_bw=lstm_bw_cell_states)
+
+            self.update_op = self.get_state_update_op((lstm_fw_cell_states, lstm_bw_cell_states), output_states)
+
+            # self.output_states.extend(output_states)
             # concat two output layers so we can treat as single output layer
             output = tf.concat(outputs, 2)
         return output
@@ -176,16 +227,16 @@ def main():
     # TODO make hyperparameters a json file
     # Parameters
     learning_rate = 0.001
-    training_iters = 100000
-    batch_size = 100
+    training_iters = 100
+    batch_size = 1
     display_step = 10
-    n_steps = 1 # one vector per timestep
-    layer_sizes = tuple([100, 100]) # hidden layer num of features
-    training_dir = project_folder()+"/training"
+    n_steps = 100 # one vector per timestep
+    layer_sizes = tuple([100]) # hidden layer num of features
+    training_dir = project_folder()+"/training2"
     training_files = list_dir(training_dir, ext="npy")
     # create data instances
-    training = Data(training_files, batch_size, queue_size=10, verbose=True)
-    testing = Data(training_files, batch_size, queue_size=10)
+    training = Data(training_files, n_steps, queue_size=10, verbose=False)
+    testing = Data(training_files, n_steps, queue_size=10, verbose=False)
     training.start()
     testing.start()
 
@@ -194,9 +245,9 @@ def main():
         features, labels = training.get_batch()
         batch1_y = labels
         batch1_x = features
-        print(type(features))
-        print(type(features[0]))
-        print(type(features[:, 0]))
+        # print(type(features))
+        # print(type(features[0]))
+        # print(type(features[:, 0]))
 
         print("num_features = ", len(features))
         print("batch1_x.shape", batch1_x.shape)
@@ -218,16 +269,15 @@ def main():
 
         # train_seq_len = np.ones(batch_size) * seq_length
 
-        model = BuildGraph(n_input, n_classes, learning_rate, layer_sizes=layer_sizes)
+        model = BuildGraph(n_input, n_classes, learning_rate, n_steps=n_steps, layer_sizes=layer_sizes, batch_size=batch_size)
         x = model.x
         y = model.y
-        seq_len = model.seq_len
         cost = model.cost
         accuracy = model.accuracy
         merged_summaries = model.merged_summaries
         optimizer = model.optimizer
         # define what we want from the optimizer run
-        run_optimizer = [optimizer]+ model.output_states
+        run_optimizer = optimizer #+ model.output_states
         init = model.init
         # Launch the graph
         with tf.Session() as sess:
@@ -238,8 +288,6 @@ def main():
             step = 1
             # initialize states with zeros
             new_read = False
-            states = dict(zip(model.layers, [np.zeros([batch_size, layer_sizes[0]])]\
-                    *len(model.layers)))
             # Keep training until reach max iterations
             while step * batch_size < training_iters:
                 # get new batch of data
@@ -248,38 +296,31 @@ def main():
                 if isinstance(features1[0], basestring):
                     # next batch is padded with zeros so pass that info to model
                     # batch_size = int(features1[0])
+                    # sess.run([model.reset_fw])
                     features1, labels = training.get_batch()
                     # print("new batch size =", batch_size)
                     # remember that the read after will be from a new read
                     new_read = True
                 # reshape input into the shape the model wants
-                features = features1.reshape((len(features1), n_steps, n_input))
+                features = features1.reshape((batch_size, len(features1), n_input))
+                labels = labels.reshape((batch_size, len(labels), n_classes))
                 # feed inputs, seq_len and hidden states to the networks
                 inputs1 = {x: features, y: labels}
-                feed_dict = merge_two_dicts(states, inputs1)
-                # Run optimization op (backprop)
-                output_states = sess.run(run_optimizer, feed_dict=feed_dict)
-                # print(output_states[0])
-                # first output is None from the optimizer
-                # the rest are hidden and cell states from the lstms
-                output_states = list(itertools.chain.from_iterable(output_states[1:]))
-
+                # Run optimization and update layers
+                # sess.run([model.reset_bw])
+                output_states = sess.run([run_optimizer, model.update_op], feed_dict=inputs1)
+                # print(output_states)
                 if new_read:
                     # create new zero hidden states if new read
-                    states = dict(zip(model.layers, [np.zeros([batch_size, \
-                            layer_sizes[0]])]*len(model.layers)))
                     new_read = False
                     # batch_size = len(features)
-                    # print("new batch size =", batch_size)
-                else:
-                    states = dict(zip(model.layers, output_states))
 
 
                 if step % display_step == 0:
                     # Calculate batch loss and accuracy
                     run_metadata = tf.RunMetadata()
                     acc, summary, loss = sess.run([accuracy, merged_summaries, cost], \
-                    feed_dict=feed_dict, run_metadata=run_metadata)
+                    feed_dict=inputs1, run_metadata=run_metadata)
                     # add summary statistics
                     test_writer.add_summary(summary, step)
                     print("Iter " + str(step*batch_size) + ", Minibatch Loss= " + \
@@ -289,20 +330,15 @@ def main():
             print("Optimization Finished!")
             # Calculate accuracy for a bunch of test data
             features, labels = testing.get_batch()
-            batch1_x = np.asarray([np.asarray(features[n]) for n in range(len(features))])
-            batch1_x = batch1_x.reshape((len(features), n_steps, n_input))
-            batch1_y = np.asarray([np.asarray(labels[n]) for n in range(len(labels))])
-
-            states = dict(zip(model.layers, [np.zeros([batch_size, \
-                        layer_sizes[0]])]*len(model.layers)))
-            inputs1 = {x: batch1_x, y: batch1_y}
-            feed_dict = merge_two_dicts(states, inputs1)
+            features = features.reshape((batch_size, len(features1), n_input))
+            labels = labels.reshape((batch_size, len(labels), n_classes))
+            inputs1 = {x: features, y: labels}
 
             saver = tf.train.Saver(max_to_keep=4, keep_checkpoint_every_n_hours=2)
             saver.save(sess, project_folder()+'/testing/my_test_model', \
                         global_step=model.global_step)
 
-            print("Testing Accuracy: {}".format(sess.run(accuracy, feed_dict=feed_dict)))
+            print("Testing Accuracy: {}".format(sess.run(accuracy, feed_dict=inputs1)))
             test_writer.close()
 
     except Exception as error:
