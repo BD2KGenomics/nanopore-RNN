@@ -34,7 +34,7 @@ def main():
     start = timer()
     output_name = "file"
     log_file = "/Users/andrewbailey/data/log-file.1"
-    kwargs = {"prob":True, "kmer_len": 5, "alphabet": "ATGC", "nanonet": True}
+    kwargs = {"prob":False, "kmer_len": 5, "alphabet": "ATGC", "nanonet": True}
 
     # create_training_data(fast5, tsv, kwargs, output_dir=project_folder()+"/training")
     jobs = []
@@ -56,6 +56,7 @@ def main():
 
     for j in jobs:
         j.join()
+
 
 
     # get training files
