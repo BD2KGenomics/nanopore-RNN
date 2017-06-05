@@ -20,7 +20,6 @@ import os
 import re
 import glob
 import random
-from multiprocessing import Process, Queue
 import boto
 from error import PathError
 import numpy as np
@@ -220,107 +219,6 @@ def add_field(np_struct_array, descr):
     return new
 
 
-class Data:
-    """Object to manage data for shuffling data inputs"""
-    def __init__(self, file_list, batch_size, queue_size, verbose=False, pad=0, trim=True):
-        self.file_list = file_list
-        self.num_files = len(self.file_list)
-        self.queue = Queue(maxsize=queue_size)
-        self.file_index = 0
-        self.batch_size = batch_size
-        self.verbose = verbose
-        self.process1 = Process(target=self.load_data, args=())
-        self.pad = pad
-        self.trim = trim
-
-    def shuffle(self):
-        """Shuffle the input file order"""
-        if self.verbose:
-            print("Shuffle data files", file=sys.stderr)
-        np.random.shuffle(self.file_list)
-        return True
-
-    def add_to_queue(self, batch, wait=True, pad=0):
-        """Add a batch to the queue"""
-        if pad > 0:
-            # print(batch[-1])
-            batch = self.pad_with_zeros(batch, pad=pad)
-            # print(batch[-1])
-        self.queue.put(batch, wait)
-
-    @staticmethod
-    def pad_with_zeros(matrix, pad=0):
-        """Pad an array with zeros so it has the correct shape for the batch"""
-        column1 = len(matrix[0][0])
-        column2 = len(matrix[0][1])
-        one_row = np.array([[np.zeros([column1]), np.zeros([column2])]])
-        new_rows = np.repeat(one_row, pad, axis=0)
-        # print(new_rows.shape)
-        return np.append(matrix, new_rows, axis=0)
-
-
-    def get_batch(self, wait=True):
-        """Get a batch from the queue"""
-        batch = self.queue.get(wait)
-        features = batch[:, 0]
-        labels = batch[:, 1]
-        features = np.asarray([np.asarray(features[n]) for n in range(len(features))])
-        labels = np.asarray([np.asarray(labels[n]) for n in range(len(labels))])
-        return features, labels
-
-    def create_batches(self, data):
-        """Create batches from input data array"""
-        num_batches = (len(data) // self.batch_size)
-        pad = self.batch_size - (len(data) % self.batch_size)
-        if self.verbose:
-            print("{} batches in this file".format(num_batches), file=sys.stderr)
-        batch_number = 0
-        more_data = True
-        index_1 = 0
-        index_2 = self.batch_size
-        while more_data:
-            next_in = data[index_1:index_2]
-            self.add_to_queue(next_in)
-            batch_number += 1
-            index_1 += self.batch_size
-            index_2 += self.batch_size
-            if batch_number == num_batches:
-                self.add_to_queue(np.array([[str(pad), str(pad)]]))
-                if not self.trim:
-                    next_in = data[index_1:index_2]
-                    # print(np.array([pad]))
-                    self.add_to_queue(next_in, pad=pad)
-                more_data = False
-        return True
-
-    def read_in_file(self):
-        """Read in file from file list"""
-        data = np.load(self.file_list[self.file_index])
-        self.create_batches(data)
-        return True
-
-    def load_data(self):
-        """Create neverending loop of adding to queue and shuffling files"""
-        counter = 0
-        while counter <= 10:
-            self.read_in_file()
-            self.file_index += 1
-            if self.verbose:
-                print("File Index = {}".format(self.file_index), file=sys.stderr)
-            if self.file_index == self.num_files:
-                self.shuffle()
-                self.file_index = 0
-        return True
-
-    def start(self):
-        """Start background process to keep queue filled"""
-        self.process1.start()
-        return True
-
-    def end(self):
-        """End bacground process"""
-        self.process1.terminate()
-        return True
 
 def merge_two_dicts(dict1, dict2):
     """Given two dicts, merge them into a new dict as a shallow copy.

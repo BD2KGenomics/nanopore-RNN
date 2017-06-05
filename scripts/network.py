@@ -21,7 +21,8 @@ from datetime import datetime
 import itertools
 import traceback
 import numpy as np
-from utils import project_folder, merge_two_dicts, Data, list_dir
+from utils import project_folder, merge_two_dicts, list_dir
+from data import Data
 import tensorflow as tf
 from tensorflow.contrib import rnn
 

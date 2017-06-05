@@ -6,37 +6,60 @@ then use's tensorflow to train a mulit layer BLSTM-RNN"""
 #  executable: nanotensor.py
 #
 # Author: Andrew Bailey
-# History: TODO Created
+# History: 05/28/17 Created
 ########################################################################
 
 from __future__ import print_function
 import sys
 from timeit import default_timer as timer
-import time
+import json
+from multiprocessing import Process, current_process, Manager
 import numpy as np
 from nanonet.fast5 import Fast5
 from nanonet.eventdetection.filters import minknow_event_detect, compute_sum_sumsq, compute_tstat, short_long_peak_detector
-from utils import testfast5, list_dir, project_folder, Data
+from utils import testfast5, list_dir, project_folder
 from data_preparation import TrainingData
-from multiprocessing import Process
+from data import Data
 
 
 def create_training_data(fast5_file, signalalign_file, kwargs,\
-        output_name="file", output_dir=project_folder()+"/training2"):
-    """Create npy training files"""
+        output_name="file", output_dir=project_folder()):
+    """Create npy training files from aligment and a fast5 file"""
     data = TrainingData(fast5_file, signalalign_file, **kwargs)
     data.save_training_file(output_name, output_dir=output_dir)
+    print("FILE SAVED: {}".format(output_name+".npy"), file=sys.stderr)
     return True
+
+def worker(work_queue, done_queue):
+    """Worker function to generate training data from a queue"""
+    try:
+        # create training data until there are no more files
+        for args in iter(work_queue.get, 'STOP'):
+            create_training_data(**args)
+        # catch errors
+    except Exception as error:
+        # pylint: disable=no-member,E1102
+        done_queue.put("%s failed with %s" % (current_process().name, error.message))
+        print("%s failed with %s" % (current_process().name, error.message), file=sys.stderr)
+
 
 
 def main():
     """Main docstring"""
     start = timer()
+    options = {"training-data":[{"filename": "file", "log_file": "/Users/andrewbailey/data/log-file.1", "output_folder": project_folder() + "/training2" }], "labeling-options":[{"prob":False, "kmer_len": 5, "alphabet": "ATGC", "nanonet": True}]}
     output_name = "file"
     log_file = "/Users/andrewbailey/data/log-file.1"
     kwargs = {"prob":False, "kmer_len": 5, "alphabet": "ATGC", "nanonet": True}
+    with open('options.json', 'w') as outfile:
+        json.dump(options, outfile, indent=4)
+    #
+    # with open('data.txt') as json_file:
+    #     data = json.load(json_file)
 
-    # create_training_data(fast5, tsv, kwargs, output_dir=project_folder()+"/training")
+    workers = 4
+    work_queue = Manager().Queue()
+    done_queue = Manager().Queue()
     jobs = []
 
     counter = 0
@@ -45,33 +68,30 @@ def main():
             line = line.rstrip().split('\t')
             fast5 = line[0]
             tsv = line[1]
-            output_name = output_name+str(counter)
-            process = Process(target=create_training_data, args=(fast5, \
-             tsv, kwargs, output_name, project_folder() + "/training2"))
-            jobs.append(process)
+            name = output_name+str(counter)
+            output_dir = project_folder() + "/training2"
+            arguments = {"fast5_file": fast5, "signalalign_file": tsv, "kwargs": kwargs, "output_name": name, "output_dir":output_dir}
+            # process = Process(target=create_training_data, args=(fast5, \
+            #  tsv, kwargs, name, project_folder() + "/training2"))
+            # jobs.append(process)
+            work_queue.put(arguments)
+
             counter += 1
 
-    for j in jobs:
-        j.start()
+    # start creating files using however many workers specified
+    for _ in xrange(workers):
+        p = Process(target=worker, args=(work_queue, done_queue))
+        p.start()
+        jobs.append(p)
+        work_queue.put('STOP')
 
-    for j in jobs:
-        j.join()
+    for p in jobs:
+        p.join()
 
-
-
-    # get training files
-    # training_dir = project_folder()
-    # training_files = list_dir(training_dir, ext="npy")
-    # print(training_files)
-    # # create data instances
-    # training = Data(training_files, 100, queue_size=10, verbose=True)
-    # testing = Data(training_files, 100, queue_size=10)
-    # training.start()
-    # testing.start()
-    # training.end()
-    # testing.end()
-
-
+    done_queue.put('STOP')
+    print("\n#  nanotensor - finished creating data set\n", file=sys.stderr)
+    print("\n#  nanotensor - finished creating data set\n", file=sys.stdout)
+    # check how long the whole program took
     stop = timer()
     print("Running Time = {} seconds".format(stop-start), file=sys.stderr)
 
