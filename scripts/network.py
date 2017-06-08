@@ -50,18 +50,14 @@ class BuildGraph():
         # self.batch_size = tf.Variable()
         # outputs = self.create_deep_blstm()
         outputs = self.blstm(self.x, layer_name="layer1", n_hidden=layer_sizes[0], forget_bias=self.forget_bias)
-        # outputs = self.blstm(outputs, layer_name="layer2", n_hidden=layer_sizes[0], \
-        # forget_bias=5.0)
 
         # clear_state = tf.group(
         #     tf.assign(forward_state, tf.zeros([layer_sizes[0]])),
         #     tf.assign(backward_state, tf.zeros([layer_sizes[0]])))
-        print("output.shape", outputs.shape)
         self.rnn_outputs_flat = tf.reshape(outputs, [-1, 2*layer_sizes[-1]])
-        print("rnn_outputs_flat.shape", self.rnn_outputs_flat.shape)
+        self.global_step = tf.Variable(0, name='global_step', trainable=False)
         # Linear activation, using rnn inner loop last output
         self.pred = self.create_prediction_layer()
-        print(self.pred)
         # Define loss and optimizer
         self.cost = self.cost_function_prob()
         self.optimizer = self.optimizer_function()
@@ -119,7 +115,6 @@ class BuildGraph():
 
     def optimizer_function(self):
         """Create optimizer function"""
-        self.global_step = tf.Variable(0, name='global_step', trainable=False)
         return tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.cost, \
          global_step=self.global_step)
 
@@ -241,45 +236,45 @@ def main():
     learning_rate = 0.001
     training_iters = 100
     batch_size = 2
+    queue_size = 10
     display_step = 10
-    n_steps = 100 # one vector per timestep
+    n_steps = 300 # one vector per timestep
     layer_sizes = tuple([100]) # hidden layer num of features
     training_dir = project_folder()+"/training2"
     training_files = list_dir(training_dir, ext="npy")
 
     # continually load data on the CPU
     with tf.device("/cpu:0"):
-        data = Data(training_files, batch_size, queue_size=10, verbose=False, pad=0, trim=True, n_steps=n_steps)
+        data = Data(training_files, batch_size, queue_size=queue_size, verbose=False, \
+                pad=0, trim=True, n_steps=n_steps)
         images_batch, labels_batch = data.get_inputs()
-        labels_batch1 = tf.reshape(labels_batch, [-1, data.n_classes])
-        images_batch1 = tf.reshape(images_batch, [-1, data.n_input])
 
     # build model
-    model = BuildGraph(data.n_input, data.n_classes, learning_rate, n_steps=n_steps, layer_sizes=layer_sizes, batch_size=batch_size, x=images_batch, y=labels_batch)
+    model = BuildGraph(data.n_input, data.n_classes, learning_rate, n_steps=n_steps, \
+            layer_sizes=layer_sizes, batch_size=batch_size, x=images_batch, y=labels_batch)
     cost = model.cost
     accuracy = model.accuracy
     merged_summaries = model.merged_summaries
     optimizer = model.optimizer
     # define what we want from the optimizer run
     init = model.init
+    saver = tf.train.Saver(max_to_keep=4, keep_checkpoint_every_n_hours=2)
     # Launch the graph
     with tf.Session(config=tf.ConfigProto(intra_op_parallelism_threads=8)) as sess:
+        # create logs
         logfolder_path = os.path.join(project_folder(), 'logs/', \
                         datetime.now().strftime("%m%b-%d-%Hh-%Mm"))
         writer = tf.summary.FileWriter((logfolder_path), sess.graph)
+        # initialize
         sess.run(init)
         step = 1
-        # initialize states with zeros
-        new_read = False
+        # start queue
         tf.train.start_queue_runners(sess=sess)
-        # training = Data(training_files, batch_size, n_steps, queue_size=10, verbose=False)
         data.start_threads(sess)
-
         # Keep training until reach max iterations
         while step * batch_size < training_iters:
             # Run optimization and update layers
             output_states = sess.run([optimizer, model.update_op])
-            print(output_states)
             if step % display_step == 0:
                 # Calculate batch loss and accuracy
                 run_metadata = tf.RunMetadata()
@@ -294,12 +289,24 @@ def main():
         print("Optimization Finished!")
         # Calculate accuracy for a bunch of test data
 
-        saver = tf.train.Saver(max_to_keep=4, keep_checkpoint_every_n_hours=2)
-        saver.save(sess, project_folder()+'/testing/my_test_model', \
-                    global_step=model.global_step)
+        saver.save(sess, project_folder()+'/testing/my_test_model.ckpt', global_step=model.global_step)
 
         print("Testing Accuracy: {}".format(sess.run(accuracy)))
         writer.close()
+
+
+
+
+    with tf.Session() as sess:
+        # To initialize values with saved data
+        sess.run(init)
+        tf.train.start_queue_runners(sess=sess)
+        data.start_threads(sess)
+
+        saver.restore(sess, '/Users/andrewbailey/nanopore-RNN/testing/my_test_model.ckpt-49')
+        # new_saver.restore(sess, tf.train.latest_checkpoint('/Users/andrewbailey/nanopore-RNN/testing/'))
+        print(sess.run(accuracy)) # returns 1000
+
 
 
     stop = timer()
