@@ -239,6 +239,10 @@ class TrainingData(object):
         np.save(output_file, self.training_file)
         return output_file
 
+    def interpolate(self):
+        """Guess a distribution of data"""
+        return "from scipy.interpolate import interp1d"
+
 def main():
     """Mainly used for testing the methods within data_preparation.py"""
     start = timer()

@@ -13,20 +13,50 @@ import sys
 from timeit import default_timer as timer
 import numpy as np
 from multiprocessing import Process, Queue
+import tensorflow as tf
+import threading
+import os
+from datetime import datetime
+import itertools
+import traceback
+import numpy as np
+from utils import project_folder, merge_two_dicts, list_dir
+from tensorflow.contrib import rnn
 
 class Data:
     """Object to manage data for shuffling data inputs"""
-    def __init__(self, file_list, batch_size, seq_len, queue_size, verbose=False, pad=0, trim=True):
+    def __init__(self, file_list, batch_size=10, queue_size=100, verbose=False, pad=0, trim=True, n_steps=1):
         self.file_list = file_list
         self.num_files = len(self.file_list)
-        self.queue = Queue(maxsize=queue_size)
+        # self.queue = Queue(maxsize=queue_size)
         self.file_index = 0
         self.batch_size = batch_size
         self.verbose = verbose
-        self.process1 = Process(target=self.load_data, args=())
+        # self.process1 = Process(target=self.load_data, args=())
         self.pad = pad
         self.trim = trim
-        self.seq_len = seq_len
+        self.seq_len = n_steps
+
+        # TODO throw error here
+        if batch_size > queue_size/10:
+            print("Increase Queue size", file=sys.stderr)
+
+        data = np.load(self.file_list[0])
+        self.n_input = len(data[0][0])
+        self.n_classes = len(data[0][1])
+        print(self.n_input, self.n_classes)
+
+
+        self.dataX = tf.placeholder("float", [n_steps, self.n_input], name='X')
+        self.dataY = tf.placeholder("float", [n_steps, self.n_classes], name='Y')
+        # The actual queue of data. The queue contains a vector for
+        # the mnist features, and a scalar label.
+        self.queue = tf.RandomShuffleQueue(shapes=[[n_steps, self.n_input], [n_steps, self.n_classes]],
+                                           dtypes=[tf.float32, tf.float32],
+                                           capacity=queue_size,
+                                           min_after_dequeue=queue_size/2)
+        # add one batch to queue
+        self.enqueue_op = self.queue.enqueue([self.dataX, self.dataY])
 
     def shuffle(self):
         """Shuffle the input file order"""
@@ -36,13 +66,16 @@ class Data:
         np.random.shuffle(self.file_list)
         return True
 
-    def add_to_queue(self, batch, wait=True, pad=0):
+    def add_to_queue(self, batch, sess, pad=0):
         """Add a batch to the queue"""
         if pad > 0:
-            # print(batch[-1])
+            # if we want to pad sequences with zeros
             batch = self.pad_with_zeros(batch, pad=pad)
-            # print(batch[-1])
-        self.queue.put(batch, wait)
+        features = batch[:, 0]
+        labels = batch[:, 1]
+        features = np.asarray([np.asarray(features[n]) for n in range(len(features))])
+        labels = np.asarray([np.asarray(labels[n]) for n in range(len(labels))])
+        sess.run(self.enqueue_op, feed_dict={self.dataX:features, self.dataY:labels})
 
     @staticmethod
     def pad_with_zeros(matrix, pad=0):
@@ -54,17 +87,7 @@ class Data:
         # print(new_rows.shape)
         return np.append(matrix, new_rows, axis=0)
 
-
-    def get_batch(self, wait=True):
-        """Get a batch from the queue"""
-        batch = self.queue.get(wait)
-        features = batch[:, 0]
-        labels = batch[:, 1]
-        features = np.asarray([np.asarray(features[n]) for n in range(len(features))])
-        labels = np.asarray([np.asarray(labels[n]) for n in range(len(labels))])
-        return features, labels
-
-    def create_batches(self, data):
+    def create_batches(self, data, sess):
         """Create batches from input data array"""
         num_batches = (len(data) // self.seq_len)
         pad = self.seq_len - (len(data) % self.seq_len)
@@ -76,31 +99,31 @@ class Data:
         index_2 = self.seq_len
         while more_data:
             next_in = data[index_1:index_2]
-            self.add_to_queue(next_in)
+            self.add_to_queue(next_in, sess)
             batch_number += 1
             index_1 += self.seq_len
             index_2 += self.seq_len
             if batch_number == num_batches:
                 if not self.trim:
                     # moved this down because we dont care about connecting between reads right now
-                    self.add_to_queue(np.array([[str(pad), str(pad)]]))
+                    self.add_to_queue(np.array([[str(pad), str(pad)]]), sess)
                     next_in = data[index_1:index_2]
                     # print(np.array([pad]))
-                    self.add_to_queue(next_in, pad=pad)
+                    self.add_to_queue(next_in, sess, pad=pad)
                 more_data = False
         return True
 
-    def read_in_file(self):
+    def read_in_file(self, sess):
         """Read in file from file list"""
         data = np.load(self.file_list[self.file_index])
-        self.create_batches(data)
+        self.create_batches(data, sess)
         return True
 
-    def load_data(self):
+    def load_data(self, sess):
         """Create neverending loop of adding to queue and shuffling files"""
         counter = 0
         while counter <= 10:
-            self.read_in_file()
+            self.read_in_file(sess)
             self.file_index += 1
             if self.verbose:
                 print("File Index = {}".format(self.file_index), file=sys.stderr)
@@ -109,134 +132,83 @@ class Data:
                 self.file_index = 0
         return True
 
-    def start(self):
-        """Start background process to keep queue filled"""
-        self.process1.start()
-        return True
+    def get_inputs(self):
+        """
+        Return's tensors containing a batch of images and labels
+        """
+        images_batch, labels_batch = self.queue.dequeue_many(self.batch_size)
+        return images_batch, labels_batch
 
-    def end(self):
-        """End bacground process"""
-        self.process1.terminate()
-        return True
+    def thread_main(self, sess, data_obj):
+        """
+        Function run on alternate thread. Basically, keep adding data to the queue.
+        """
+        for x_data, y_data in data_obj.batch_generator():
+            sess.run(self.enqueue_op, feed_dict={self.dataX:x_data, self.dataY:y_data})
 
-    def interpolate(self):
-        """Guess a distribution of data"""
-        return "from scipy.interpolate import interp1d"
-
-
-def create_proto(path):
-    """Create a protobuff file from numpy array"""
-
+    def start_threads(self, sess, n_threads=1):
+        """ Start background threads to feed queue """
+        threads = []
+        for n in range(n_threads):
+            t = threading.Thread(target=self.load_data, args=(sess,))
+            t.daemon = True # thread will close when parent quits
+            t.start()
+            threads.append(t)
+        return threads
 
 
 def main():
     """Main docstring"""
     start = timer()
 
-    from skdata.mnist.views import OfficialVectorClassification
-    from tqdm import tqdm
-    import numpy as np
-    import tensorflow as tf
+    batch_size = 2
+    n_steps = 100 # one vector per timestep
+    training_dir = project_folder()+"/training2"
+    training_files = list_dir(training_dir, ext="npy")
 
-    # filename = "mnist.tfrecords"
-    # for serialized_example in tf.python_io.tf_record_iterator(filename):
-    #     example = tf.train.Example()
-    #     example.ParseFromString(serialized_example)
-    #
-    #     # traverse the Example format to get data
-    #     image = example.features.feature['image'].int64_list.value
-    #     label = example.features.feature['label'].int64_list.value[0]
-    #     # do something
-    #     print (image, label)
-    # data = OfficialVectorClassification()
-    # trIdx = data.sel_idxs[:]
-    # print(data.all_labels[0])
-    # one MUST randomly shuffle data before putting it into one of these
-    # formats. Without this, one cannot make use of tensorflow's great
-    # out of core shuffling.
-    # np.random.shuffle(trIdx)
-    #
-    data = np.load("/Users/andrewbailey/nanopore-RNN/testing.npy")
-    writer = tf.python_io.TFRecordWriter("nanopore.tfrecords")
-    # # iterate over each example
-    # # wrap with tqdm for a progress bar
-    # for example_idx in tqdm(len(data)):
-    features = data[:, 0]
-    labels = data[:, 1]
+    # Doing anything with data on the CPU is generally a good idea.
+    with tf.device("/cpu:0"):
+        data = Data(training_files, batch_size, queue_size=10, verbose=False, pad=0, trim=True, n_steps=n_steps)
+        images_batch, labels_batch = data.get_inputs()
+        labels_batch1 = tf.reshape(labels_batch, [-1, data.n_classes])
+        images_batch1 = tf.reshape(images_batch, [-1, data.n_input])
+    # simple model
+    def fulconn_layer(input_data, output_dim, activation_func=None):
+        """Create a fully connected layer.
+        source: https://stackoverflow.com/questions/39808336/tensorflow-bidirectional-dynamic-rnn-none-values-error/40305673
+        """
+        input_dim = int(input_data.get_shape()[1])
+        weight = tf.Variable(tf.random_normal([input_dim, output_dim]))
+        bais = tf.Variable(tf.random_normal([output_dim]))
+        if activation_func:
+            output = activation_func(tf.matmul(input_data, weight) + bais)
+        else:
+            output = tf.matmul(input_data, weight) + bais
+        return output
 
-    def make_example(sequence, labels):
-        # The object we return
-        # A non-sequential feature of our example
-        ex = tf.train.SequenceExample()
-        sequence_length = len(sequence)
-        ex.context.feature["length"].int64_list.value.append(sequence_length)
-        # Feature lists for the two sequential features of our example
-        fl_events = ex.feature_lists.feature_list["events"]
-        fl_labels = ex.feature_lists.feature_list["labels"]
-        for event, label in zip(sequence, labels):
-            fl_events.feature.add().float_list.value.append(_floatlist_feature(event))
-            fl_labels.feature.add().float_list.value.append(label)
-        return ex
+    pred = fulconn_layer(images_batch1, data.n_classes)
+    print(pred.shape)
+    print(labels_batch.shape)
+    print(labels_batch1.shape)
+    loss = tf.nn.softmax_cross_entropy_with_logits(logits=pred, labels=labels_batch1)
 
-    def _int64_feature(value):
-      return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
+    train_op = tf.train.AdamOptimizer().minimize(loss)
 
+    sess = tf.Session(config=tf.ConfigProto(intra_op_parallelism_threads=8))
+    init = tf.global_variables_initializer()
+    sess.run(init)
 
-    def _bytes_feature(value):
-      return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
+    # start the tensorflow QueueRunner's
+    tf.train.start_queue_runners(sess=sess)
+    # start our custom queue runner's threads
+    # training = Data(training_files, batch_size, n_steps, queue_size=10, verbose=True)
+    # custom_runner.thread_main(sess, training)
+    data.start_threads(sess)
 
-    def _float_feature(value):
-      return tf.train.Feature(float_list=tf.train.FloatList(value=[value]))
+    while True:
+        _, loss_val = sess.run([train_op, loss])
+        print(loss_val)
 
-    ex = tf.train.SequenceExample(features=tf.train.Features(feature={
-        # 'height': _int64_feature(rows),
-        # 'width': _int64_feature(cols),
-        # 'depth': _int64_feature(depth),
-        # 'label': _int64_feature(int(labels[index])),
-        'image_raw': _float_feature(labels)}))
-
-
-
-    # def make_example2(sequence, labels):
-    #     # The object we return
-    #     # A non-sequential feature of our example
-    #     sequence_length = len(sequence)
-    #
-    #     ex = tf.train.SequenceExample()
-    #     ex.context.feature["length"].int64_list.value.append(sequence_length)
-    #     # Feature lists for the two sequential features of our example
-    #     fl_events = ex.feature_lists.feature_list["events"]
-    #     fl_labels = ex.feature_lists.feature_list["labels"]
-    #     for event, label in zip(sequence, labels):
-    #         fl_events.feature.add().float_list.value {event}
-    #         fl_labels.feature.add().float_list.value.append(label)
-    #     return ex
-
-
-    sequence_length = len(features)
-
-    # ex = make_example(features, labels)
-    writer.write(ex.SerializeToString())
-    writer.close()
-
-
-    # construct the Example proto boject
-    # example = tf.train.Example(
-    #     # Example contains a Features proto object
-    #     features=tf.train.Features(
-    #       # Features contains a map of string to Feature proto objects
-    #       feature={
-    #         # A Feature contains one of either a int64_list,
-    #         # float_list, or bytes_list
-    #         'label': tf.train.Feature(
-    #             int64_list=tf.train.Int64List(value=[label])),
-    #         'image': tf.train.Feature(
-    #             int64_list=tf.train.Int64List(value=features.astype("int64"))),
-    #     }))
-    #     # use the proto object to serialize the example to a string
-    # serialized = example.SerializeToString()
-    # # write the serialized object to disk
-    # writer.write(serialized)
 
     stop = timer()
     print("Running Time = {} seconds".format(stop-start), file=sys.stderr)

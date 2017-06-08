@@ -26,18 +26,17 @@ from data import Data
 import tensorflow as tf
 from tensorflow.contrib import rnn
 
+
 class BuildGraph():
     """Build a tensorflow network graph."""
     def __init__(self, n_input, n_classes, learning_rate, n_steps=1,\
-    layer_sizes=tuple([100]), forget_bias=5.0, batch_size=100):
+        layer_sizes=tuple([100]), forget_bias=5.0, batch_size=100, y=None, x=None):
         # TODO get variable batch size
 
+        self.x = x
+        self.y = y
         self.batch_size = batch_size
-        self.x = tf.placeholder("float", [self.batch_size, n_steps, n_input], name='x')
-        self.y = tf.placeholder("float", [self.batch_size, n_steps, n_classes], name='y')
-
         self.y_flat = tf.reshape(self.y, [-1, n_classes])
-        print(self.y_flat.shape)
         self.n_layers = len(layer_sizes)
         self.layer_sizes = layer_sizes
         self.n_input = n_input
@@ -45,15 +44,12 @@ class BuildGraph():
         self.learning_rate = learning_rate
         self.n_steps = n_steps
         self.forget_bias = forget_bias
-        # output states
         self.output_states = []
-        # layer placeholders
         self.layers = []
         # self.seq_len = tf.placeholder(tf.int32, [None], name="batch_size")
         # self.batch_size = tf.Variable()
         # outputs = self.create_deep_blstm()
-        outputs = self.blstm(self.x, layer_name="layer1", n_hidden=layer_sizes[0], \
-        forget_bias=5.0)
+        outputs = self.blstm(self.x, layer_name="layer1", n_hidden=layer_sizes[0], forget_bias=self.forget_bias)
         # outputs = self.blstm(outputs, layer_name="layer2", n_hidden=layer_sizes[0], \
         # forget_bias=5.0)
 
@@ -114,7 +110,7 @@ class BuildGraph():
         """Create a cost function for optimizer"""
         # TODO create a cost function with a defined mask for padded input sequences
         with tf.name_scope("cost"):
-            cost = tf.reduce_mean(tf.nn.sparse.softmax_cross_entropy_with_logits(logits=self.pred,\
+            cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.pred,\
                 labels=self.y_flat))
             # mask = tf.sign(tf.to_float(self.y_flat))
             # masked_losses = mask * losses
@@ -155,7 +151,6 @@ class BuildGraph():
         # The tuple's actual value should not be used.
         return tf.tuple(update_ops)
 
-
     def blstm(self, input_vector, layer_name="blstm_layer1", n_hidden=128, forget_bias=5.0):
         """Create a bidirectional LSTM using code from the example at
          https://github.com/aymericdamien/TensorFlow-Examples/blob/master/examples/3_NeuralNetworks/bidirectional_rnn.py"""
@@ -187,13 +182,13 @@ class BuildGraph():
 
             self.update_op = self.get_state_update_op((lstm_fw_cell_states, lstm_bw_cell_states), output_states)
 
-            # self.output_states.extend(output_states)
             # concat two output layers so we can treat as single output layer
             output = tf.concat(outputs, 2)
         return output
 
     @staticmethod
     def variable_summaries(var):
+        # pylint: disable=C0301
         """Attach a lot of summaries to a Tensor (for TensorBoard visualization).
         source: https://github.com/tensorflow/tensorflow/blob/r1.1/tensorflow/examples/tutorials/mnist/mnist_with_summaries.py
         """
@@ -209,6 +204,7 @@ class BuildGraph():
 
     @staticmethod
     def fulconn_layer(input_data, output_dim, activation_func=None):
+        # pylint: disable=C0301
         """Create a fully connected layer.
         source: https://stackoverflow.com/questions/39808336/tensorflow-bidirectional-dynamic-rnn-none-values-error/40305673
         """
@@ -224,140 +220,90 @@ class BuildGraph():
 def main():
     """Control the flow of the program"""
     start = timer()
-    # load data
+    # if "CUDA_HOME" in os.environ:
+    #     utilization = re.findall(r"Utilization.*?Gpu.*?(\d+).*?Memory.*?(\d+)",
+    #                              subprocess.check_output(["nvidia-smi", "-q"]),
+    #                              flags=re.MULTILINE | re.DOTALL)
+    #     print("GPU Utilization", utilization)
+    #
+    #     if ('0', '0') in utilization:
+    #         print("Using GPU Device:", utilization.index(('0', '0')))
+    #         os.environ["CUDA_VISIBLE_DEVICES"] = str(utilization.index(('0', '0')))
+    #         os.environ["CUDA_DEVICE_ORDER"]  = "PCI_BUS_ID"  # To ensure the index matches
+    #     else:
+    #         print("All GPUs in Use")
+    #         exit
+    # else:
+    #     print("Running using CPU, NOT GPU")
+
     # TODO make hyperparameters a json file
     # Parameters
     learning_rate = 0.001
     training_iters = 100
-    batch_size = 1
+    batch_size = 2
     display_step = 10
     n_steps = 100 # one vector per timestep
     layer_sizes = tuple([100]) # hidden layer num of features
     training_dir = project_folder()+"/training2"
     training_files = list_dir(training_dir, ext="npy")
-    # create data instances
-    training = Data(training_files, n_steps, queue_size=10, verbose=False)
-    testing = Data(training_files, n_steps, queue_size=10, verbose=False)
-    training.start()
-    testing.start()
 
-    try:
-        # grab labels
-        features, labels = training.get_batch()
-        batch1_y = labels
-        batch1_x = features
-        # print(type(features))
-        # print(type(features[0]))
-        # print(type(features[:, 0]))
+    # continually load data on the CPU
+    with tf.device("/cpu:0"):
+        data = Data(training_files, batch_size, queue_size=10, verbose=False, pad=0, trim=True, n_steps=n_steps)
+        images_batch, labels_batch = data.get_inputs()
+        labels_batch1 = tf.reshape(labels_batch, [-1, data.n_classes])
+        images_batch1 = tf.reshape(images_batch, [-1, data.n_input])
 
-        print("num_features = ", len(features))
-        print("batch1_x.shape", batch1_x.shape)
-        print("features.shape", features.shape)
-        print("batch1_y.shape", batch1_y.shape)
+    # build model
+    model = BuildGraph(data.n_input, data.n_classes, learning_rate, n_steps=n_steps, layer_sizes=layer_sizes, batch_size=batch_size, x=images_batch, y=labels_batch)
+    cost = model.cost
+    accuracy = model.accuracy
+    merged_summaries = model.merged_summaries
+    optimizer = model.optimizer
+    # define what we want from the optimizer run
+    init = model.init
+    # Launch the graph
+    with tf.Session(config=tf.ConfigProto(intra_op_parallelism_threads=8)) as sess:
+        logfolder_path = os.path.join(project_folder(), 'logs/', \
+                        datetime.now().strftime("%m%b-%d-%Hh-%Mm"))
+        writer = tf.summary.FileWriter((logfolder_path), sess.graph)
+        sess.run(init)
+        step = 1
+        # initialize states with zeros
+        new_read = False
+        tf.train.start_queue_runners(sess=sess)
+        # training = Data(training_files, batch_size, n_steps, queue_size=10, verbose=False)
+        data.start_threads(sess)
 
-        # grab feature vectors
-        # find the length of the label vector
-        # print(features, labels)
-        label_len = len(labels[0])
-        feature_len = len(features[0])
-        n_input = feature_len
-        n_classes = label_len
+        # Keep training until reach max iterations
+        while step * batch_size < training_iters:
+            # Run optimization and update layers
+            output_states = sess.run([optimizer, model.update_op])
+            print(output_states)
+            if step % display_step == 0:
+                # Calculate batch loss and accuracy
+                run_metadata = tf.RunMetadata()
+                acc, summary, loss = sess.run([accuracy, merged_summaries, cost], run_metadata=run_metadata)
+                # add summary statistics
+                writer.add_summary(summary, step)
+                print("Iter " + str(step*batch_size) + ", Minibatch Loss= " + \
+                      "{:.6f}".format(loss) + ", Training Accuracy= " + \
+                      "{:.5f}".format(acc))
+            step += 1
 
-        # convert the inputs into numpy arrays
-        print("label_len", label_len)
-        print("feature_len", feature_len)
-        features = features.reshape((batch_size, n_steps, n_input))
+        print("Optimization Finished!")
+        # Calculate accuracy for a bunch of test data
 
-        # train_seq_len = np.ones(batch_size) * seq_length
+        saver = tf.train.Saver(max_to_keep=4, keep_checkpoint_every_n_hours=2)
+        saver.save(sess, project_folder()+'/testing/my_test_model', \
+                    global_step=model.global_step)
 
-        model = BuildGraph(n_input, n_classes, learning_rate, n_steps=n_steps, layer_sizes=layer_sizes, batch_size=batch_size)
-        x = model.x
-        y = model.y
-        cost = model.cost
-        accuracy = model.accuracy
-        merged_summaries = model.merged_summaries
-        optimizer = model.optimizer
-        # define what we want from the optimizer run
-        run_optimizer = optimizer #+ model.output_states
-        init = model.init
-        # Launch the graph
-        with tf.Session() as sess:
-            logfolder_path = os.path.join(project_folder(), 'logs/', \
-                            datetime.now().strftime("%m%b-%d-%Hh-%Mm"))
-            test_writer = tf.summary.FileWriter((logfolder_path), sess.graph)
-            sess.run(init)
-            step = 1
-            # initialize states with zeros
-            new_read = False
-            # Keep training until reach max iterations
-            while step * batch_size < training_iters:
-                # get new batch of data
-                features1, labels = training.get_batch()
-                # check if end of file and new read coming up
-                if isinstance(features1[0], basestring):
-                    # next batch is padded with zeros so pass that info to model
-                    # batch_size = int(features1[0])
-                    # sess.run([model.reset_fw])
-                    features1, labels = training.get_batch()
-                    # print("new batch size =", batch_size)
-                    # remember that the read after will be from a new read
-                    new_read = True
-                # reshape input into the shape the model wants
-                features = features1.reshape((batch_size, len(features1), n_input))
-                labels = labels.reshape((batch_size, len(labels), n_classes))
-                # feed inputs, seq_len and hidden states to the networks
-                inputs1 = {x: features, y: labels}
-                # Run optimization and update layers
-                # sess.run([model.reset_bw])
-                output_states = sess.run([run_optimizer, model.update_op], feed_dict=inputs1)
-                # print(output_states)
-                if new_read:
-                    # create new zero hidden states if new read
-                    new_read = False
-                    # batch_size = len(features)
+        print("Testing Accuracy: {}".format(sess.run(accuracy)))
+        writer.close()
 
 
-                if step % display_step == 0:
-                    # Calculate batch loss and accuracy
-                    run_metadata = tf.RunMetadata()
-                    acc, summary, loss = sess.run([accuracy, merged_summaries, cost], \
-                    feed_dict=inputs1, run_metadata=run_metadata)
-                    # add summary statistics
-                    test_writer.add_summary(summary, step)
-                    print("Iter " + str(step*batch_size) + ", Minibatch Loss= " + \
-                          "{:.6f}".format(loss) + ", Training Accuracy= " + \
-                          "{:.5f}".format(acc))
-                step += 1
-            print("Optimization Finished!")
-            # Calculate accuracy for a bunch of test data
-            features, labels = testing.get_batch()
-            features = features.reshape((batch_size, len(features1), n_input))
-            labels = labels.reshape((batch_size, len(labels), n_classes))
-            inputs1 = {x: features, y: labels}
-
-            saver = tf.train.Saver(max_to_keep=4, keep_checkpoint_every_n_hours=2)
-            saver.save(sess, project_folder()+'/testing/my_test_model', \
-                        global_step=model.global_step)
-
-            print("Testing Accuracy: {}".format(sess.run(accuracy, feed_dict=inputs1)))
-            test_writer.close()
-
-    except Exception as error:
-        training.end()
-        testing.end()
-        exc_info = sys.exc_info()
-        traceback.print_exception(*exc_info)
-        # print(sys.exc_info(), file=sys.stderr)
-        raise error
-
-    training.end()
-    testing.end()
-    # end the batch updating
     stop = timer()
     print("Running Time = {} seconds".format(stop-start), file=sys.stderr)
-
-
-
 
 
 if __name__ == "__main__":
