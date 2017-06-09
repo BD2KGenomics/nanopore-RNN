@@ -24,9 +24,10 @@ import boto
 from error import PathError
 import numpy as np
 from Bio.Seq import Seq
-
 # from Bio.Alphabet import generic_dna
+
 #TODO create debug function and verbose options
+
 
 
 def no_skipped_events(filepath):
@@ -112,61 +113,78 @@ def get_project_file(localpath):
     else:
         raise PathError("Path to file does not exist!")
 
-def testfast5():
-    """Get the path to one of our test fast5 files"""
-    return get_project_file("test-files/r9/canonical/AlexisLucattini_20160918_FNFAD24297_MN19582_sequencing_run_E_COLI_NON_MTHYLTD_R9_77950_ch146_read1209_strand1.fast5")
-#signalAlign
 def remove_fasta_newlines(reference_path, reference_modified_path):
-    """Get fasta file and remove \n from the ends"""
+    """Get fast5 file and remove \n from the ends"""
     with open(reference_modified_path, 'w') as outfile, open(reference_path, 'r') as infile:
         for line in infile:
             if ">" in line:
                 outfile.write(line)
             else:
-                newline = line.rstrip()
-                outfile.write(newline)
+                line1 = line.rstrip()
+                outfile.write(line1)
 
-def get_motif_complement(motif):
-    """get the complement of a motif"""
+    return reference_modified_path
+
+def get_complement(motif, reverse=False):
+    """get the complement or reverse complement of a dna sequecnce"""
     dna = Seq(motif)
-    motif_complement = str(dna.complement())
+    if reverse:
+        motif_complement = str(dna.reverse_complement())
+    else:
+        motif_complement = str(dna.complement())
     return motif_complement
 
-def make_bed_file(reference_modified_path, bed_file_path, motif1, modified_motif1, modified_motif1_comp, replace):
-    """This method does something"""
-    sequence_list = str()
-    seq_name = str()
-    string1 = motif1[[i for i in range(len(motif1)) if motif1[i] != modified_motif1[i]][0]]
-    print(string1)
-    motif1_comp = get_motif_complement(motif1)
+# TODO This needs to work with the human genome so it probably cant read in the whole genome
+def make_bed_file(reference_modified_path, bed_file_path, motifs={"CCAGG":"CEAGG", "CCTGG":"CETGG"}):
+    """Create bed file from motif and replacement motif
+
+    Must replace a single character with a new, non canonical base
+
+    """
+    reference = ""
+    seq_name = ""
+    # get reference sequence as string
     with open(reference_modified_path, 'r') as infile:
         for line in infile:
             if ">" in line:
                 seq_name = seq_name + line.rsplit()[0].split(">")[1]
             else:
-                sequence_list = sequence_list + line
+                reference = reference + line
+    # create bed file
     with open(bed_file_path, "w") as output:
-        motif1_replaced = sequence_list.replace(motif1, modified_motif1)
-        motif1_position = [m.start() for m in re.finditer(replace, motif1_replaced)]
-        motif1_comp_replaced = sequence_list.replace(replace, modified_motif1_comp)
-        motif1_comp_position = [m.start() for m in re.finditer(replace, motif1_comp_replaced)]
-        for i in motif1_position:
-            output.write(seq_name + "\t" + np.str(i) + "\t" + "+" + "\t" + string1 + "\t" + replace + "\n")
-        for i in motif1_comp_position:
-            output.write(seq_name + "\t" + np.str(i) + "\t" + "-" + "\t" + string1 +"\t" + replace + "\n")
+        for motif, replacement in motifs.items():
+            # get replacement character
+            pos = [i for i in range(len(motif)) if motif[i] != replacement[i]][0]
+            old_char = motif[pos]
+            new_char = replacement[pos]
+            motif1_replaced = reference.replace(motif, replacement)
+            motif1_position = [m.start() for m in re.finditer(new_char, motif1_replaced)]
+            for i in motif1_position:
+                output.write(seq_name + "\t" + np.str(i) + "\t" + "+" + "\t" +
+                             old_char +"\t" + new_char + "\n")
+            # find motifs on opposite strand
+            replace_pos = len(motif)-pos-1
+            motif1_comp = get_complement(motif, reverse=True)
+            # replace motif complement with modified base at correct position
+            modified_motif1_comp = motif1_comp[:replace_pos] + new_char + \
+                                   motif1_comp[replace_pos+1:]
+            motif1_comp_replaced = reference.replace(motif1_comp, modified_motif1_comp)
+            motif1_comp_position = [m.start() for m in re.finditer(new_char, motif1_comp_replaced)]
+            for i in motif1_comp_position:
+                output.write(seq_name + "\t" + np.str(i) + "\t" + "-" + "\t" +
+                             old_char +"\t" + new_char + "\n")
 
 ## Concatenate control and experimental assignments
 def concatenate_assignments(assignments_path1, assignments_path2, output):
     """concatenates control and experimental assignments"""
-    read_files = glob.glob(assignments_path1 + "/*.assignments") +\
-    glob.glob(assignments_path2 + "/*.assignments")
+    read_files = glob.glob(assignments_path1 + "/*.assignments") + glob.glob(assignments_path2 + "/*.assignments")
     with open(output, "w") as outfile:
-        for file1 in read_files:
-            with open(file1, "rb") as infile:
+        for f in read_files:
+            with open(f, "rb") as infile:
                 outfile.write(infile.read())
 
-## for each kmer in assignmnets get 50 assignment or less
 def get_sample_assignments(concatenated_assignmnets_path, sampled_assignments):
+    """for each kmer in assignmnets get 50 assignment or less"""
     kmerDict = dict()
     with open(concatenated_assignmnets_path, "r") as infile:
         for i in infile:
@@ -180,16 +198,15 @@ def get_sample_assignments(concatenated_assignmnets_path, sampled_assignments):
         for key, value in kmerDict.iteritems():
             mylist = kmerDict[key]
             if len(mylist) >= 50:
-                rand_smpl = [mylist[i] for i in random.sample(range(len(mylist)),50)]
+                rand_smpl = [mylist[i] for i in random.sample(range(len(mylist)), 50)]
                 for g in rand_smpl:
                     string = ''.join(g)
                     outfile.write(key + "\t" + string)
             elif len(mylist) < 50:
-                rand_smpl = [mylist[i] for i in random.sample(range(len(mylist)),len(mylist))]
+                rand_smpl = [mylist[i] for i in random.sample(range(len(mylist)), len(mylist))]
                 for g in rand_smpl:
                     string = ''.join(g)
                     outfile.write(key + "\t" + string)
-
 
 def sum_to_one(vector):
     """Make sure a vector sums to one, if not, create diffuse vector"""
@@ -218,33 +235,27 @@ def add_field(np_struct_array, descr):
         new[name] = np_struct_array[name]
     return new
 
-
 def merge_two_dicts(dict1, dict2):
     """Given two dicts, merge them into a new dict as a shallow copy.
-    source:https://stackoverflow.com/questions/38987/how-to-merge-two-python-dictionaries-in-a-single-expression"""
+    source: https://stackoverflow.com/questions/38987/
+    how-to-merge-two-python-dictionaries-in-a-single-expression"""
     final = dict1.copy()
     final.update(dict2)
     return final
 
+
+
 def main():
     """Test the methods"""
     start = timer()
-    # file1 = """/Users/andrewbailey/nanopore-RNN/temp/tempFiles_alignment/132de6a8-df1e-468f-848b-abc960e1fc76_Basecall_2D_template.sm.backward.tsv"""
-    # dir1 = "/Users/andrewbailey/nanopore-RNN/temp/tempFiles_alignment/"
-    # print(len(grab_s3_files("bailey-nanonet/fast5files2", ext="a")))
-    # check_events(dir1)
-    # print(len(list_dir(dir1, ext="a")))
-    # print(find_skipped_events(file1))
-    ref_seq = get_project_file("/reference-sequences/ecoli_k12_mg1655.fa")
-    reference_modified_path = get_project_file("/reference-sequences/ecoli_k12_mg1655_modified.fa")
-    # remove_fasta_newlines(ref_seq, ref_seq+"1")
-    bed_file_path = project_folder()+"/reference-sequences/CCAGG_modified.bed"
-    motif1 = "CCAGG"
-    # motif2 = "CCTGG"
-    modified_motif1 = "CEAGG"
-    modified_motif1_comp = "GGTCC"
-    replace = "E"
-    make_bed_file(reference_modified_path, bed_file_path, motif1, modified_motif1, modified_motif1_comp, replace)
+
+    ref_seq = get_project_file("/testing/reference-sequences/ecoli_k12_mg1655.fa")
+    reference_modified_path = project_folder()+"/testing/reference-sequences/ecoli_k12_mg1655_modified.fa"
+    remove_fasta_newlines(ref_seq, reference_modified_path)
+    bed_file_path = project_folder()+"/testing/reference-sequences/CCAGG_modified.bed"
+    motifs = {"CCAGG":"CEAGG", "CCTGG":"CETGG"}
+
+    make_bed_file(reference_modified_path, bed_file_path, motifs)
     stop = timer()
     print("Running Time = {} seconds".format(stop-start), file=sys.stderr)
 
