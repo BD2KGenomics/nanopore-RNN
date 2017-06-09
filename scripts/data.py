@@ -44,7 +44,7 @@ class Data:
         data = np.load(self.file_list[0])
         self.n_input = len(data[0][0])
         self.n_classes = len(data[0][1])
-        print(self.n_input, self.n_classes)
+        # print(self.n_input, self.n_classes)
 
 
         self.dataX = tf.placeholder("float", [n_steps, self.n_input], name='X')

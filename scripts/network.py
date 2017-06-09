@@ -31,8 +31,6 @@ class BuildGraph():
     """Build a tensorflow network graph."""
     def __init__(self, n_input, n_classes, learning_rate, n_steps=1,\
         layer_sizes=tuple([100]), forget_bias=5.0, batch_size=100, y=None, x=None):
-        # TODO get variable batch size
-
         self.x = x
         self.y = y
         self.batch_size = batch_size

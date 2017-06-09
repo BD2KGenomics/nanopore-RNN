@@ -219,7 +219,6 @@ def add_field(np_struct_array, descr):
     return new
 
 
-
 def merge_two_dicts(dict1, dict2):
     """Given two dicts, merge them into a new dict as a shallow copy.
     source:https://stackoverflow.com/questions/38987/how-to-merge-two-python-dictionaries-in-a-single-expression"""
