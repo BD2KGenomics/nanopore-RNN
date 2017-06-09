@@ -17,9 +17,17 @@ from __future__ import print_function
 from timeit import default_timer as timer
 import sys
 import os
+import re
+import glob
+import random
 import boto
 from error import PathError
 import numpy as np
+from Bio.Seq import Seq
+
+# from Bio.Alphabet import generic_dna
+#TODO create debug function and verbose options
+
 
 
 import numpy as np
@@ -65,7 +73,7 @@ def grab_s3_files(bucket_path, ext=""):
     return file_paths
 
 def list_dir(path, ext=""):
-    """get all fast5 file paths from local directory"""
+    """get all file paths from local directory with extention"""
     if ext == "":
         onlyfiles = [os.path.join(os.path.abspath(path), f) for f in \
         os.listdir(path) if \
@@ -105,11 +113,12 @@ def get_project_file(localpath):
     if localpath != "":
         if not localpath.startswith('/'):
             localpath = '/'+localpath
-    path = project_folder()+localpath
+    path = os.path.join(project_folder()+localpath)
     if os.path.isfile(path):
         return path
     else:
         raise PathError("Path to file does not exist!")
+
 
 #signalAlign
 def get_refrence_andEdit(referencePath, reference_Modified_Path):
@@ -127,6 +136,7 @@ def get_motif_complement(motif):
     dna = Seq(motif)
     motif_complement = str(dna.complement())
     return motif_complement
+
 
 def make_Bed_file (reference_modified_Path, BED_file_path, motif1,modified_motif1,modified_motif1_comp, alphabet, motif2 = False, modified_motif2 = False, modified_motif2_comp = False):
     sequence_list = ""
@@ -194,7 +204,6 @@ def get_sample_assignments(concatenated_assignmnets_path, sampled_assignments):
                     string = ''.join(g)
                     outfile.write(key + "\t" + string)
 
-                
 def sum_to_one(vector):
     """Make sure a vector sums to one, if not, create diffuse vector"""
     total = sum(vector)
@@ -211,7 +220,6 @@ def sum_to_one(vector):
                     vector[index] = amount_to_add
     return vector
 
-
 def add_field(np_struct_array, descr):
     """Return a new array that is like the structured numpy array, but has additional fields.
     descr looks like descr=[('test', '<i8')]
@@ -223,6 +231,14 @@ def add_field(np_struct_array, descr):
         new[name] = np_struct_array[name]
     return new
 
+
+def merge_two_dicts(dict1, dict2):
+    """Given two dicts, merge them into a new dict as a shallow copy.
+    source:https://stackoverflow.com/questions/38987/how-to-merge-two-python-dictionaries-in-a-single-expression"""
+    final = dict1.copy()
+    final.update(dict2)
+    return final
+
 def main():
     """Test the methods"""
     start = timer()
@@ -232,6 +248,16 @@ def main():
     # check_events(dir1)
     # print(len(list_dir(dir1, ext="a")))
     # print(find_skipped_events(file1))
+    ref_seq = get_project_file("/reference-sequences/ecoli_k12_mg1655.fa")
+    reference_modified_path = get_project_file("/reference-sequences/ecoli_k12_mg1655_modified.fa")
+    # remove_fasta_newlines(ref_seq, ref_seq+"1")
+    bed_file_path = project_folder()+"/reference-sequences/CCAGG_modified.bed"
+    motif1 = "CCAGG"
+    # motif2 = "CCTGG"
+    modified_motif1 = "CEAGG"
+    modified_motif1_comp = "GGTCC"
+    replace = "E"
+    make_bed_file(reference_modified_path, bed_file_path, motif1, modified_motif1, modified_motif1_comp, replace)
     stop = timer()
     print("Running Time = {} seconds".format(stop-start), file=sys.stderr)
 

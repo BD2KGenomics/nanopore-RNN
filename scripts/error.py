@@ -22,12 +22,27 @@ class PathError(Exception):
         return repr(self.value)
 
 
+class Usage(Exception):
+    '''Signal Usage error
+
+    Used to signal a Usage error, evoking a usage statement and eventual exit
+    when raised.
+    '''
+    def __init__(self, msg):
+        super(Usage, self).__init__()
+        self.msg = msg
+
+
+
+
 def main():
     """Main docstring"""
     start = timer()
 
     stop = timer()
     print("Running Time = {} seconds".format(stop-start), file=sys.stderr)
+
+
 
 if __name__ == "__main__":
     main()
