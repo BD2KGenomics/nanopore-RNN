@@ -25,10 +25,7 @@ from error import PathError
 import numpy as np
 from Bio.Seq import Seq
 # from Bio.Alphabet import generic_dna
-
 #TODO create debug function and verbose options
-
-
 
 def no_skipped_events(filepath):
     """Find if there are any skipped events in a signalalign file"""
@@ -147,7 +144,7 @@ def make_bed_file(reference_modified_path, bed_file_path, motifs={"CCAGG":"CEAGG
     with open(reference_modified_path, 'r') as infile:
         for line in infile:
             if ">" in line:
-                seq_name = seq_name + line.rsplit()[0].split(">")[1]
+                 seq_name = seq_name + line.rsplit()[0].split(">")[1]
             else:
                 reference = reference + line
     # create bed file
