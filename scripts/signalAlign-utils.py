@@ -154,7 +154,7 @@ def main():
     get_refrence_and_edit(ref_seq, reference_modified_path)
     bed_file_path = project_folder()+"/testing/reference-sequences/CCAGG_modified2.bed"
     char = "E"
-    make_bed_file(reference_modified_path, bed_file_path, ["CCTGG","CFTGG"], ["CCAGG","CFAGG"])
+    make_bed_file(reference_modified_path, bed_file_path, ["CCTGG","CETGG"], ["CCAGG","CEAGG"])
 
     stop = timer()
     print("Running Time = {} seconds".format(stop-start), file=sys.stderr)
