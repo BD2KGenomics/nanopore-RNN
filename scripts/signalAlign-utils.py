@@ -12,23 +12,41 @@ This is a place for small scripts and utility functions
 #   stdout:
 #
 # Author: Rojin Safavi
-# History: 5/16/2017 Created
+# History: 06/01/2017 Created
+from __future__ import print_function
 import sys
-import os
-import numpy as np
-from Bio.Seq import Seq
-from Bio.Alphabet import generic_dna
+from timeit import default_timer as timer
 import glob
 import random
 import re
+import numpy as np
+from Bio.Seq import Seq
+from utils import get_project_file, project_folder
+# from Bio.Alphabet import generic_dna
 
+def get_refrence_and_edit(referencePath, reference_Modified_Path):
+    """Get fast5 file and remove \n from the ends"""
+    with open(reference_Modified_Path, 'w') as outfile, open(referencePath, 'r') as infile:
+        for line in infile:
+            if ">" in line:
+                outfile.write(line)
+            else:
+                T = line.rstrip()
+                outfile.write(T)
 
 def get_motif_complement(motif):
-    '''get the complement of a motif, cuurrently works with A,T,C,G,E,X,O
-    ex: the complement of ATCO is TAGO'''
+    """get the complement of a motif, cuurrently works with A,T,C,G,E,X,O
+    ex: the complement of ATCO is TAGO"""
     dna = Seq(motif)
     motif_complement = str(dna.complement())
     return motif_complement
+
+def get_motif_REVcomplement(motif):
+    """get the complement of a motif, cuurrently works with A,T,C,G,E,X,O
+    ex: the REVcomplement of ATCO is OGAT"""
+    dna = Seq(motif)
+    rev_complement = str(dna.reverse_complement())
+    return rev_complement
 
 def store_seq_and_name(reference_modified_Path):
     sequence_list = ""
@@ -39,41 +57,62 @@ def store_seq_and_name(reference_modified_Path):
                 seq_name = seq_name + line.rsplit()[0].split(">")[1]
             else:
                 sequence_list = sequence_list + line
-    return seq_name,sequence_list
+    return seq_name, sequence_list
 
-def replace_nucleotide(motif, modified):
-    modified_nuc = motif[[x for x in range(len(motif)) if motif[x] != modified[x]][0]]
-    return modified_nuc
 
-def nuc_position(seq_str):
-    motif_position = [m.start() for m in re.finditer('F', seq_str)]
+def replace_nucleotide(motif, replacement):
+    """compares motifs and modifed motif and
+        tells you what nucleotide is modified
+        ex: ("CCAGG","CFAGG") => C"""
+    pos = [i for i in range(len(motif)) if motif[i] != replacement[i]][0]
+    old_char = motif[pos]
+    new_char = replacement[pos]
+    rev_comp_pos = len(motif)-pos-1
+
+    return pos, old_char, new_char, rev_comp_pos
+
+def nuc_position(seq_str, char):
+    """Finds all positions of specific character
+        withing sequence"""
+    motif_position = [m.start() for m in re.finditer(char, seq_str)]
     return motif_position
 
-def make_bed_file(ref_modified_path, bed_path, char, *args):
-    seq_str_fwd = store_seq_and_name(ref_modified_path)[1]
-    seq_name = store_seq_and_name(ref_modified_path)[0]
-    seq_str_bwd = store_seq_and_name(ref_modified_path)[1]
-    for pair in args:
-        motif = pair[0]
-        modified = pair[1]
-        motif_comp = get_motif_complement(motif)
-        modified_comp = get_motif_complement(modified)
-        '''outputs the nucleotide that is been modified, it can be A,T,C, or G'''
-        modified_nuc = replace_nucleotide(motif, modified)
-        seq_str_fwd = seq_str_fwd.replace(motif, modified)
-        seq_str_bwd = seq_str_bwd.replace(motif_comp, modified_comp)
-    with open(bed_path, "a") as outfile:
-        nuc_positions = nuc_position(seq_str_fwd)
-        for pos in nuc_positions:
-            outfile.write(seq_name + "\t" + np.str(pos) + "\t" + "+" + "\t" + modified_nuc +"\t" + char + "\n")
-        nuc_positions = nuc_position(seq_str_bwd)
-        for pos in nuc_positions:
-            outfile.write(seq_name + "\t" + np.str(pos) + "\t" + "-" + "\t" + modified_nuc +"\t" + char + "\n")
+
+def make_bed_file(ref_modified_path, bed_path, *args):
+    """ NOTE: USE "F" CHAR TO DISTINGUISH MODIFIED POSITION WITHIN MOTIF
+        NOTE: CHAR can be E or X
+        ex: x : args = [("CCAGG","CFAGG"), ("CCTGG","CFTGG")]"""
+    seq_name, reference = store_seq_and_name(ref_modified_path)
+    with open(bed_path, "w") as outfile:
+        for pair in args:
+            motif = pair[0]
+            modified = pair[1]
+            # get pos, old character and the replacement character
+            pos, old_char, new_char, rev_comp_pos = replace_nucleotide(motif, modified)
+            # get get rev_complement of motif and modified
+            motif_comp = get_motif_REVcomplement(motif)
+            # changed from rev complement to expand the alphabet and not contain
+            # replacements to a single character, it can be different across motifs
+            modified_comp = motif_comp[:rev_comp_pos] + new_char + \
+                                   motif_comp[rev_comp_pos+1:]
+
+            seq_str_fwd = reference.replace(motif, modified)
+            seq_str_bwd = reference.replace(motif_comp, modified_comp)
+            nuc_positions = nuc_position(seq_str_fwd, new_char)
+            for pos in nuc_positions:
+                outfile.write(seq_name + "\t" + np.str(pos) + "\t" + "+" + "\t"
+                              + old_char +"\t" + new_char + "\n")
+            nuc_positions = nuc_position(seq_str_bwd, new_char)
+            for pos in nuc_positions:
+                outfile.write(seq_name + "\t" + np.str(pos) + "\t" + "-" + "\t"
+                              + old_char +"\t" + new_char + "\n")
+
 
 ## Concatenate control and experimental assignments
-def concat_assignments (assignments_path1, assignments_path2, output):
-    '''concatenates control and experimental assignments'''
-    read_files = glob.glob(assignments_path1 + "/*.assignments") + glob.glob(assignments_path2 + "/*.assignments")
+## ex : concatenation of non methylated and methylated assignments
+def concat_assignments (assignments_path1, assignments_path2, output, op_prefix):
+    """concatenates control and experimental assignments"""
+    read_files = glob.glob(assignments_path1 + "/*." + op_prefix) + glob.glob(assignments_path2 + "/*." + op_prefix)
     with open(output, "w") as outfile:
         for f in read_files:
             with open(f, "rb") as infile:
@@ -103,3 +142,23 @@ def get_sample_assignments(concat_assign_path, output_sampled):
                 for g in rand_smpl:
                     string = ''.join(g)
                     outfile.write(key + "\t" + string)
+
+
+
+def main():
+    """Test the methods"""
+    start = timer()
+
+    ref_seq = get_project_file("/testing/reference-sequences/ecoli_k12_mg1655.fa")
+    reference_modified_path = project_folder()+"/testing/reference-sequences/ecoli_k12_mg1655_modified.fa"
+    get_refrence_and_edit(ref_seq, reference_modified_path)
+    bed_file_path = project_folder()+"/testing/reference-sequences/CCAGG_modified2.bed"
+    char = "E"
+    make_bed_file(reference_modified_path, bed_file_path, ["CCTGG","CETGG"], ["CCAGG","CEAGG"])
+
+    stop = timer()
+    print("Running Time = {} seconds".format(stop-start), file=sys.stderr)
+
+if __name__ == "__main__":
+    main()
+    raise SystemExit
