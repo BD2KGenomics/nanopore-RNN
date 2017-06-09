@@ -17,14 +17,10 @@ from __future__ import print_function
 from timeit import default_timer as timer
 import sys
 import os
-import re
-import glob
-import random
 import boto
 from error import PathError
 import numpy as np
-from Bio.Seq import Seq
-# from Bio.Alphabet import generic_dna
+
 #TODO create debug function and verbose options
 
 def no_skipped_events(filepath):
@@ -110,101 +106,6 @@ def get_project_file(localpath):
     else:
         raise PathError("Path to file does not exist!")
 
-def remove_fasta_newlines(reference_path, reference_modified_path):
-    """Get fast5 file and remove \n from the ends"""
-    with open(reference_modified_path, 'w') as outfile, open(reference_path, 'r') as infile:
-        for line in infile:
-            if ">" in line:
-                outfile.write(line)
-            else:
-                line1 = line.rstrip()
-                outfile.write(line1)
-
-    return reference_modified_path
-
-def get_complement(motif, reverse=False):
-    """get the complement or reverse complement of a dna sequecnce"""
-    dna = Seq(motif)
-    if reverse:
-        motif_complement = str(dna.reverse_complement())
-    else:
-        motif_complement = str(dna.complement())
-    return motif_complement
-
-# TODO This needs to work with the human genome so it probably cant read in the whole genome
-def make_bed_file(reference_modified_path, bed_file_path, motifs={"CCAGG":"CEAGG", "CCTGG":"CETGG"}):
-    """Create bed file from motif and replacement motif
-
-    Must replace a single character with a new, non canonical base
-
-    """
-    reference = ""
-    seq_name = ""
-    # get reference sequence as string
-    with open(reference_modified_path, 'r') as infile:
-        for line in infile:
-            if ">" in line:
-                 seq_name = seq_name + line.rsplit()[0].split(">")[1]
-            else:
-                reference = reference + line
-    # create bed file
-    with open(bed_file_path, "w") as output:
-        for motif, replacement in motifs.items():
-            # get replacement character
-            pos = [i for i in range(len(motif)) if motif[i] != replacement[i]][0]
-            old_char = motif[pos]
-            new_char = replacement[pos]
-            motif1_replaced = reference.replace(motif, replacement)
-            motif1_position = [m.start() for m in re.finditer(new_char, motif1_replaced)]
-            for i in motif1_position:
-                output.write(seq_name + "\t" + np.str(i) + "\t" + "+" + "\t" +
-                             old_char +"\t" + new_char + "\n")
-            # find motifs on opposite strand
-            replace_pos = len(motif)-pos-1
-            motif1_comp = get_complement(motif, reverse=True)
-            # replace motif complement with modified base at correct position
-            modified_motif1_comp = motif1_comp[:replace_pos] + new_char + \
-                                   motif1_comp[replace_pos+1:]
-            motif1_comp_replaced = reference.replace(motif1_comp, modified_motif1_comp)
-            motif1_comp_position = [m.start() for m in re.finditer(new_char, motif1_comp_replaced)]
-            for i in motif1_comp_position:
-                output.write(seq_name + "\t" + np.str(i) + "\t" + "-" + "\t" +
-                             old_char +"\t" + new_char + "\n")
-
-## Concatenate control and experimental assignments
-def concatenate_assignments(assignments_path1, assignments_path2, output):
-    """concatenates control and experimental assignments"""
-    read_files = glob.glob(assignments_path1 + "/*.assignments") + glob.glob(assignments_path2 + "/*.assignments")
-    with open(output, "w") as outfile:
-        for f in read_files:
-            with open(f, "rb") as infile:
-                outfile.write(infile.read())
-
-def get_sample_assignments(concatenated_assignmnets_path, sampled_assignments):
-    """for each kmer in assignmnets get 50 assignment or less"""
-    kmerDict = dict()
-    with open(concatenated_assignmnets_path, "r") as infile:
-        for i in infile:
-            key = i.split("\t")[0]
-            value = "\t".join(i.split("\t")[1:])
-            if kmerDict.has_key(key):
-                kmerDict[key].append(value)
-            else:
-                kmerDict[key] = [value]
-    with open(sampled_assignments, "w") as outfile:
-        for key, value in kmerDict.iteritems():
-            mylist = kmerDict[key]
-            if len(mylist) >= 50:
-                rand_smpl = [mylist[i] for i in random.sample(range(len(mylist)), 50)]
-                for g in rand_smpl:
-                    string = ''.join(g)
-                    outfile.write(key + "\t" + string)
-            elif len(mylist) < 50:
-                rand_smpl = [mylist[i] for i in random.sample(range(len(mylist)), len(mylist))]
-                for g in rand_smpl:
-                    string = ''.join(g)
-                    outfile.write(key + "\t" + string)
-
 def sum_to_one(vector):
     """Make sure a vector sums to one, if not, create diffuse vector"""
     total = sum(vector)
@@ -246,13 +147,6 @@ def main():
     """Test the methods"""
     start = timer()
 
-    ref_seq = get_project_file("/testing/reference-sequences/ecoli_k12_mg1655.fa")
-    reference_modified_path = project_folder()+"/testing/reference-sequences/ecoli_k12_mg1655_modified.fa"
-    remove_fasta_newlines(ref_seq, reference_modified_path)
-    bed_file_path = project_folder()+"/testing/reference-sequences/CCAGG_modified.bed"
-    motifs = {"CCAGG":"CEAGG", "CCTGG":"CETGG"}
-
-    make_bed_file(reference_modified_path, bed_file_path, motifs)
     stop = timer()
     print("Running Time = {} seconds".format(stop-start), file=sys.stderr)
 
