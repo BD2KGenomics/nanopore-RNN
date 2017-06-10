@@ -79,10 +79,9 @@ def nuc_position(seq_str, char):
 
 
 def make_bed_file(ref_modified_path, bed_path, *args):
-    """ NOTE: USE "F" CHAR TO DISTINGUISH MODIFIED POSITION WITHIN MOTIF
-        NOTE: CHAR can be E or X
-        ex: x : args = [("CCAGG","CFAGG"), ("CCTGG","CFTGG")]"""
-    seq_name, reference = store_seq_and_name(ref_modified_path)
+    """ex: args = [("CCAGG","CEAGG"), ("CCTGG","CETGG")]"""
+    seq_name, seq_str_fwd  = store_seq_and_name(ref_modified_path)
+    seq_name, seq_str_bwd  = store_seq_and_name(ref_modified_path)
     with open(bed_path, "w") as outfile:
         for pair in args:
             motif = pair[0]
@@ -96,16 +95,16 @@ def make_bed_file(ref_modified_path, bed_path, *args):
             modified_comp = motif_comp[:rev_comp_pos] + new_char + \
                                    motif_comp[rev_comp_pos+1:]
 
-            seq_str_fwd = reference.replace(motif, modified)
-            seq_str_bwd = reference.replace(motif_comp, modified_comp)
-            nuc_positions = nuc_position(seq_str_fwd, new_char)
-            for pos in nuc_positions:
-                outfile.write(seq_name + "\t" + np.str(pos) + "\t" + "+" + "\t"
-                              + old_char +"\t" + new_char + "\n")
-            nuc_positions = nuc_position(seq_str_bwd, new_char)
-            for pos in nuc_positions:
-                outfile.write(seq_name + "\t" + np.str(pos) + "\t" + "-" + "\t"
-                              + old_char +"\t" + new_char + "\n")
+            seq_str_fwd = seq_str_fwd.replace(motif, modified)
+            seq_str_bwd = seq_str_bwd.replace(motif_comp, modified_comp)
+        nuc_positions = nuc_position(seq_str_fwd, new_char)
+        for pos in nuc_positions:
+            outfile.write(seq_name + "\t" + np.str(pos) + "\t" + "+" + "\t"
+                          + old_char +"\t" + new_char + "\n")
+        nuc_positions = nuc_position(seq_str_bwd, new_char)
+        for pos in nuc_positions:
+            outfile.write(seq_name + "\t" + np.str(pos) + "\t" + "-" + "\t"
+                          + old_char +"\t" + new_char + "\n")
 
 
 ## Concatenate control and experimental assignments
