@@ -28,7 +28,7 @@ from nanonet.features import events_to_features as nanonet_features
 
 class TrainingData(object):
     """docstring for TrainingData."""
-    def __init__(self, fast5_file, alignment_file, prob=False, kmer_len=5, alphabet="ATGC", nanonet=True, deepnano=False):
+    def __init__(self, fast5_file, alignment_file, strand_name="template", prob=False, kmer_len=5, alphabet="ATGC", nanonet=True, deepnano=False):
         super(TrainingData, self).__init__()
         self.fast5_file = fast5_file
         self.alignment_file = alignment_file
@@ -39,6 +39,7 @@ class TrainingData(object):
         self.prob = prob
         self.nanonet = nanonet
         self.deepnano = deepnano
+        self.strand_name = strand_name
         if self.deepnano:
             print("Deepnano events not completed", file=sys.stderr)
             #TODO create error for incomplete work
@@ -52,14 +53,18 @@ class TrainingData(object):
 
     def scrape_fast5_events(self, fields=None):
         """Scrape a fast5 file for event information"""
-        # TODO Access other places than just the events within Basecall_1D_000
+        # TODO *Access other places than just the events within Basecall_1D_000
         # TODO May want to have error checking when grabbing fields
         if fields is None:
             fields = ["mean", "start", "stdv", "length"]
         with h5py.File(self.fast5_file, 'r+') as fast5:
-            template = fast5.get("Analyses/Basecall_1D_000/BaseCalled_template/Events").value
-        template = np.array(template)
-        events = template[fields]
+            if self.strand_name == "template":
+                template = fast5.get("Analyses/Basecall_1D_000/BaseCalled_template/Events").value
+                Strand = np.array(template)
+            elif self.strand_name == "complement":
+                complement = fast5.get("Analyses/Basecall_1D_000/BaseCalled_complement/Events").value
+                Strand = np.array(complement)
+        events = Strand[fields]
         return events
 
     def scrape_signalalign(self):
@@ -82,14 +87,17 @@ class TrainingData(object):
                 strand = line[4]
                 event_index = int(line[5])
                 prob = float(line[12])
-                kmers[event_index].append((kmer, prob))
                 # only grab template strand
-                if strand == "c":
-                    break
+                if self.strand_name == "template":
+                    if strand =="t":
+                        kmers[event_index].append((kmer, prob))
+                elif self.strand_name == "complement":
+                    if strand =="c":
+                        kmers[event_index].append((kmer, prob))
         return kmers
 
     def scrape_eventalign(self):
-        """Grab all the event kmers from the signal align output and record probability"""
+        """Grab all the event kmers from the eventalign output and record probability"""
         # TODO make same method?
         # data = list()
         # with open(tsv1) as tsv:
