@@ -263,7 +263,7 @@ def main():
     #
     kwargs = {"eventalign": False, "prob":True, "length": 5, "alphabet": "ATGCE", "nanonet": True, "deepnano": False}
 
-    data = TrainingData(fast5_file, signalalign_file, prob=False, kmer_len=5, alphabet="ATGC", nanonet=True, deepnano=False)
+    data = TrainingData(fast5_file, signalalign_file, strand_name="template", prob=False, kmer_len=5, alphabet="ATGC", nanonet=True, deepnano=False)
     data.save_training_file("testing")
     # print(getkmer_dict()["TTTTT"])
     # create_kmer_labels({1:[["TTTTT", 1]]})
