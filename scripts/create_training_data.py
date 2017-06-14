@@ -88,6 +88,9 @@ class CommandLine(object):
         self.parser.add_argument('-t', '--num-cpu', help='number of cpus available for\
                                  compute', default=1)
 
+        self.parser.add_argument('-s', '--strand-name',
+                                    help='"template" or "complement". default="template"', default="template")
+
         # allow optional arguments not passed by the command line
         if inOpts is None:
             self.args = vars(self.parser.parse_args())
@@ -107,10 +110,10 @@ class CommandLine(object):
         self.parser.print_help(file=sys.stderr)
         return 2
 
-def create_training_data(fast5_file, signalalign_file, prob=False, kmer_len=5, \
+def create_training_data(fast5_file, signalalign_file, strand_name, prob=False, kmer_len=5, \
         alphabet="ATGC", nanonet=True, output_name="file", output_dir=project_folder()):
     """Create npy training files from aligment and a fast5 file"""
-    data = TrainingData(fast5_file, signalalign_file, prob=prob, kmer_len=kmer_len,
+    data = TrainingData(fast5_file, signalalign_file, strand_name, prob=prob, kmer_len=kmer_len,
                         alphabet=alphabet, nanonet=nanonet)
     data.save_training_file(output_name, output_dir=output_dir)
     print("FILE SAVED: {}".format(output_name+".npy"), file=sys.stderr)
