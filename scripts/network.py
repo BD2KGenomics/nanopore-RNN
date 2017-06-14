@@ -18,11 +18,8 @@ import sys
 import os
 from timeit import default_timer as timer
 from datetime import datetime
-import itertools
-import traceback
-import numpy as np
-from utils import project_folder, merge_two_dicts, list_dir
-from data import Data
+from utils import project_folder, list_dir
+from data import DataQueue
 import tensorflow as tf
 from tensorflow.contrib import rnn
 
@@ -243,7 +240,7 @@ def main():
 
     # continually load data on the CPU
     with tf.device("/cpu:0"):
-        data = Data(training_files, batch_size, queue_size=queue_size, verbose=False, \
+        data = DataQueue(training_files, batch_size, queue_size=queue_size, verbose=False, \
                 pad=0, trim=True, n_steps=n_steps)
         images_batch, labels_batch = data.get_inputs()
 

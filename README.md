@@ -19,3 +19,8 @@ If you decide to help contribute please use pylint so our code is readable.
 https://www.pylint.org/
 
 If you have ideas about things needed to be done please feel free to add an issue and tag Rojin or Bailey.
+
+Download Anaconda https://docs.continuum.io/anaconda/install
+conda create --name nanotensor python=2.7
+source activate nanotensor
+conda install tensorflow-gpu

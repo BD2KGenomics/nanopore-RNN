@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""data processing for passing to network"""
+"""Create inputs to a tensorflow graph using tf operations and queues"""
 ########################################################################
 # File: data.py
 #  executable: data.py
@@ -11,20 +11,13 @@
 from __future__ import print_function
 import sys
 from timeit import default_timer as timer
-import numpy as np
-from multiprocessing import Process, Queue
-import tensorflow as tf
 import threading
-import os
-from datetime import datetime
-import itertools
-import traceback
 import numpy as np
-from utils import project_folder, merge_two_dicts, list_dir
-from tensorflow.contrib import rnn
+from utils import project_folder, list_dir
+import tensorflow as tf
 
-class Data:
-    """Object to manage data for shuffling data inputs"""
+class DataQueue:
+    """Parses data and feeds inputs to the tf graph"""
     def __init__(self, file_list, batch_size=10, queue_size=100, verbose=False, pad=0, trim=True, n_steps=1):
         self.file_list = file_list
         self.num_files = len(self.file_list)
@@ -168,7 +161,7 @@ def main():
 
     # Doing anything with data on the CPU is generally a good idea.
     with tf.device("/cpu:0"):
-        data = Data(training_files, batch_size, queue_size=10, verbose=False, pad=0, trim=True, n_steps=n_steps)
+        data = DataQueue(training_files, batch_size, queue_size=10, verbose=False, pad=0, trim=True, n_steps=n_steps)
         images_batch, labels_batch = data.get_inputs()
         labels_batch1 = tf.reshape(labels_batch, [-1, data.n_classes])
         images_batch1 = tf.reshape(images_batch, [-1, data.n_input])

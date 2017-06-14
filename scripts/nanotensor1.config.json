@@ -1,0 +1,15 @@
+{
+    "validation_dir": "/Users/andrewbailey/nanopore-RNN/06Jun-12-08h-48m", 
+    "queue_size": 10, 
+    "training_iters": 100, 
+    "display_step": 1, 
+    "n_steps": 10, 
+    "learning_rate": 0.001, 
+    "testing_dir": "/Users/andrewbailey/nanopore-RNN/06Jun-12-08h-48m", 
+    "blstm_layer_sizes": [
+        100, 
+        100
+    ], 
+    "training_dir": "/Users/andrewbailey/nanopore-RNN/06Jun-12-08h-48m", 
+    "batch_size": 2
+}
