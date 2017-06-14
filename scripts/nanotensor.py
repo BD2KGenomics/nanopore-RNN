@@ -11,124 +11,207 @@ then use's tensorflow to train a mulit layer BLSTM-RNN"""
 
 from __future__ import print_function
 import sys
+import os
 from timeit import default_timer as timer
 import json
-from multiprocessing import Process, current_process, Manager
-import numpy as np
-from nanonet.fast5 import Fast5
-from nanonet.eventdetection.filters import minknow_event_detect, compute_sum_sumsq, compute_tstat, short_long_peak_detector
-from utils import testfast5, list_dir, project_folder
-from data_preparation import TrainingData
-from data import Data
+from utils import project_folder, list_dir
+import argparse
+from error import Usage
+from datetime import datetime
+from data import DataQueue
+import tensorflow as tf
+from tensorflow.contrib import rnn
+from network import BuildGraph
+
+class CommandLine(object):
+    '''
+    Handle the command line, usage and help requests.
+
+    attributes:
+    myCommandLine.args is a dictionary which includes each of the available
+    command line arguments as myCommandLine.args['option']
+
+    methods:
+    do_usage_and_die()
+    prints usage and help and terminates with an error.
+
+    '''
+
+    def __init__(self, inOpts=None):
+        '''CommandLine constructor.
+
+        Implements a parser to interpret the command line argv string using
+        argparse.
+        '''
+        # define program description, usage and epilog
+        self.parser = argparse.ArgumentParser(description='This program \
+        takes a config file with network configurations and paths to data directories.'
+        , epilog="Dont forget to tar the files",
+                                              usage='%(prog)s use "-h" for help')
+
+        # create mutually exclusive argument for log file and json file
+        self.exclusive = self.parser.add_mutually_exclusive_group(required=True)
+
+        # optional arguments
+        self.exclusive.add_argument('-c', '--config',
+                                    help='path to a json config file with all \
+                                    required arguments defined')
+
+        # allow optional arguments not passed by the command line
+        if inOpts is None:
+            self.args = vars(self.parser.parse_args())
+        else:
+            self.args = vars(self.parser.parse_args(inOpts))
 
 
-def create_training_data(fast5_file, signalalign_file, kwargs,\
-        output_name="file", output_dir=project_folder()):
-    """Create npy training files from aligment and a fast5 file"""
-    data = TrainingData(fast5_file, signalalign_file, **kwargs)
-    data.save_training_file(output_name, output_dir=output_dir)
-    print("FILE SAVED: {}".format(output_name+".npy"), file=sys.stderr)
-    return True
+    def do_usage_and_die(self, message):
+        ''' Print string and usage then return 2
 
-def worker(work_queue, done_queue):
-    """Worker function to generate training data from a queue"""
-    try:
-        # create training data until there are no more files
-        for args in iter(work_queue.get, 'STOP'):
-            create_training_data(**args)
-        # catch errors
-    except Exception as error:
-        # pylint: disable=no-member,E1102
-        done_queue.put("%s failed with %s" % (current_process().name, error.message))
-        print("%s failed with %s" % (current_process().name, error.message), file=sys.stderr)
+        If a critical error is encountered, where it is suspected that the
+        program is not being called with consistent parameters or data, this
+        method will write out an error string (str), then terminate execution
+        of the program.
+        '''
+        print(message, file=sys.stderr)
+        self.parser.print_help(file=sys.stderr)
+        return 2
 
+    @staticmethod
+    def check_args(args):
+        """Check arguments, save config file in new folder if correct"""
+        # make sure output dir exists
+        assert os.path.isdir(args["training_dir"])
+        # create new output dir
+        # logfolder_path = os.path.join(args["output_dir"],
+        #                               datetime.now().strftime("%m%b-%d-%Hh-%Mm"))
+        # os.makedirs(logfolder_path)
+        # config_path = os.path.join(logfolder_path, 'config.json')
+        # # save config file for training data
+        # with open(config_path, 'w') as outfile:
+        #     json.dump(args, outfile, indent=4)
+        # args["output_dir"] = logfolder_path
+        return args
 
+#
+# if "CUDA_HOME" in os.environ:
+#     utilization = re.findall(r"Utilization.*?Gpu.*?(\d+).*?Memory.*?(\d+)",
+#                              subprocess.check_output(["nvidia-smi", "-q"]),
+#                              flags=re.MULTILINE | re.DOTALL)
+#     print("GPU Utilization", utilization)
+#
+#     if ('0', '0') in utilization:
+#         print("Using GPU Device:", utilization.index(('0', '0')))
+#         os.environ["CUDA_VISIBLE_DEVICES"] = str(utilization.index(('0', '0')))
+#         os.environ["CUDA_DEVICE_ORDER"]  = "PCI_BUS_ID"  # To ensure the index matches
+#     else:
+#         print("All GPUs in Use")
+#         exit
+# else:
+#     print("Running using CPU, NOT GPU")
 
-def main():
+def main(command_line=None):
     """Main docstring"""
     start = timer()
-    options = {"training-data":[{"filename": "file", "log_file": "/Users/andrewbailey/data/log-file.1", "output_folder": project_folder() + "/training2" }], "labeling-options":[{"prob":False, "kmer_len": 5, "alphabet": "ATGC", "nanonet": True}]}
-    output_name = "file"
-    log_file = "/Users/andrewbailey/data/log-file.1"
-    kwargs = {"prob":False, "kmer_len": 5, "alphabet": "ATGC", "nanonet": True}
-    with open('options.json', 'w') as outfile:
-        json.dump(options, outfile, indent=4)
-    #
-    # with open('data.txt') as json_file:
-    #     data = json.load(json_file)
 
-    workers = 4
-    work_queue = Manager().Queue()
-    done_queue = Manager().Queue()
-    jobs = []
+    if command_line is None:
+        command_line = CommandLine()
 
-    counter = 0
-    with open(log_file, 'r') as log:
-        for line in log:
-            line = line.rstrip().split('\t')
-            fast5 = line[0]
-            tsv = line[1]
-            name = output_name+str(counter)
-            output_dir = project_folder() + "/training2"
-            arguments = {"fast5_file": fast5, "signalalign_file": tsv, "kwargs": kwargs, "output_name": name, "output_dir":output_dir}
-            # process = Process(target=create_training_data, args=(fast5, \
-            #  tsv, kwargs, name, project_folder() + "/training2"))
-            # jobs.append(process)
-            work_queue.put(arguments)
+    try:
+        # get config and log files
+        config = command_line.args["config"]
+        # define arguments with config or arguments
+        config = os.path.abspath(config)
+        assert os.path.isfile(config)
 
-            counter += 1
+        print("Using config file {}".format(config), file=sys.stderr)
+        with open(config) as json_file:
+            args = json.load(json_file)
+        command_line.check_args(args)
+        # Parameters
+        learning_rate = args["learning_rate"]
+        training_iters = args["training_iters"]
+        batch_size = args["batch_size"]
+        queue_size = args["queue_size"]
+        display_step = args["display_step"]
+        n_steps = args["n_steps"] # one vector per timestep
+        layer_sizes = args["blstm_layer_sizes"] # hidden layer num of features
+        training_dir = args["training_dir"]
+        training_files = list_dir(training_dir, ext="npy")
+        # continually load data on the CPU
+        with tf.device("/cpu:0"):
+            data = DataQueue(training_files, batch_size, queue_size=queue_size, verbose=False, \
+                    pad=0, trim=True, n_steps=n_steps)
+            images_batch, labels_batch = data.get_inputs()
 
-    # start creating files using however many workers specified
-    for _ in xrange(workers):
-        p = Process(target=worker, args=(work_queue, done_queue))
-        p.start()
-        jobs.append(p)
-        work_queue.put('STOP')
+        # build model
+        model = BuildGraph(data.n_input, data.n_classes, learning_rate, n_steps=n_steps, \
+                layer_sizes=layer_sizes, batch_size=batch_size, x=images_batch, y=labels_batch)
+        cost = model.cost
+        accuracy = model.accuracy
+        merged_summaries = model.merged_summaries
+        optimizer = model.optimizer
+        # define what we want from the optimizer run
+        init = model.init
+        saver = tf.train.Saver(max_to_keep=4, keep_checkpoint_every_n_hours=2)
+        # Launch the graph
+        with tf.Session(config=tf.ConfigProto(log_device_placement=True, intra_op_parallelism_threads=8)) as sess:
+            # create logs
+            logfolder_path = os.path.join(project_folder(), 'logs/', \
+                            datetime.now().strftime("%m%b-%d-%Hh-%Mm"))
+            writer = tf.summary.FileWriter((logfolder_path), sess.graph)
+            # initialize
+            sess.run(init)
+            step = 1
+            # start queue
+            tf.train.start_queue_runners(sess=sess)
+            data.start_threads(sess)
+            # Keep training until reach max iterations
+            while step * batch_size < training_iters:
+                # Run optimization and update layers
+                output_states = sess.run([optimizer, model.update_op])
+                if step % display_step == 0:
+                    # Calculate batch loss and accuracy
+                    run_metadata = tf.RunMetadata()
+                    acc, summary, loss = sess.run([accuracy, merged_summaries, cost], run_metadata=run_metadata)
+                    # add summary statistics
+                    writer.add_summary(summary, step)
+                    print("Iter " + str(step*batch_size) + ", Minibatch Loss= " + \
+                          "{:.6f}".format(loss) + ", Training Accuracy= " + \
+                          "{:.5f}".format(acc))
+                step += 1
 
-    for p in jobs:
-        p.join()
+            print("Optimization Finished!")
+            # Calculate accuracy for a bunch of test data
 
-    done_queue.put('STOP')
-    print("\n#  nanotensor - finished creating data set\n", file=sys.stderr)
-    print("\n#  nanotensor - finished creating data set\n", file=sys.stdout)
-    # check how long the whole program took
-    stop = timer()
-    print("Running Time = {} seconds".format(stop-start), file=sys.stderr)
+            saver.save(sess, project_folder()+'/testing/my_test_model.ckpt', global_step=model.global_step)
+
+            print("Testing Accuracy: {}".format(sess.run(accuracy)))
+            writer.close()
+
+
+
+        #
+        # with tf.Session() as sess:
+        #     # To initialize values with saved data
+        #     sess.run(init)
+        #     tf.train.start_queue_runners(sess=sess)
+        #     data.start_threads(sess)
+        #
+        #     saver.restore(sess, '/Users/andrewbailey/nanopore-RNN/testing/my_test_model.ckpt-49')
+        #     # new_saver.restore(sess, tf.train.latest_checkpoint('/Users/andrewbailey/nanopore-RNN/testing/'))
+        #     print(sess.run(accuracy)) # returns 1000
+
+        print("\n#  nanotensor - finished training \n", file=sys.stderr)
+        print("\n#  nanotensor - finished training \n", file=sys.stdout)
+        # check how long the whole program took
+        stop = timer()
+        print("Running Time = {} seconds".format(stop-start), file=sys.stderr)
+
+
+    except Usage as err:
+        command_line.do_usage_and_die(err.msg)
+
 
 if __name__ == "__main__":
     main()
-    # f = testfast5()
-    # # print(f)
-    # ed_params = {'window_lengths':[3, 6]}
-    # # for f in list_dir(project_folder()+"/test-files/r9/canonical", ext="fast5"):
-    # window_lengths = [3, 6]
-    # thresholds=[8.0, 4.0]
-    # peak_height = 1.0
-    # with Fast5(f) as fh:
-    #     # print(fh.sample_rate)
-    #     raw_data1 = fh.get_read(raw=True, scale=False)
-    #     # print(max(raw_data1)-min(raw_data1))
-    #     print(len(raw_data1))
-    #     raw_data = fh.get_read(raw=True, scale=True)
-    #     # print(min(raw_data), max(raw_data))
-    #     sums, sumsqs = compute_sum_sumsq(raw_data)
-    #     # print(sums, sumsqs)
-    #     tstats = []
-    #     for i, w_len in enumerate(window_lengths):
-    #         # print(i, w_len)
-    #         tstat = compute_tstat(sums, sumsqs, w_len, False)
-    #         tstats.append(tstat)
-    #     peaks = short_long_peak_detector(tstats, thresholds, window_lengths, peak_height)
-    #     print(len(peaks))
-    #     # print(tstats[0][10:100])
-    #     events = minknow_event_detect(
-    #         fh.get_read(raw=True), fh.sample_rate, **ed_params)
-    #
-    # # print()
-    # print(events[0])
-    # print(np.mean(raw_data[0:10]))
-    # # print(len(raw_data1)/len(events))
-    # print(max(np.ediff1d(peaks)))
-    # print(min(np.ediff1d(peaks)))
-    # print(np.mean(np.ediff1d(peaks)))
     raise SystemExit
