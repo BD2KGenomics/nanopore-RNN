@@ -41,16 +41,23 @@ class BuildGraph():
         self.forget_bias = forget_bias
         self.output_states = []
         self.layers = []
+        # list of operations to reset states of each blstm layer
+        self.zero_states = []
+        self.reset_fws = []
+        self.reset_bws = []
+
         # self.seq_len = tf.placeholder(tf.int32, [None], name="batch_size")
         # self.batch_size = tf.Variable()
-        # outputs = self.create_deep_blstm()
-        outputs = self.blstm(self.x, layer_name="layer1", n_hidden=layer_sizes[0], forget_bias=self.forget_bias)
+        outputs = self.create_deep_blstm()
+        # outputs = self.blstm(self.x, layer_name="layer1", n_hidden=layer_sizes[0], forget_bias=self.forget_bias)
 
-        # clear_state = tf.group(
-        #     tf.assign(forward_state, tf.zeros([layer_sizes[0]])),
-        #     tf.assign(backward_state, tf.zeros([layer_sizes[0]])))
         self.rnn_outputs_flat = tf.reshape(outputs, [-1, 2*layer_sizes[-1]])
         self.global_step = tf.Variable(0, name='global_step', trainable=False)
+
+        self.zero_state = self.combine_arguments(self.zero_states)
+        self.fw_reset = self.combine_arguments(self.reset_fws)
+        self.bw_reset = self.combine_arguments(self.reset_bws)
+
         # Linear activation, using rnn inner loop last output
         self.pred = self.create_prediction_layer()
         # Define loss and optimizer
@@ -124,10 +131,14 @@ class BuildGraph():
         """Create a multi-layer blstm neural network"""
         # make sure we are making as many layers as we have layer sizes
         input1 = self.x
-        for number in range(self.n_layers):
-            input1 = self.blstm(input1, layer_name="blstm_layer"+str(number),\
-            n_hidden=self.layer_sizes[number], forget_bias=self.forget_bias)
+        for layer_size in range(self.n_layers):
+            input1 = self.blstm(input1, layer_name="blstm_layer"+str(layer_size),\
+            n_hidden=self.layer_sizes[layer_size], forget_bias=self.forget_bias)
         return input1
+
+    def combine_arguments(self, tf_tensor_list):
+        """Create a single operation that can be passed to the run function"""
+        return tf.tuple(tf_tensor_list)
 
     def get_state_update_op(self, state_variables, new_states):
         """Update the state with new values"""
@@ -139,7 +150,7 @@ class BuildGraph():
                                state_variable[1].assign(new_state[1])])
         # Return a tuple in order to combine all update_ops into a single operation.
         # The tuple's actual value should not be used.
-        return tf.tuple(update_ops)
+        return update_ops
 
     def blstm(self, input_vector, layer_name="blstm_layer1", n_hidden=128, forget_bias=5.0):
         """Create a bidirectional LSTM using code from the example at
@@ -163,14 +174,15 @@ class BuildGraph():
                 tf.Variable(bw_state_c, trainable=False, name="backward_c"),
                 tf.Variable(bw_state_h, trainable=False, name="backward_h"))
 
-            # self.reset_fw = self.get_state_update_op(lstm_fw_cell_states, (fw_state_c, fw_state_h))
-            # self.reset_bw = self.get_state_update_op(lstm_bw_cell_states, (bw_state_c, bw_state_h))
-
             outputs, output_states = tf.nn.bidirectional_dynamic_rnn(lstm_fw_cell, \
             lstm_bw_cell, input_vector, dtype=tf.float32, initial_state_fw=lstm_fw_cell_states, \
             initial_state_bw=lstm_bw_cell_states)
 
-            self.update_op = self.get_state_update_op((lstm_fw_cell_states, lstm_bw_cell_states), output_states)
+            # create operations for resetting both states and only the forward or backward states
+            self.zero_states.extend(self.get_state_update_op((lstm_fw_cell_states, \
+                                    lstm_bw_cell_states), output_states))
+            self.reset_fws.extend(self.get_state_update_op(lstm_fw_cell_states, output_states[0]))
+            self.reset_bws.extend(self.get_state_update_op(lstm_bw_cell_states, output_states[1]))
 
             # concat two output layers so we can treat as single output layer
             output = tf.concat(outputs, 2)
@@ -210,21 +222,6 @@ class BuildGraph():
 def main():
     """Control the flow of the program"""
     start = timer()
-    # if "CUDA_HOME" in os.environ:
-    #     utilization = re.findall(r"Utilization.*?Gpu.*?(\d+).*?Memory.*?(\d+)",
-    #                              subprocess.check_output(["nvidia-smi", "-q"]),
-    #                              flags=re.MULTILINE | re.DOTALL)
-    #     print("GPU Utilization", utilization)
-    #
-    #     if ('0', '0') in utilization:
-    #         print("Using GPU Device:", utilization.index(('0', '0')))
-    #         os.environ["CUDA_VISIBLE_DEVICES"] = str(utilization.index(('0', '0')))
-    #         os.environ["CUDA_DEVICE_ORDER"]  = "PCI_BUS_ID"  # To ensure the index matches
-    #     else:
-    #         print("All GPUs in Use")
-    #         exit
-    # else:
-    #     print("Running using CPU, NOT GPU")
 
     # TODO make hyperparameters a json file
     # Parameters
@@ -243,7 +240,6 @@ def main():
         data = DataQueue(training_files, batch_size, queue_size=queue_size, verbose=False, \
                 pad=0, trim=True, n_steps=n_steps)
         images_batch, labels_batch = data.get_inputs()
-
     # build model
     model = BuildGraph(data.n_input, data.n_classes, learning_rate, n_steps=n_steps, \
             layer_sizes=layer_sizes, batch_size=batch_size, x=images_batch, y=labels_batch)
@@ -269,7 +265,7 @@ def main():
         # Keep training until reach max iterations
         while step * batch_size < training_iters:
             # Run optimization and update layers
-            output_states = sess.run([optimizer, model.update_op])
+            output_states = sess.run([optimizer, model.zero_state])
             if step % display_step == 0:
                 # Calculate batch loss and accuracy
                 run_metadata = tf.RunMetadata()

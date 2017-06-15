@@ -81,15 +81,18 @@ class CommandLine(object):
         """Check arguments, save config file in new folder if correct"""
         # make sure output dir exists
         assert os.path.isdir(args["training_dir"])
+        assert os.path.isdir(args["validation_dir"])
+        assert isinstance(args["blstm_layer_sizes"], list)
         # create new output dir
-        # logfolder_path = os.path.join(args["output_dir"],
-        #                               datetime.now().strftime("%m%b-%d-%Hh-%Mm"))
-        # os.makedirs(logfolder_path)
-        # config_path = os.path.join(logfolder_path, 'config.json')
-        # # save config file for training data
-        # with open(config_path, 'w') as outfile:
-        #     json.dump(args, outfile, indent=4)
-        # args["output_dir"] = logfolder_path
+        logfolder_path = os.path.join(args["output_dir"],
+                                      datetime.now().strftime("%m%b-%d-%Hh-%Mm"))
+        os.makedirs(logfolder_path)
+        config_path = os.path.join(logfolder_path, 'config.json')
+        # save config file for training data
+        with open(config_path, 'w') as outfile:
+            json.dump(args, outfile, indent=4)
+        # define log file dir
+        args["output_dir"] = logfolder_path
         return args
 
 #
@@ -126,6 +129,7 @@ def main(command_line=None):
         print("Using config file {}".format(config), file=sys.stderr)
         with open(config) as json_file:
             args = json.load(json_file)
+        # check arguments and define
         command_line.check_args(args)
         # Parameters
         learning_rate = args["learning_rate"]
@@ -136,16 +140,29 @@ def main(command_line=None):
         n_steps = args["n_steps"] # one vector per timestep
         layer_sizes = args["blstm_layer_sizes"] # hidden layer num of features
         training_dir = args["training_dir"]
+        validation_dir = args["validation_dir"]
+        logfolder_path = args["output_dir"]
+
         training_files = list_dir(training_dir, ext="npy")
+        validation_files = list_dir(validation_dir, ext="npy")
+
         # continually load data on the CPU
         with tf.device("/cpu:0"):
             data = DataQueue(training_files, batch_size, queue_size=queue_size, verbose=False, \
                     pad=0, trim=True, n_steps=n_steps)
-            images_batch, labels_batch = data.get_inputs()
+            # event_batch, labels_batch = data.get_inputs()
+            data2 = DataQueue(validation_files, batch_size, queue_size=queue_size, verbose=False, \
+                    pad=0, trim=True, n_steps=n_steps)
+            # event_batch2, labels_batch2 = data2.get_inputs()
+
+            validation = tf.placeholder(dtype=bool,shape=[],name='validation')
+            events, labels = tf.cond(validation, \
+                            lambda: data2.get_inputs(),\
+                            lambda: data.get_inputs())
 
         # build model
         model = BuildGraph(data.n_input, data.n_classes, learning_rate, n_steps=n_steps, \
-                layer_sizes=layer_sizes, batch_size=batch_size, x=images_batch, y=labels_batch)
+                layer_sizes=layer_sizes, batch_size=batch_size, x=events, y=labels)
         cost = model.cost
         accuracy = model.accuracy
         merged_summaries = model.merged_summaries
@@ -156,8 +173,6 @@ def main(command_line=None):
         # Launch the graph
         with tf.Session(config=tf.ConfigProto(log_device_placement=True, intra_op_parallelism_threads=8)) as sess:
             # create logs
-            logfolder_path = os.path.join(project_folder(), 'logs/', \
-                            datetime.now().strftime("%m%b-%d-%Hh-%Mm"))
             writer = tf.summary.FileWriter((logfolder_path), sess.graph)
             # initialize
             sess.run(init)
@@ -165,19 +180,25 @@ def main(command_line=None):
             # start queue
             tf.train.start_queue_runners(sess=sess)
             data.start_threads(sess)
+            data2.start_threads(sess)
             # Keep training until reach max iterations
             while step * batch_size < training_iters:
                 # Run optimization and update layers
-                output_states = sess.run([optimizer, model.update_op])
+                _ = sess.run([optimizer, model.zero_state], feed_dict={validation:False})
                 if step % display_step == 0:
                     # Calculate batch loss and accuracy
                     run_metadata = tf.RunMetadata()
-                    acc, summary, loss = sess.run([accuracy, merged_summaries, cost], run_metadata=run_metadata)
+                    acc, summary, loss = sess.run([accuracy, merged_summaries, cost], feed_dict={validation:False}, run_metadata=run_metadata)
+                    acc1, loss1 = sess.run([accuracy, cost], feed_dict={validation:True})
                     # add summary statistics
                     writer.add_summary(summary, step)
                     print("Iter " + str(step*batch_size) + ", Minibatch Loss= " + \
                           "{:.6f}".format(loss) + ", Training Accuracy= " + \
                           "{:.5f}".format(acc))
+                    print("Validation" + ", Minibatch Loss= " + \
+                          "{:.6f}".format(loss1) + ", Training Accuracy= " + \
+                          "{:.5f}".format(acc1))
+
                 step += 1
 
             print("Optimization Finished!")
@@ -185,21 +206,10 @@ def main(command_line=None):
 
             saver.save(sess, project_folder()+'/testing/my_test_model.ckpt', global_step=model.global_step)
 
-            print("Testing Accuracy: {}".format(sess.run(accuracy)))
+            print("Testing Accuracy: {}".format(sess.run(accuracy, feed_dict={validation:True})))
             writer.close()
 
 
-
-        #
-        # with tf.Session() as sess:
-        #     # To initialize values with saved data
-        #     sess.run(init)
-        #     tf.train.start_queue_runners(sess=sess)
-        #     data.start_threads(sess)
-        #
-        #     saver.restore(sess, '/Users/andrewbailey/nanopore-RNN/testing/my_test_model.ckpt-49')
-        #     # new_saver.restore(sess, tf.train.latest_checkpoint('/Users/andrewbailey/nanopore-RNN/testing/'))
-        #     print(sess.run(accuracy)) # returns 1000
 
         print("\n#  nanotensor - finished training \n", file=sys.stderr)
         print("\n#  nanotensor - finished training \n", file=sys.stdout)
