@@ -141,6 +141,11 @@ def merge_two_dicts(dict1, dict2):
     final.update(dict2)
     return final
 
+class DotDict(dict):
+    """dot.notation access to dictionary attributes"""
+    __getattr__ = dict.get
+    __setattr__ = dict.__setitem__
+    __delattr__ = dict.__delitem__
 
 
 def main():

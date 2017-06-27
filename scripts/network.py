@@ -28,8 +28,10 @@ class BuildGraph():
     """Build a tensorflow network graph."""
     def __init__(self, n_input, n_classes, learning_rate, n_steps=1,\
         layer_sizes=tuple([100]), forget_bias=5.0, batch_size=100, y=None, x=None):
-        self.x = x
+        # self.x = x
         self.y = y
+        self.x = tf.placeholder_with_default(x, shape=[None, n_steps, n_input])
+        # self.batch_size = tf.placeholder(tf.int32, [])
         self.batch_size = batch_size
         self.y_flat = tf.reshape(self.y, [-1, n_classes])
         self.n_layers = len(layer_sizes)
@@ -54,30 +56,35 @@ class BuildGraph():
         self.rnn_outputs_flat = tf.reshape(outputs, [-1, 2*layer_sizes[-1]])
         self.global_step = tf.Variable(0, name='global_step', trainable=False)
 
-        self.zero_state = self.combine_arguments(self.zero_states)
-        self.fw_reset = self.combine_arguments(self.reset_fws)
-        self.bw_reset = self.combine_arguments(self.reset_bws)
+        self.zero_state = self.combine_arguments(self.zero_states, "zero_states")
+        self.fw_reset = self.combine_arguments(self.reset_fws, "reset_fws")
+        self.bw_reset = self.combine_arguments(self.reset_bws, "reset_bws")
 
         # Linear activation, using rnn inner loop last output
         self.pred = self.create_prediction_layer()
+        tf.add_to_collection("predicton", self.pred)
+        self.evaluate_pred = tf.argmax(self.pred, 1, name="evaluate_pred")
         # Define loss and optimizer
         self.cost = self.cost_function_prob()
         self.optimizer = self.optimizer_function()
         # Evaluate model
+        tf.add_to_collection("optimizer", self.optimizer)
+
         self.correct_pred = self.prediction_function()
         self.accuracy = self.accuracy_function()
         # merge summary information
         self.merged_summaries = tf.summary.merge_all()
         # Initializing the variables
-        self.init = tf.global_variables_initializer()
+        # self.init = tf.global_variables_initializer()
 
     def create_prediction_layer(self):
         """Create a prediction layer from output of blstm layers"""
-        with tf.name_scope("predition"):
+        with tf.name_scope("prediction"):
             pred = self.fulconn_layer(self.rnn_outputs_flat, self.n_classes)
             # print("pred shape", pred.shape)
             self.variable_summaries(pred)
         return pred
+
 
     def prediction_function(self):
         """Compare predicions with label to calculate number correct"""
@@ -136,9 +143,9 @@ class BuildGraph():
             n_hidden=self.layer_sizes[layer_size], forget_bias=self.forget_bias)
         return input1
 
-    def combine_arguments(self, tf_tensor_list):
+    def combine_arguments(self, tf_tensor_list, name):
         """Create a single operation that can be passed to the run function"""
-        return tf.tuple(tf_tensor_list)
+        return tf.tuple(tf_tensor_list, name=name)
 
     def get_state_update_op(self, state_variables, new_states):
         """Update the state with new values"""
@@ -248,7 +255,8 @@ def main():
     merged_summaries = model.merged_summaries
     optimizer = model.optimizer
     # define what we want from the optimizer run
-    init = model.init
+    init = tf.global_variables_initializer()
+
     saver = tf.train.Saver(max_to_keep=4, keep_checkpoint_every_n_hours=2)
     # Launch the graph
     with tf.Session(config=tf.ConfigProto(intra_op_parallelism_threads=8)) as sess:
@@ -284,20 +292,6 @@ def main():
 
         print("Testing Accuracy: {}".format(sess.run(accuracy)))
         writer.close()
-
-
-
-
-    with tf.Session() as sess:
-        # To initialize values with saved data
-        sess.run(init)
-        tf.train.start_queue_runners(sess=sess)
-        data.start_threads(sess)
-
-        saver.restore(sess, '/Users/andrewbailey/nanopore-RNN/testing/my_test_model.ckpt-49')
-        # new_saver.restore(sess, tf.train.latest_checkpoint('/Users/andrewbailey/nanopore-RNN/testing/'))
-        print(sess.run(accuracy)) # returns 1000
-
 
 
     stop = timer()

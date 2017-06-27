@@ -150,20 +150,21 @@ class TrainingData(object):
     def create_kmer_labels(self):
         """Create probability label vector from dictionary of kmers"""
         # create a dictionary for kmers and the location within a vector
-        kmer_dict = self.getkmer_dict()
+        kmer_dict = self.getkmer_dict(self.alphabet, self.length)
         # loop through the dictionary and create a categorical vector with probabilities
         labels = defaultdict()
         for index, kmer_list in self.kmers.items():
             labels[index] = self.create_vector(kmer_list, kmer_dict)
         return labels
 
-    def getkmer_dict(self, flip=False):
+    @staticmethod
+    def getkmer_dict(alphabet, length, flip=False):
         """Create a dictionary for kmers and the location within a vector"""
         # http://stackoverflow.com/questions/25942528/generating-all-dna-kmers-with-python
         # make sure always alphabetical
-        alphabet = ''.join(sorted(self.alphabet))
+        alphabet = ''.join(sorted(alphabet))
         # create list of kmers
-        fwd_map = [''.join(p) for p in itertools.product(alphabet, repeat=self.length)]
+        fwd_map = [''.join(p) for p in itertools.product(alphabet, repeat=length)]
         # create dictionary depending on kmer to index or index to kmer
         if flip:
             # index are keys, kmers are values
