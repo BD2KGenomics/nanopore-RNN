@@ -129,13 +129,15 @@ class TrainModel(object):
     def load_data(self):
         """Create training and validation queues from training and validation files"""
         with tf.device("/cpu:0"):
-            self.training = DataQueue(self.training_files, self.args.batch_size, \
-                queue_size=self.args.queue_size, verbose=False, pad=0, trim=True, \
-                n_steps=self.args.n_steps)
+            if self.args.train:
+                self.training = DataQueue(self.training_files, self.args.batch_size, \
+                    queue_size=self.args.queue_size, verbose=False, pad=0, trim=True, \
+                    n_steps=self.args.n_steps)
+            else:
             # event_batch, labels_batch = data.get_inputs()
-            # self.validation = DataQueue(self.validation_files, self.args.batch_size, \
-            #     queue_size=self.args.queue_size, verbose=False, pad=0, trim=True, \
-            #     n_steps=self.args.n_steps)
+                self.training = DataQueue(self.validation_files, self.args.batch_size, \
+                    queue_size=self.args.queue_size, verbose=False, pad=0, trim=True, \
+                    n_steps=self.args.n_steps)
             events, labels = self.training.get_inputs()
             # events, labels = tf.cond(self.validation_bool, \
                             # lambda: self.validation.get_inputs(),\
@@ -194,10 +196,10 @@ class TrainModel(object):
     def call(self):
         """Run a model from a saved model path"""
         new_saver = tf.train.Saver()
-        translate = TrainingData.getkmer_dict(alphabet=self.args.alphabet, length=self.args.length, flip=True)
+        translate = TrainingData.getkmer_dict(alphabet=self.args.alphabet, length=self.args.kmer_len, flip=True)
         with tf.Session() as sess:
             # new_saver = tf.train.import_meta_graph('/Users/andrewbailey/nanopore-RNN/logs/06Jun-26-18h-04m/my_test_model-0.meta')
-            new_saver.restore(sess, tf.train.latest_checkpoint('/Users/andrewbailey/nanopore-RNN/logs/06Jun-26-21h-29m'))
+            new_saver.restore(sess, tf.train.latest_checkpoint('/Users/andrewbailey/nanopore-RNN/logs/06Jun-27-00h-08m'))
             # graph = tf.get_default_graph()
             coord = tf.train.Coordinator()
             threads = tf.train.start_queue_runners(sess=sess, coord=coord)
