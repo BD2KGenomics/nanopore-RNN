@@ -294,8 +294,6 @@ def main():
         writer.close()
 
 
-d
-
     stop = timer()
     print("Running Time = {} seconds".format(stop-start), file=sys.stderr)
 
