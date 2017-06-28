@@ -1,0 +1,28 @@
+language: python
+python:
+  - 2.7
+notifications: # set notification options
+  email:
+    recipients:
+      - andbaile@ucsc.edu
+    # change is when the repo status goes from pass to fail or vice versa
+    on_success: [change]
+    on_failure: [always]
+# branches:
+#   only:
+#     - master
+#     - /^deploy-.*$/ # regex ok
+# blacklist
+branches:
+  except:
+    - rojin
+before_install:
+- sudo apt-get update -qq
+install: "pip install -r requirements.txt"
+
+script:
+- scripts.py
+
+after_script: # here's a build step block
+- echo "We can put normal shell commands here"
+- echo "more shell commands here"
