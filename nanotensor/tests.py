@@ -13,7 +13,7 @@ Place unit tests in this file
 
 import os
 import unittest
-from utils import list_dir, DotDict
+from utils import list_dir
 
 class UtilsTest(unittest.TestCase):
     """Test the functions in utils.py"""
@@ -21,7 +21,7 @@ class UtilsTest(unittest.TestCase):
     def test_list_dir(self):
         """Test if list_dir is working"""
         canonical = os.path.abspath(__file__).split("/")[:-2]
-        canonical.append("testing/minion-reads/canonical/")
+        canonical.append("test-files/r9/canonical/")
         canonical = '/'.join(canonical)
         dir_list = \
         ['/Users/andrewbailey/nanopore-RNN/test-files/r9/canonical/AlexisLucattini_20160918_FNFAD24297_MN19582_sequencing_run_E_COLI_NON_MTHYLTD_R9_77950_ch146_read1209_strand1.fast5', \
@@ -29,18 +29,18 @@ class UtilsTest(unittest.TestCase):
         '/Users/andrewbailey/nanopore-RNN/test-files/r9/canonical/AlexisLucattini_20160918_FNFAD24297_MN19582_sequencing_run_E_COLI_NON_MTHYLTD_R9_77950_ch215_read2042_strand1.fast5',\
         '/Users/andrewbailey/nanopore-RNN/test-files/r9/canonical/AlexisLucattini_20160918_FNFAD24297_MN19582_sequencing_run_E_COLI_NON_MTHYLTD_R9_77950_ch348_read11114_strand.fast5',\
         '/Users/andrewbailey/nanopore-RNN/test-files/r9/canonical/AlexisLucattini_20160918_FNFAD24297_MN19582_sequencing_run_E_COLI_NON_MTHYLTD_R9_77950_ch94_read2151_strand.fast5']
-        # self.assertEqual(list_dir(canonical), dir_list)
+        self.assertEqual(list_dir(canonical), dir_list)
         self.assertEqual(list_dir(canonical, ext="txt"), [])
 
-    def test_dot_dict(self):
-        """Test DotDict class"""
-        test_dict = {"asdf": 0}
-        new_dict = DotDict(test_dict)
-        self.assertEqual(test_dict["asdf"], new_dict.asdf)
+
 #TODO test signalalign in path
 #TODO test signalalign output is the same as signalalign files
 
 
+# runSignalAlign -d /Users/andrewbailey/nanopore-RNN/testing/minion-reads/methylated/ -o /Users/andrewbailey/nanopore-RNN/testing/signalalignment_files/methylated/ -r /Users/andrewbailey/nanopore-RNN/testing/reference-sequences/ecoli_k12_mg1655.fa -p /Users/andrewbailey/nanopore-RNN/testing/reference-sequences/CCAGG_modified.bed -t 0.0001 --log_file /Users/andrewbailey/nanopore-RNN/testing/test_log_files/methylated.log.txt --debug
+#
+#
+# runSignalAlign -d /Users/andrewbailey/nanopore-RNN/testing/minion-reads/canonical/ -o /Users/andrewbailey/nanopore-RNN/testing/signalalignment_files/canonical/ -r /Users/andrewbailey/nanopore-RNN/testing/reference-sequences/ecoli_k12_mg1655.fa -t 0.0001 --log_file /Users/andrewbailey/nanopore-RNN/testing/test_log_files/canonical.log.txt --debug
 
 
 if __name__ == '__main__':
