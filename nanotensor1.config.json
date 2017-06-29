@@ -1,20 +1,21 @@
 {
-    "validation_dir": "/Users/andrewbailey/nanopore-RNN/validation",
+    "testing_dir": "/Users/andrewbailey/nanopore-RNN/validation",
     "training_dir": "/Users/andrewbailey/nanopore-RNN/training",
     "output_dir": "/Users/andrewbailey/nanopore-RNN/logs",
     "model_name": "my_test_model",
     "queue_size": 100,
-    "training_iters": 2000,
-    "display_step": 10,
+    "training_iters": 6000,
+    "batch_size": 3,
+    "display_step": 50,
     "n_steps": 100,
     "learning_rate": 0.001,
     "blstm_layer_sizes": [
-        100,
-        100,
         100
     ],
-    "batch_size": 5,
-    "train": false,
+    "train": true,
+    "load_trained_model": true,
     "alphabet": "ATGC",
-    "kmer_len": 5
+    "kmer_len": 5,
+    "inference_output": "/Users/andrewbailey/nanopore-RNN/kmers.txt",
+    "trained_model": "/Users/andrewbailey/nanopore-RNN/logs/06Jun-29-11h-11m"
 }
