@@ -24,6 +24,7 @@ from error import Usage
 from data import DataQueue
 import tensorflow as tf
 from tensorflow.contrib import rnn
+from tensorflow.python.client import timeline
 from network import BuildGraph
 from data_preparation import TrainingData
 
@@ -133,30 +134,29 @@ class TrainModel(object):
 
     def load_data(self):
         """Create training and testing queues from training and testing files"""
-        with tf.device("/cpu:0"):
-            if self.args.train:
-                self.training = DataQueue(self.training_files, self.args.batch_size, \
-                    queue_size=self.args.queue_size, verbose=False, pad=0, trim=True, \
-                    n_steps=self.args.n_steps)
-                self.testing = DataQueue(self.testing_files, self.args.batch_size, \
-                    queue_size=self.args.queue_size, verbose=False, pad=0, trim=True, \
-                    n_steps=self.args.n_steps)
-            # events, labels = self.training.get_inputs()
-                events, labels = tf.cond(self.testing_bool, \
-                            lambda: self.testing.get_inputs(),\
-                            lambda: self.training.get_inputs(), name="events")
-                assert self.training.n_input == self.testing.n_input
-                assert self.training.n_classes == self.testing.n_classes
-                self.n_input = self.training.n_input
-                self.n_classes = self.training.n_classes
-            else:
-                self.testing = DataQueue(self.testing_files, self.args.batch_size, \
-                    queue_size=self.args.queue_size, verbose=False, pad=0, trim=True, \
-                    n_steps=self.args.n_steps)
-                events, labels = self.testing.get_inputs()
-                # TODO -  should get this info from data preparation configuration
-                self.n_input = self.testing.n_input
-                self.n_classes = self.testing.n_classes
+        if self.args.train:
+            self.training = DataQueue(self.training_files, self.args.batch_size, \
+                queue_size=self.args.queue_size, verbose=False, pad=0, trim=True, \
+                n_steps=self.args.n_steps)
+            self.testing = DataQueue(self.testing_files, self.args.batch_size, \
+                queue_size=self.args.queue_size, verbose=False, pad=0, trim=True, \
+                n_steps=self.args.n_steps)
+        # events, labels = self.training.get_inputs()
+            events, labels = tf.cond(self.testing_bool, \
+                        lambda: self.testing.get_inputs(),\
+                        lambda: self.training.get_inputs(), name="events")
+            assert self.training.n_input == self.testing.n_input
+            assert self.training.n_classes == self.testing.n_classes
+            self.n_input = self.training.n_input
+            self.n_classes = self.training.n_classes
+        else:
+            self.testing = DataQueue(self.testing_files, self.args.batch_size, \
+                queue_size=self.args.queue_size, verbose=False, pad=0, trim=True, \
+                n_steps=self.args.n_steps)
+            events, labels = self.testing.get_inputs()
+            # TODO -  should get this info from data preparation configuration
+            self.n_input = self.testing.n_input
+            self.n_classes = self.testing.n_classes
 
         return events, labels
 
@@ -165,15 +165,17 @@ class TrainModel(object):
         with tf.Session(config=tf.ConfigProto(log_device_placement=log_device_placement,\
                     intra_op_parallelism_threads=intra_op_parallelism_threads)) as sess:
             # create logs
-            writer = tf.summary.FileWriter((self.args.output_dir), sess.graph)
+            run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
 
             step = 1
             if self.args.load_trained_model:
+                writer = tf.summary.FileWriter((self.args.trained_model), sess.graph)
                 saver = tf.train.Saver(max_to_keep=4, keep_checkpoint_every_n_hours=2)
                 saver.restore(sess, self.trained_model_path)
                 save_model_path = os.path.join(self.args.trained_model, self.args.model_name)
             else:
             # initialize
+                writer = tf.summary.FileWriter((self.args.output_dir), sess.graph)
                 sess.run(tf.global_variables_initializer())
                 save_model_path = os.path.join(self.args.output_dir, self.args.model_name)
                 saver = tf.train.Saver()
@@ -185,6 +187,7 @@ class TrainModel(object):
             threads = tf.train.start_queue_runners(sess=sess, coord=coord)
             self.training.start_threads(sess)
             self.testing.start_threads(sess)
+            run_metadata = tf.RunMetadata()
 
             # Keep training until reach max iterations
             while step * self.args.batch_size < self.args.training_iters:
@@ -193,12 +196,17 @@ class TrainModel(object):
                                 feed_dict={self.testing_bool:False})
                 if step % self.args.display_step == 0:
                     # Calculate batch loss and accuracy
-                    run_metadata = tf.RunMetadata()
-                    acc, summary, loss = sess.run([self.model.accuracy, self.model.merged_summaries\
-                                        , self.model.cost],\
-                                        run_metadata=run_metadata, feed_dict={self.testing_bool:True})
+                    acc, summary, loss, global_step = sess.run([self.model.accuracy, self.model.merged_summaries\
+                                        , self.model.cost, self.model.global_step],\
+                                        run_metadata=run_metadata, options=run_options, feed_dict={self.testing_bool:True})
                     # add summary statistics
-                    writer.add_summary(summary, step)
+                    writer.add_summary(summary, global_step)
+                    writer.add_run_metadata(run_metadata, "step{}".format(global_step))
+                    tl = timeline.Timeline(run_metadata.step_stats)
+                    ctf = tl.generate_chrome_trace_format()
+                    with open('timeline.json', 'w') as f:
+                        f.write(ctf)
+                        
                     print("Iter " + str(step*self.args.batch_size) + ", Minibatch Loss= " + \
                           "{:.6f}".format(loss) + ", Testing Accuracy= " + \
                           "{:.5f}".format(acc))
