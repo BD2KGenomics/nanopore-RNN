@@ -2,9 +2,11 @@ language: python
 python:
   - 2.7
 notifications: # set notification options
-  slack: ucsc-cgl:Edwfgt7MJEVZV9Lib3igueTF
-      on_success: change
-      on_failure: always
+  slack:
+    rooms:
+      - ucsc-cgl:Edwfgt7MJEVZV9Lib3igueTF
+    on_success: change
+    on_failure: always
   email:
     recipients:
       - andbaile@ucsc.edu
