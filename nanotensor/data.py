@@ -50,6 +50,8 @@ class DataQueue:
                                            min_after_dequeue=queue_size/2)
         # add one batch to queue
         self.enqueue_op = self.queue.enqueue([self.dataX, self.dataY])
+        self.files_left = True
+
 
     def shuffle(self):
         """Shuffle the input file order"""
@@ -57,6 +59,7 @@ class DataQueue:
             print("Shuffle data files", file=sys.stderr)
         # pylint: disable=no-member
         np.random.shuffle(self.file_list)
+        self.files_left = False
         return True
 
     def add_to_queue(self, batch, sess, pad=0):
