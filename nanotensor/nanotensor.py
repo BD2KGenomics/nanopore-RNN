@@ -163,8 +163,13 @@ class TrainModel(object):
 
     def run_training(self, intra_op_parallelism_threads=8, log_device_placement=False):
         """Run training steps"""
-        with tf.Session(config=tf.ConfigProto(log_device_placement=log_device_placement,\
-                    intra_op_parallelism_threads=intra_op_parallelism_threads)) as sess:
+        config = tf.ConfigProto(log_device_placement=log_device_placement,\
+                    intra_op_parallelism_threads=intra_op_parallelism_threads)
+
+        # shows gpu memory usage
+        # config.gpu_options.allow_growth = True
+
+        with tf.Session(config=config) as sess:
             # create logs
             run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
 
@@ -185,19 +190,20 @@ class TrainModel(object):
                 saver = tf.train.Saver(max_to_keep=4, keep_checkpoint_every_n_hours=2)
             # start queue
             coord = tf.train.Coordinator()
+
             threads = tf.train.start_queue_runners(sess=sess, coord=coord)
             self.training.start_threads(sess)
             self.testing.start_threads(sess)
             run_metadata = tf.RunMetadata()
             # Keep training until reach max iterations
-            print("Training Has Started!")
+            # print("Training Has Started!")
             while step < self.args.training_iters:
                 for _ in range(self.args.record_step):
                 # Run optimization and update layers
                     _ = sess.run([self.model.optimizer, self.model.zero_state], \
                                 feed_dict={self.testing_bool:False})
                     step += 1
-    
+
                 # get testing accuracy stats
                 summary, global_step = sess.run([self.model.train_summary,
                                                 self.model.global_step],\
@@ -255,7 +261,9 @@ class TrainModel(object):
             print("Training Finished!")
 
     def chrome_trace(self, metadata_proto, f_name):
-        """Save a chrome trace json file"""
+        """Save a chrome trace json file.
+        To view json vile go to - chrome://tracing/
+        """
         time_line = timeline.Timeline(metadata_proto.step_stats)
         ctf = time_line.generate_chrome_trace_format()
         with open(f_name, 'w') as file1:
@@ -268,7 +276,6 @@ class TrainModel(object):
             self.start = datetime.now()
             return True
         return False
-
 
     def call(self):
         """Run a model from a saved model path"""
@@ -292,7 +299,6 @@ class TrainModel(object):
             coord.request_stop()
             coord.join(threads)
             sess.close()
-
 
     def testing_accuracy(self, config_path, save=True, intra_op_parallelism_threads=8, log_device_placement=False):
         """Get testing accuracy and save model along with configuration file on s3"""
