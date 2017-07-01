@@ -47,6 +47,8 @@ class BuildGraph():
         self.zero_states = []
         self.reset_fws = []
         self.reset_bws = []
+        self.training_summaries = []
+        self.testing_summaries = []
 
         # self.seq_len = tf.placeholder(tf.int32, [None], name="batch_size")
         # self.batch_size = tf.Variable()
@@ -73,7 +75,10 @@ class BuildGraph():
         self.correct_pred = self.prediction_function()
         self.accuracy = self.accuracy_function()
         # merge summary information
-        self.merged_summaries = tf.summary.merge_all()
+
+        self.test_summary = tf.summary.merge(self.testing_summaries)
+        self.train_summary = tf.summary.merge(self.training_summaries)
+
         # Initializing the variables
         # self.init = tf.global_variables_initializer()
 
@@ -82,7 +87,6 @@ class BuildGraph():
         with tf.name_scope("prediction"):
             pred = self.fulconn_layer(self.rnn_outputs_flat, self.n_classes)
             # print("pred shape", pred.shape)
-            self.variable_summaries(pred)
         return pred
 
 
@@ -90,7 +94,6 @@ class BuildGraph():
         """Compare predicions with label to calculate number correct"""
         with tf.name_scope("correct_pred"):
             correct_pred = tf.equal(tf.argmax(self.pred, 1), tf.argmax(self.y_flat, 1))
-            # self.variable_summaries(correct_pred)
         return correct_pred
 
     def cost_function_prob(self):
@@ -195,21 +198,26 @@ class BuildGraph():
             output = tf.concat(outputs, 2)
         return output
 
-    @staticmethod
-    def variable_summaries(var):
+    def variable_summaries(self, var):
         # pylint: disable=C0301
         """Attach a lot of summaries to a Tensor (for TensorBoard visualization).
         source: https://github.com/tensorflow/tensorflow/blob/r1.1/tensorflow/examples/tutorials/mnist/mnist_with_summaries.py
         """
-        with tf.name_scope('summaries'):
-            mean = tf.reduce_mean(var)
-            tf.summary.scalar('mean', mean)
-        with tf.name_scope('stddev'):
-            stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
-        tf.summary.scalar('stddev', stddev)
-        tf.summary.scalar('max', tf.reduce_max(var))
-        tf.summary.scalar('min', tf.reduce_min(var))
-        tf.summary.histogram('histogram', var)
+        with tf.name_scope("testing"):
+            with tf.name_scope('summaries'):
+                mean = tf.reduce_mean(var)
+                summary = tf.summary.scalar('mean', mean)
+                self.testing_summaries.append(summary)
+        with tf.name_scope("training"):
+            with tf.name_scope('summaries'):
+                mean = tf.reduce_mean(var)
+                summary = tf.summary.scalar('mean', mean)
+                self.training_summaries.append(summary)
+        # with tf.name_scope('stddev'):
+        #     stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
+        # tf.summary.scalar('stddev', stddev)
+        # tf.summary.scalar('max', tf.reduce_max(var))
+        # tf.summary.scalar('min', tf.reduce_min(var))
 
     @staticmethod
     def fulconn_layer(input_data, output_dim, activation_func=None):
