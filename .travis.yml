@@ -28,4 +28,4 @@ script:
 # - echo "more shell commands here"
 
 after_success:
-  - codecov
+  - codecov -t 3806b863-7185-4be7-9787-a0c1d7963703
