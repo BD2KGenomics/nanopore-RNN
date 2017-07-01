@@ -190,12 +190,14 @@ class TrainModel(object):
             self.testing.start_threads(sess)
             run_metadata = tf.RunMetadata()
             # Keep training until reach max iterations
+            print("Training Has Started!")
             while step < self.args.training_iters:
                 for _ in range(self.args.record_step):
                 # Run optimization and update layers
                     _ = sess.run([self.model.optimizer, self.model.zero_state], \
                                 feed_dict={self.testing_bool:False})
                     step += 1
+    
                 # get testing accuracy stats
                 summary, global_step = sess.run([self.model.train_summary,
                                                 self.model.global_step],\
@@ -237,7 +239,7 @@ class TrainModel(object):
                     # save session
                     saver.save(sess, save_model_path, \
                                     global_step=self.model.global_step, write_meta_graph=False)
-                step += 1
+                    step += 1
 
             if self.args.save_trace:
                 self.chrome_trace(run_metadata, self.args.trace_name)
