@@ -21,8 +21,11 @@ before_install:
 install: "pip install -r requirements.txt"
 
 script:
-- python nanotensor/tests.py
+- coverage run --source nanotensor nanotensor/tests.py
 
-after_script: # here's a build step block
-- echo "We can put normal shell commands here"
-- echo "more shell commands here"
+# after_script: # here's a build step block
+# - echo "We can put normal shell commands here"
+# - echo "more shell commands here"
+
+after_success:
+  - codecov
