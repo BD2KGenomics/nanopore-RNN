@@ -7,12 +7,11 @@ notifications: # set notification options
       - ucsc-cgl:Edwfgt7MJEVZV9Lib3igueTF
     on_success: change
     on_failure: always
-  email:
-    recipients:
-      - andbaile@ucsc.edu
+  # email:
+  #   recipients:
+  #     - andbaile@ucsc.edu
     # change is when the repo status goes from pass to fail or vice versa
-    on_success: change
-    on_failure: always
+    # on_failure: always
 
 branches:
   except:
