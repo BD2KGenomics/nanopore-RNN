@@ -18,10 +18,13 @@ from timeit import default_timer as timer
 import sys
 import os
 import boto
+from boto.s3.key import Key
+from boto.s3.connection import S3Connection
 from error import PathError
 import numpy as np
 
 #TODO create debug function and verbose options
+
 
 def no_skipped_events(filepath):
     """Find if there are any skipped events in a signalalign file"""
@@ -147,11 +150,45 @@ class DotDict(dict):
     __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
 
+def upload_file_to_s3(bucket_path, filepath, key):
+    """Upload a file or directory to an aws bucket"""
+    # s3_conn = S3Connection(host='s3-us-west-1.amazonaws.com')
+
+
+    conn = S3Connection(host='s3-us-west-2.amazonaws.com')
+    test = conn.lookup(bucket_path)
+    if test is None:
+        print("There is no bucket with this name!", file=sys.stderr)
+        return 1
+    else:
+        bucket = conn.get_bucket(bucket_path)
+
+    def percent_cb(complete, total):
+        sys.stdout.write('.')
+        sys.stdout.flush()
+
+    k = Key(bucket)
+    k.key = key
+    k.set_contents_from_filename(filepath,
+            cb=percent_cb, num_cb=10)
+    sys.stdout.write('\n')
+
+def upload_model(bucket, files, dir_name):
+    """Upload all files to bucket"""
+    for file1 in files:
+        name = file1.split("/")[-1]
+        key = os.path.join(dir_name, name)
+        upload_file_to_s3(bucket, file1, key)
 
 def main():
     """Test the methods"""
     start = timer()
-
+    file_path = "/Users/andrewbailey/nanopore-RNN/logs/06Jun-29-11h-11m/checkpoint"
+    file_list = ["/Users/andrewbailey/nanopore-RNN/kmers.txt", "/Users/andrewbailey/nanopore-RNN/logs/06Jun-29-11h-11m/checkpoint", "/Users/andrewbailey/nanopore-RNN/logs/06Jun-29-11h-11m/my_test_model-3215.data-00000-of-00001"]
+    bucket = "neuralnet-accuracy"
+    dir_name = "06Jun-29-11h-30m-11.0%"
+    # upload_file_to_s3(bucket, file_path, "12.0%/checkpoint")
+    upload_model(bucket, file_list, dir_name)
     stop = timer()
     print("Running Time = {} seconds".format(stop-start), file=sys.stderr)
 

@@ -12,10 +12,14 @@
     "blstm_layer_sizes": [
         100
     ],
-    "train": true,
+    "train": false,
+    "inference": false,
     "load_trained_model": true,
     "alphabet": "ATGC",
     "kmer_len": 5,
     "inference_output": "/Users/andrewbailey/nanopore-RNN/kmers.txt",
-    "trained_model": "/Users/andrewbailey/nanopore-RNN/logs/06Jun-29-11h-11m"
+    "trained_model": "/Users/andrewbailey/nanopore-RNN/logs/06Jun-29-11h-11m",
+    "trained_model_path": "/Users/andrewbailey/nanopore-RNN/logs/06Jun-29-11h-11m/my_test_model-3215",
+    "use_checkpoint": false,
+    "save_s3": true
 }

@@ -17,8 +17,9 @@ import json
 import argparse
 import pickle
 import numpy as np
+import time
 from datetime import datetime
-from utils import project_folder, list_dir, DotDict
+from utils import project_folder, list_dir, DotDict, upload_model
 from error import Usage
 from data import DataQueue
 import tensorflow as tf
@@ -97,6 +98,7 @@ class CommandLine(object):
                 json.dump(args, outfile, indent=4)
             # define log file dir
             args["output_dir"] = logfolder_path
+            args["config_path"] = config_path
         args = DotDict(args)
         return args
 
@@ -114,9 +116,12 @@ class TrainModel(object):
         self.n_classes = int()
         self.training = "DataQueue"
         self.testing = "DataQueue"
-        self.save_model_path = os.path.join(self.args.output_dir, self.args.model_name)
+        # self.save_model_path = os.path.join(self.args.output_dir, self.args.model_name)
         self.model = self.models()
-
+        if self.args.use_checkpoint:
+            self.trained_model_path = tf.train.latest_checkpoint(self.args.trained_model)
+        else:
+            self.trained_model_path = self.args.trained_model_path
 
     def models(self):
         events, labels = self.load_data()
@@ -142,29 +147,30 @@ class TrainModel(object):
                             lambda: self.training.get_inputs(), name="events")
                 assert self.training.n_input == self.testing.n_input
                 assert self.training.n_classes == self.testing.n_classes
+                self.n_input = self.training.n_input
+                self.n_classes = self.training.n_classes
             else:
-                self.training = DataQueue(self.testing_files, self.args.batch_size, \
+                self.testing = DataQueue(self.testing_files, self.args.batch_size, \
                     queue_size=self.args.queue_size, verbose=False, pad=0, trim=True, \
                     n_steps=self.args.n_steps)
-                events, labels = self.training.get_inputs()
+                events, labels = self.testing.get_inputs()
+                # TODO -  should get this info from data preparation configuration
+                self.n_input = self.testing.n_input
+                self.n_classes = self.testing.n_classes
 
-            self.n_input = self.training.n_input
-            self.n_classes = self.training.n_classes
         return events, labels
 
-    def run_training(self, intra_op_parallelism_threads=8, log_device_placement=False, ):
+    def run_training(self, intra_op_parallelism_threads=8, log_device_placement=False):
         """Run training steps"""
         with tf.Session(config=tf.ConfigProto(log_device_placement=log_device_placement,\
                     intra_op_parallelism_threads=intra_op_parallelism_threads)) as sess:
             # create logs
             writer = tf.summary.FileWriter((self.args.output_dir), sess.graph)
-            # if args.from_data:
-            #     saver.restore(sess, tf.train.latest_checkpoint(self.args.trained_model))
 
             step = 1
             if self.args.load_trained_model:
                 saver = tf.train.Saver(max_to_keep=4, keep_checkpoint_every_n_hours=2)
-                saver.restore(sess, tf.train.latest_checkpoint(self.args.trained_model))
+                saver.restore(sess, self.trained_model_path)
                 save_model_path = os.path.join(self.args.trained_model, self.args.model_name)
             else:
             # initialize
@@ -176,7 +182,7 @@ class TrainModel(object):
                 saver = tf.train.Saver(max_to_keep=4, keep_checkpoint_every_n_hours=2)
             # start queue
             coord = tf.train.Coordinator()
-            tf.train.start_queue_runners(sess=sess, coord=coord)
+            threads = tf.train.start_queue_runners(sess=sess, coord=coord)
             self.training.start_threads(sess)
             self.testing.start_threads(sess)
 
@@ -199,10 +205,15 @@ class TrainModel(object):
                     saver.save(sess, save_model_path, \
                                     global_step=self.model.global_step, write_meta_graph=False)
                 step += 1
+            saver.save(sess, save_model_path, \
+                            global_step=self.model.global_step, write_meta_graph=False)
+
+            coord.request_stop()
+            coord.join(threads)
+            sess.close()
 
             print("Optimization Finished!")
             writer.close()
-
 
     def call(self):
         """Run a model from a saved model path"""
@@ -211,11 +222,11 @@ class TrainModel(object):
         translate[1024] = "NNNNN"
         with tf.Session() as sess:
             # new_saver = tf.train.import_meta_graph('/Users/andrewbailey/nanopore-RNN/logs/06Jun-26-18h-04m/my_test_model-0.meta')
-            new_saver.restore(sess, tf.train.latest_checkpoint(self.args.trained_model))
+            new_saver.restore(sess, self.trained_model_path)
             # graph = tf.get_default_graph()
             coord = tf.train.Coordinator()
             threads = tf.train.start_queue_runners(sess=sess, coord=coord)
-            self.training.start_threads(sess)
+            self.testing.start_threads(sess)
             evaluate_pred = sess.run([self.model.evaluate_pred])
             kmers = [translate[index] for index in evaluate_pred[0]]
             with open(self.args.inference_output, "w+") as f1:
@@ -226,6 +237,54 @@ class TrainModel(object):
             coord.request_stop()
             coord.join(threads)
             sess.close()
+
+
+    def testing_accuracy(self, config_path, save=True, intra_op_parallelism_threads=8, log_device_placement=False):
+        """Get testing accuracy and save model along with configuration file on s3"""
+        with tf.Session(config=tf.ConfigProto(log_device_placement=log_device_placement,\
+                    intra_op_parallelism_threads=intra_op_parallelism_threads)) as sess:
+            # restore model
+            saver = tf.train.Saver(max_to_keep=4, keep_checkpoint_every_n_hours=2)
+            saver.restore(sess, self.trained_model_path)
+
+            # save_model_path = os.path.join(self.args.trained_model, self.args.model_name)
+            # start queue
+            coord = tf.train.Coordinator()
+            threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+            self.testing.start_threads(sess)
+
+            acc_sum = 0
+            # Keep training until reach max iterations
+            step = 0
+
+            while self.testing.files_left:
+                # Calculate batch loss and accuracy
+                acc = sess.run([self.model.accuracy])
+                # print(acc)
+                acc_sum += acc[0]
+                print("Iter " + str(step*self.args.batch_size) + ", Testing Accuracy= " + "{:.5f}".format(acc[0]))
+                step += 1
+            coord.request_stop()
+            coord.join(threads)
+            sess.close()
+            final_acc = str(acc_sum/step *100)[:5]+"%"+datetime.now().strftime("%m%b-%d-%Hh-%Mm")
+            print("Average Accuracy = {:.3f}".format(acc_sum/step *100))
+
+        if save:
+            file_list = self.get_model_files(config_path)
+            # print(file_list)
+            print("Uploading Model to neuralnet-accuracy s3 Bucket")
+            upload_model("neuralnet-accuracy", file_list, final_acc)
+
+    def get_model_files(self, *files):
+        """Collect neccessary model files for upload"""
+        file_list = []
+        file_list.append(self.trained_model_path+".data-00000-of-00001")
+        file_list.append(self.trained_model_path+".index")
+        for file1 in files:
+            file_list.append(file1)
+        return file_list
+
 
 def main(command_line=None):
     """Main docstring"""
@@ -250,9 +309,12 @@ def main(command_line=None):
         if args.train:
             train = TrainModel(args)
             train.run_training(log_device_placement=False)
+        elif args.inference:
+            infer = TrainModel(args)
+            infer.call()
         else:
-            train = TrainModel(args)
-            train.call()
+            test = TrainModel(args)
+            test.testing_accuracy(config, save=args.save_s3)
 
         print("\n#  nanotensor - finished training \n", file=sys.stderr)
         print("\n#  nanotensor - finished training \n", file=sys.stdout)
