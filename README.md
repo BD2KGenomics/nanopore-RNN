@@ -1,3 +1,6 @@
+[![Build Status](https://travis-ci.com/BD2KGenomics/nanopore-RNN.svg?token=q4uTfLUSZiuL53MqFw8k&branch=master)](https://travis-ci.com/BD2KGenomics/nanopore-RNN)
+[![codecov](https://codecov.io/gh/BD2KGenomics/nanopore-RNN/branch/master/graph/badge.svg)](https://codecov.io/gh/BD2KGenomics/nanopore-RNN)
+
 # NanoTensor
 
 We propose a series of scripts, which are still in development, to label and train a multilayer Bidirectional long short-term memory recurrent neural network to base-call ONT-nanopore reads with modified bases.
