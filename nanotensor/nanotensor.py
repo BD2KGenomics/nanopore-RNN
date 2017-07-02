@@ -24,6 +24,7 @@ from error import Usage
 from data import DataQueue
 import tensorflow as tf
 from tensorflow.contrib import rnn
+from tensorflow.python.client import timeline
 from network import BuildGraph
 from data_preparation import TrainingData
 
@@ -116,6 +117,7 @@ class TrainModel(object):
         self.n_classes = int()
         self.training = "DataQueue"
         self.testing = "DataQueue"
+        self.start = datetime.now()
         # self.save_model_path = os.path.join(self.args.output_dir, self.args.model_name)
         self.model = self.models()
         if self.args.use_checkpoint:
@@ -133,47 +135,53 @@ class TrainModel(object):
 
     def load_data(self):
         """Create training and testing queues from training and testing files"""
-        with tf.device("/cpu:0"):
-            if self.args.train:
-                self.training = DataQueue(self.training_files, self.args.batch_size, \
-                    queue_size=self.args.queue_size, verbose=False, pad=0, trim=True, \
-                    n_steps=self.args.n_steps)
-                self.testing = DataQueue(self.testing_files, self.args.batch_size, \
-                    queue_size=self.args.queue_size, verbose=False, pad=0, trim=True, \
-                    n_steps=self.args.n_steps)
-            # events, labels = self.training.get_inputs()
-                events, labels = tf.cond(self.testing_bool, \
-                            lambda: self.testing.get_inputs(),\
-                            lambda: self.training.get_inputs(), name="events")
-                assert self.training.n_input == self.testing.n_input
-                assert self.training.n_classes == self.testing.n_classes
-                self.n_input = self.training.n_input
-                self.n_classes = self.training.n_classes
-            else:
-                self.testing = DataQueue(self.testing_files, self.args.batch_size, \
-                    queue_size=self.args.queue_size, verbose=False, pad=0, trim=True, \
-                    n_steps=self.args.n_steps)
-                events, labels = self.testing.get_inputs()
-                # TODO -  should get this info from data preparation configuration
-                self.n_input = self.testing.n_input
-                self.n_classes = self.testing.n_classes
+        if self.args.train:
+            self.training = DataQueue(self.training_files, self.args.batch_size, \
+                queue_size=self.args.queue_size, verbose=False, pad=0, trim=True, \
+                n_steps=self.args.n_steps)
+            self.testing = DataQueue(self.testing_files, self.args.batch_size, \
+                queue_size=self.args.queue_size, verbose=False, pad=0, trim=True, \
+                n_steps=self.args.n_steps)
+        # events, labels = self.training.get_inputs()
+            events, labels = tf.cond(self.testing_bool, \
+                        lambda: self.testing.get_inputs(),\
+                        lambda: self.training.get_inputs(), name="events")
+            assert self.training.n_input == self.testing.n_input
+            assert self.training.n_classes == self.testing.n_classes
+            self.n_input = self.training.n_input
+            self.n_classes = self.training.n_classes
+        else:
+            self.testing = DataQueue(self.testing_files, self.args.batch_size, \
+                queue_size=self.args.queue_size, verbose=False, pad=0, trim=True, \
+                n_steps=self.args.n_steps)
+            events, labels = self.testing.get_inputs()
+            # TODO -  should get this info from data preparation configuration
+            self.n_input = self.testing.n_input
+            self.n_classes = self.testing.n_classes
 
         return events, labels
 
     def run_training(self, intra_op_parallelism_threads=8, log_device_placement=False):
         """Run training steps"""
-        with tf.Session(config=tf.ConfigProto(log_device_placement=log_device_placement,\
-                    intra_op_parallelism_threads=intra_op_parallelism_threads)) as sess:
+        config = tf.ConfigProto(log_device_placement=log_device_placement,\
+                    intra_op_parallelism_threads=intra_op_parallelism_threads)
+
+        # shows gpu memory usage
+        # config.gpu_options.allow_growth = True
+
+        with tf.Session(config=config) as sess:
             # create logs
-            writer = tf.summary.FileWriter((self.args.output_dir), sess.graph)
+            run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
 
             step = 1
             if self.args.load_trained_model:
+                writer = tf.summary.FileWriter((self.args.trained_model), sess.graph)
                 saver = tf.train.Saver(max_to_keep=4, keep_checkpoint_every_n_hours=2)
                 saver.restore(sess, self.trained_model_path)
                 save_model_path = os.path.join(self.args.trained_model, self.args.model_name)
             else:
             # initialize
+                writer = tf.summary.FileWriter((self.args.output_dir), sess.graph)
                 sess.run(tf.global_variables_initializer())
                 save_model_path = os.path.join(self.args.output_dir, self.args.model_name)
                 saver = tf.train.Saver()
@@ -182,38 +190,92 @@ class TrainModel(object):
                 saver = tf.train.Saver(max_to_keep=4, keep_checkpoint_every_n_hours=2)
             # start queue
             coord = tf.train.Coordinator()
+
             threads = tf.train.start_queue_runners(sess=sess, coord=coord)
             self.training.start_threads(sess)
             self.testing.start_threads(sess)
-
+            run_metadata = tf.RunMetadata()
             # Keep training until reach max iterations
-            while step * self.args.batch_size < self.args.training_iters:
+            # print("Training Has Started!")
+            while step < self.args.training_iters:
+                for _ in range(self.args.record_step):
                 # Run optimization and update layers
-                _ = sess.run([self.model.optimizer, self.model.zero_state], \
+                    _ = sess.run([self.model.optimizer, self.model.zero_state], \
                                 feed_dict={self.testing_bool:False})
-                if step % self.args.display_step == 0:
-                    # Calculate batch loss and accuracy
-                    run_metadata = tf.RunMetadata()
-                    acc, summary, loss = sess.run([self.model.accuracy, self.model.merged_summaries\
-                                        , self.model.cost],\
-                                        run_metadata=run_metadata, feed_dict={self.testing_bool:True})
+                    step += 1
+
+                # get testing accuracy stats
+                summary, global_step = sess.run([self.model.train_summary,
+                                                self.model.global_step],\
+                                                feed_dict={self.testing_bool:True})
+                # add summary statistics
+                writer.add_summary(summary, global_step)
+                # get training accuracy stats
+                summary, global_step = sess.run([self.model.test_summary,
+                                                 self.model.global_step],\
+                                                 feed_dict={self.testing_bool:False})
+                # add summary statistics
+                writer.add_summary(summary, global_step)
+
+                if self.test_time():
+                    # Calculate batch loss and accuracy for training
+                    _, _, acc, summary, cost, global_step = sess.run([self.model.optimizer, self.model.zero_state,\
+                                                        self.model.accuracy, self.model.train_summary,\
+                                                        self.model.cost, self.model.global_step],\
+                                                        run_metadata=run_metadata, options=run_options,\
+                                                        feed_dict={self.testing_bool:False})
                     # add summary statistics
-                    writer.add_summary(summary, step)
-                    print("Iter " + str(step*self.args.batch_size) + ", Minibatch Loss= " + \
-                          "{:.6f}".format(loss) + ", Testing Accuracy= " + \
-                          "{:.5f}".format(acc))
+                    writer.add_summary(summary, global_step)
+                    writer.add_run_metadata(run_metadata, "step{}_train".format(global_step))
+                    # Calculate batch loss and accuracy for testing
+                    summary, global_step, test_acc, test_cost = sess.run([self.model.test_summary,
+                                        self.model.global_step, self.model.accuracy, self.model.cost],\
+                                        run_metadata=run_metadata, options=run_options,\
+                                        feed_dict={self.testing_bool:True})
+                    # add summary statistics
+                    writer.add_summary(summary, global_step)
+                    writer.add_run_metadata(run_metadata, "step{}_test".format(global_step))
+
+                    print("Iter " + str(step) + ", Training Cost= " + \
+                          "{:.6f}".format(cost) + ", Training Accuracy= " + \
+                          "{:.5f}".format(acc) + ", Testing Cost= " + \
+                          "{:.6f}".format(test_cost) + ", Testing Accuracy= " + \
+                          "{:.5f}".format(test_acc))
+
+                    # save session
                     saver.save(sess, save_model_path, \
                                     global_step=self.model.global_step, write_meta_graph=False)
-                step += 1
+                    step += 1
+
+            if self.args.save_trace:
+                self.chrome_trace(run_metadata, self.args.trace_name)
+
             saver.save(sess, save_model_path, \
                             global_step=self.model.global_step, write_meta_graph=False)
 
             coord.request_stop()
             coord.join(threads)
             sess.close()
-
-            print("Optimization Finished!")
             writer.close()
+
+            print("Training Finished!")
+
+    def chrome_trace(self, metadata_proto, f_name):
+        """Save a chrome trace json file.
+        To view json vile go to - chrome://tracing/
+        """
+        time_line = timeline.Timeline(metadata_proto.step_stats)
+        ctf = time_line.generate_chrome_trace_format()
+        with open(f_name, 'w') as file1:
+            file1.write(ctf)
+
+    def test_time(self):
+        """Return true if it is time to save the model"""
+        delta = (datetime.now() - self.start).total_seconds()
+        if delta > self.args.save_model:
+            self.start = datetime.now()
+            return True
+        return False
 
     def call(self):
         """Run a model from a saved model path"""
@@ -237,7 +299,6 @@ class TrainModel(object):
             coord.request_stop()
             coord.join(threads)
             sess.close()
-
 
     def testing_accuracy(self, config_path, save=True, intra_op_parallelism_threads=8, log_device_placement=False):
         """Get testing accuracy and save model along with configuration file on s3"""
