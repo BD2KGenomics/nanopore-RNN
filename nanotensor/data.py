@@ -90,23 +90,22 @@ class DataQueue:
         if self.verbose:
             print("{} batches in this file".format(num_batches), file=sys.stderr)
         batch_number = 0
-        more_data = True
         index_1 = 0
         index_2 = self.seq_len
-        while more_data:
+        while batch_number < num_batches:
             next_in = data[index_1:index_2]
             self.add_to_queue(next_in, sess)
             batch_number += 1
             index_1 += self.seq_len
             index_2 += self.seq_len
-            if batch_number == num_batches:
-                if not self.trim:
-                    # moved this down because we dont care about connecting between reads right now
-                    self.add_to_queue(np.array([[str(pad), str(pad)]]), sess)
-                    next_in = data[index_1:index_2]
-                    # print(np.array([pad]))
-                    self.add_to_queue(next_in, sess, pad=pad)
-                more_data = False
+
+        if not self.trim:
+            # moved this down because we dont care about connecting between reads right now
+            self.add_to_queue(np.array([[str(pad), str(pad)]]), sess)
+            next_in = data[index_1:index_2]
+            # print(np.array([pad]))
+            self.add_to_queue(next_in, sess, pad=pad)
+
         return True
 
     def read_in_file(self, sess):
