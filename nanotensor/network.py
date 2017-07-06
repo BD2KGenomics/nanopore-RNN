@@ -18,8 +18,8 @@ import sys
 import os
 from timeit import default_timer as timer
 from datetime import datetime
-from utils import project_folder, list_dir
-from data import DataQueue
+from nanotensor.utils import project_folder, list_dir
+from nanotensor.data import DataQueue
 import tensorflow as tf
 from tensorflow.contrib import rnn
 

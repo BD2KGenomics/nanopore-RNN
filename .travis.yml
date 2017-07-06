@@ -10,6 +10,7 @@ notifications: # set notification options
   # email:
   #   recipients:
   #     - andbaile@ucsc.edu
+  #	-rsafavi@ucsc.edu
     # change is when the repo status goes from pass to fail or vice versa
     # on_failure: always
 
@@ -18,11 +19,19 @@ branches:
     - rojin
 before_install:
 - sudo apt-get update -qq
-install: "pip install -r requirements.txt"
+- sudo apt-get install libhdf5-serial-dev
+
+install:
+- "cd nanonet"
+- "python setup.py install"
+- "cd .."
+- "python setup.py install"
+- "cd nanotensor"
 
 script:
-- coverage run --source nanotensor nanotensor/tests.py
-
+- coverage run --source nanotensor -m pytest
+# - coverage run --source nanotensor -a nanotensor/tests/data_preparation_test.py
+# - bash <(curl -s https://codecov.io/bash) -cF python
 # after_script: # here's a build step block
 # - echo "We can put normal shell commands here"
 # - echo "more shell commands here"

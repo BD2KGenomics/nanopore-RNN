@@ -20,7 +20,7 @@ import os
 import boto
 from boto.s3.key import Key
 from boto.s3.connection import S3Connection
-from error import PathError
+from nanotensor.error import PathError
 import numpy as np
 
 #TODO create debug function and verbose options

@@ -13,7 +13,7 @@ import sys
 from timeit import default_timer as timer
 import threading
 import numpy as np
-from utils import project_folder, list_dir
+from nanotensor.utils import project_folder, list_dir
 import tensorflow as tf
 
 class DataQueue:

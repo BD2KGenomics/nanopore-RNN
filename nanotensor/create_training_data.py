@@ -16,9 +16,9 @@ from datetime import datetime
 import json
 from multiprocessing import Process, current_process, Manager
 import argparse
-from utils import project_folder, merge_two_dicts
-from data_preparation import TrainingData
-from error import Usage
+from nanotensor.utils import project_folder, merge_two_dicts
+from nanotensor.data_preparation import TrainingData
+from nanotensor.error import Usage
 
 
 

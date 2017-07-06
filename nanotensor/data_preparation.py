@@ -29,7 +29,6 @@ from nanonet.features import events_to_features as nanonet_features
 class TrainingData(object):
     """docstring for TrainingData."""
     def __init__(self, fast5_file, alignment_file, strand_name="template", prob=False, kmer_len=5, alphabet="ATGC", nanonet=True, deepnano=False):
-        super(TrainingData, self).__init__()
         self.fast5_file = fast5_file
         self.alignment_file = alignment_file
         assert self.fast5_file.endswith("fast5")
@@ -44,12 +43,20 @@ class TrainingData(object):
             print("Deepnano events not completed", file=sys.stderr)
             #TODO create error for incomplete work
 
-        self.events = str()
-        self.kmers = str()
-        self.labels = str()
-        self.features = str()
-        self.training_file = str()
+        self.events = []
+        self.kmers = []
+        self.labels = []
+        self.features = []
+        self.training_file = []
 
+    def run_complete_analysis(self):
+        """Run complete flow of analysis"""
+        self.scrape_fast5_events()
+        self.scrape_signalalign()
+        self.create_labels()
+        self.create_features()
+        self.match_label_with_feature()
+        return True
 
     def scrape_fast5_events(self, fields=None):
         """Scrape a fast5 file for event information"""
@@ -65,6 +72,7 @@ class TrainingData(object):
                 complement = fast5.get("Analyses/Basecall_1D_000/BaseCalled_complement/Events").value
                 Strand = np.array(complement)
         events = Strand[fields]
+        self.events = events
         return events
 
     def scrape_signalalign(self):
@@ -94,6 +102,7 @@ class TrainingData(object):
                 elif self.strand_name == "complement":
                     if strand =="c":
                         kmers[event_index].append((kmer, prob))
+        self.kmers = kmers
         return kmers
 
     def scrape_eventalign(self):
@@ -119,6 +128,7 @@ class TrainingData(object):
             final_matrix.append([self.features[index], label])
             prev_counter = index
         final_matrix = np.asanyarray(final_matrix)
+        self.training_file = final_matrix
         return final_matrix
 
     def create_null_label(self):
@@ -137,6 +147,7 @@ class TrainingData(object):
         else:
             # create categorical vector with probability or simple binary classification
             labels = self.create_kmer_labels()
+        self.labels = labels
         return labels
 
     def create_deepnano_labels(self):
@@ -213,6 +224,7 @@ class TrainingData(object):
             features = nanonet_features(self.events)
         else:
             features = self.deepnano_events(self.events)
+        self.features = features
         return features
 
     def deepnano_events(self, shift=1, scale=1, scale_sd=1):
@@ -236,15 +248,11 @@ class TrainingData(object):
         std = std - 1
         return [mean, mean*mean, std, length]
 
-    def save_training_file(self, output_name, output_dir=project_folder()):
+    def save_training_file(self, output_name, output_dir):
         """Create training file and save it as an .npy file"""
         assert os.path.isdir(output_dir)
-        self.events = self.scrape_fast5_events()
-        self.kmers = self.scrape_signalalign()
-        self.labels = self.create_labels()
-        self.features = self.create_features()
-        self.training_file = self.match_label_with_feature()
         output_file = os.path.join(output_dir, output_name)
+        self.run_complete_analysis()
         np.save(output_file, self.training_file)
         return output_file
 
