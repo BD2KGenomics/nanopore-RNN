@@ -22,6 +22,7 @@ import re
 import numpy as np
 from Bio.Seq import Seq
 from utils import get_project_file, project_folder
+from pandas import DataFrame
 # from Bio.Alphabet import generic_dna
 
 def get_refrence_and_edit(referencePath, reference_Modified_Path):
@@ -107,6 +108,24 @@ def make_bed_file(ref_modified_path, bed_path, *args):
                 outfile.write(seq_name + "\t" + np.str(pos) + "\t" + "-" + "\t"
                               + old_char +"\t" + new_char + "\n")
 
+def sorting(bed_path):
+    '''sort the bed file'''
+    df = DataFrame.from_csv(bed_path, sep='\t', header=None)
+    df_sorted = df.sort_values([2,1], ascending=[True,True])
+    return df_sorted
+
+
+def save_as_tsv(bed_path, sorted_bed_path):
+    '''save the sorted bedfile as tsv'''
+    s = ''
+    sorted_table = sorting(bed_path) # df sorted
+    for i in DataFrame.to_csv(sorted_table, sep='\t'):
+        s = s + i
+    g = s.split("\n")
+    with open(sorted_bed_path, "w") as tsv_file:
+        for i in g:
+            if "0\t1\t2\t3\t4" not in i:
+                tsv_file.write(i + "\n")
 
 ## Concatenate control and experimental assignments
 ## ex : concatenation of non methylated and methylated assignments
@@ -153,8 +172,10 @@ def main():
     reference_modified_path = project_folder()+"/testing/reference-sequences/ecoli_k12_mg1655_modified.fa"
     get_refrence_and_edit(ref_seq, reference_modified_path)
     bed_file_path = project_folder()+"/testing/reference-sequences/CCAGG_modified2.bed"
+    sorted_bed_file_path = project_folder()+"/testing/reference-sequences/CCAGG_modified2_sorted.bed"
     char = "E"
     make_bed_file(reference_modified_path, bed_file_path, ["CCTGG","CETGG"], ["CCAGG","CEAGG"])
+    save_as_tsv(bed_file_path, sorted_bed_file_path)
 
     stop = timer()
     print("Running Time = {} seconds".format(stop-start), file=sys.stderr)
