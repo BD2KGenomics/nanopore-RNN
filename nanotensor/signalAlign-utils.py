@@ -22,6 +22,7 @@ import re
 import numpy as np
 from Bio.Seq import Seq
 from utils import get_project_file, project_folder
+from pandas import DataFrame
 # from Bio.Alphabet import generic_dna
 
 def get_refrence_and_edit(referencePath, reference_Modified_Path):
@@ -171,8 +172,10 @@ def main():
     reference_modified_path = project_folder()+"/testing/reference-sequences/ecoli_k12_mg1655_modified.fa"
     get_refrence_and_edit(ref_seq, reference_modified_path)
     bed_file_path = project_folder()+"/testing/reference-sequences/CCAGG_modified2.bed"
+    sorted_bed_file_path = project_folder()+"/testing/reference-sequences/CCAGG_modified2_sorted.bed"
     char = "E"
     make_bed_file(reference_modified_path, bed_file_path, ["CCTGG","CETGG"], ["CCAGG","CEAGG"])
+    save_as_tsv(bed_file_path, sorted_bed_file_path)
 
     stop = timer()
     print("Running Time = {} seconds".format(stop-start), file=sys.stderr)
