@@ -118,8 +118,16 @@ class TrainingData(object):
         """Match indexed label with correct event"""
         # TODO fix the data type so that everything is a nparray
         final_matrix = []
+        prev_counter = -1
         for index, label in sorted(self.labels.items()):
+            counter = index
+            if prev_counter != -1:
+                  while counter != prev_counter+1:
+                        null = self.create_null_label()
+                        final_matrix.append([self.features[prev_counter+1], null])
+                        prev_counter += 1
             final_matrix.append([self.features[index], label])
+            prev_counter = index
         final_matrix = np.asanyarray(final_matrix)
         self.training_file = final_matrix
         return final_matrix
@@ -159,11 +167,6 @@ class TrainingData(object):
         labels = defaultdict()
         for index, kmer_list in self.kmers.items():
             labels[index] = self.create_vector(kmer_list, kmer_dict)
-        Range = np.arange(min(labels.keys()), max(labels.keys()) +1)
-        null = self.create_null_label()
-        for i in Range:
-            if not labels.has_key(i):
-                labels[i] = null
         return labels
 
     @staticmethod
