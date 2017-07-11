@@ -122,9 +122,10 @@ class TrainingData(object):
         for index, label in sorted(self.labels.items()):
             counter = index
             if prev_counter != -1:
-                if counter != prev_counter+1:
-                    null = self.create_null_label()
-                    final_matrix.append([self.features[prev_counter+1], null])
+                  while counter != prev_counter+1:
+                        null = self.create_null_label()
+                        final_matrix.append([self.features[prev_counter+1], null])
+                        prev_counter += 1
             final_matrix.append([self.features[index], label])
             prev_counter = index
         final_matrix = np.asanyarray(final_matrix)
