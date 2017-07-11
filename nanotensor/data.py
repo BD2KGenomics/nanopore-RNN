@@ -131,10 +131,11 @@ class DataQueue:
         """
         Return's tensors containing a batch of images and labels
         """
+        # batch_size = np.random.randint(1, self.batch_size)
         reads_batch, labels_batch = self.queue.dequeue_many(self.batch_size, name="dequeue")
         tf.add_to_collection("read_batch", reads_batch)
         tf.add_to_collection("labels_batch", labels_batch)
-
+        # print(tf.shape(reads_batch))
         return reads_batch, labels_batch
 
     def thread_main(self, sess, data_obj):

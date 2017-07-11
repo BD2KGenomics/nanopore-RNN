@@ -1,14 +1,11 @@
 codecov:
+  token: 3806b863-7185-4be7-9787-a0c1d7963703
   notify:
-    require_ci_to_pass: yes
     slack:
-      default:
-        url: "https://hooks.slack.com/services/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"
-        threshold: 1%
-        only_pulls: false
-        branches: null
-        flags: null
-        paths: null
+      url: "https://hooks.slack.com/services/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"
+      # only_pulls: false
+      attachments: "sunburst, diff"
+      # branches: default
 
 coverage:
   precision: 2
@@ -19,6 +16,8 @@ coverage:
     project: yes
     patch: yes
     changes: no
+    threshold: 2
+
 
 parsers:
   gcov:

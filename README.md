@@ -12,11 +12,13 @@ We propose a series of scripts, which are still in development, to label and tra
 The easiest way to deal with the dependencies is to download Anaconda
 * Download and Install Anaconda https://docs.continuum.io/anaconda/install
 * `git clone --recursive https://github.com/BD2KGenomics/nanopore-RNN`
+* `cd nanopore-RNN`
+* `conda env create --file requirements.yml`
+* `source activate nanotensor`
 * `cd nanopore-RNN/nanonet`
 * `python setup.py install`
 * `cd ..`
-* `conda env --file requirements.yml`
-* `source activate nanotensor`
+* `python setup.py install`
 
 
 ## USAGE

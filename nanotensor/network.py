@@ -31,8 +31,8 @@ class BuildGraph():
         # self.x = x
         self.y = y
         self.x = tf.placeholder_with_default(x, shape=[None, n_steps, n_input])
-        # self.batch_size = tf.placeholder(tf.int32, [])
-        self.batch_size = batch_size
+        self.batch_size = tf.shape(self.x)[0]
+        # self.batch_size = batch_size
         self.y_flat = tf.reshape(self.y, [-1, n_classes])
         self.n_layers = len(layer_sizes)
         self.layer_sizes = layer_sizes
@@ -51,16 +51,15 @@ class BuildGraph():
         self.testing_summaries = []
 
         # self.seq_len = tf.placeholder(tf.int32, [None], name="batch_size")
-        # self.batch_size = tf.Variable()
         outputs = self.create_deep_blstm()
         # outputs = self.blstm(self.x, layer_name="layer1", n_hidden=layer_sizes[0], forget_bias=self.forget_bias)
 
         self.rnn_outputs_flat = tf.reshape(outputs, [-1, 2*layer_sizes[-1]])
         self.global_step = tf.Variable(0, name='global_step', trainable=False)
 
-        self.zero_state = self.combine_arguments(self.zero_states, "zero_states")
-        self.fw_reset = self.combine_arguments(self.reset_fws, "reset_fws")
-        self.bw_reset = self.combine_arguments(self.reset_bws, "reset_bws")
+        # self.zero_state = self.combine_arguments(self.zero_states, "zero_states")
+        # self.fw_reset = self.combine_arguments(self.reset_fws, "reset_fws")
+        # self.bw_reset = self.combine_arguments(self.reset_bws, "reset_bws")
 
         # Linear activation, using rnn inner loop last output
         self.pred = self.create_prediction_layer()
@@ -173,26 +172,26 @@ class BuildGraph():
             lstm_bw_cell = rnn.LSTMCell(n_hidden, forget_bias=forget_bias, state_is_tuple=True)
 
             # forward states
-            fw_state_c, fw_state_h = lstm_fw_cell.zero_state(self.batch_size, tf.float32)
-            lstm_fw_cell_states = rnn.LSTMStateTuple(
-                tf.Variable(fw_state_c, trainable=False, name="forward_c"),
-                tf.Variable(fw_state_h, trainable=False, name="forward_h"))
-
-            # backward states
-            bw_state_c, bw_state_h = lstm_bw_cell.zero_state(self.batch_size, tf.float32)
-            lstm_bw_cell_states = rnn.LSTMStateTuple(
-                tf.Variable(bw_state_c, trainable=False, name="backward_c"),
-                tf.Variable(bw_state_h, trainable=False, name="backward_h"))
+            # fw_state_c, fw_state_h = lstm_fw_cell.zero_state(self.batch_size, tf.float32)
+            # lstm_fw_cell_states = rnn.LSTMStateTuple(
+            #     tf.Variable(fw_state_c, trainable=False, name="forward_c"),
+            #     tf.Variable(fw_state_h, trainable=False, name="forward_h"))
+            #
+            # # backward states
+            # bw_state_c, bw_state_h = lstm_bw_cell.zero_state(self.batch_size, tf.float32)
+            # lstm_bw_cell_states = rnn.LSTMStateTuple(
+            #     tf.Variable(bw_state_c, trainable=False, name="backward_c"),
+            #     tf.Variable(bw_state_h, trainable=False, name="backward_h"))
 
             outputs, output_states = tf.nn.bidirectional_dynamic_rnn(lstm_fw_cell, \
-            lstm_bw_cell, input_vector, dtype=tf.float32, initial_state_fw=lstm_fw_cell_states, \
-            initial_state_bw=lstm_bw_cell_states)
+            lstm_bw_cell, input_vector, dtype=tf.float32)#, initial_state_fw=lstm_fw_cell_states, \
+            #initial_state_bw=lstm_bw_cell_states)
 
             # create operations for resetting both states and only the forward or backward states
-            self.zero_states.extend(self.get_state_update_op((lstm_fw_cell_states, \
-                                    lstm_bw_cell_states), output_states))
-            self.reset_fws.extend(self.get_state_update_op(lstm_fw_cell_states, output_states[0]))
-            self.reset_bws.extend(self.get_state_update_op(lstm_bw_cell_states, output_states[1]))
+            # self.zero_states.extend(self.get_state_update_op((lstm_fw_cell_states, \
+            #                         lstm_bw_cell_states), output_states))
+            # self.reset_fws.extend(self.get_state_update_op(lstm_fw_cell_states, output_states[0]))
+            # self.reset_bws.extend(self.get_state_update_op(lstm_bw_cell_states, output_states[1]))
 
             # concat two output layers so we can treat as single output layer
             output = tf.concat(outputs, 2)

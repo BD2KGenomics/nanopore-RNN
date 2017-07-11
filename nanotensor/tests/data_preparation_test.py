@@ -51,6 +51,7 @@ class Test_data_preparation(unittest.TestCase):
         canonical_fast5 = os.path.join(self.HOME,\
         "test_files/minion-reads/canonical/miten_PC_20160820_FNFAD20259_MN17223_mux_scan_AMS_158_R9_WGA_Ecoli_08_20_16_83098_ch467_read35_strand.fast5")
         canonical_tsv = os.path.join(self.HOME, \
+
         "test_files/signalalignment_files/test_canonical/3c6e13d8-2ecb-475a-9499-d0d5c48dd1c8_Basecall_2D_2d.sm.forward.tsv")
 
         self.T = TrainingData(canonical_fast5, canonical_tsv, strand_name="template", prob=True, kmer_len=5, alphabet="ATGCE", nanonet=True, deepnano=False)
@@ -152,7 +153,6 @@ class Test_data_preparation(unittest.TestCase):
     def test_create_deepnano_labels(self):
         self.assertEqual(self.T.create_deepnano_labels(), False)
         self.assertEqual(self.C.create_deepnano_labels(), False)
-
 
 
 

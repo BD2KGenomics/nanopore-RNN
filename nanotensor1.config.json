@@ -4,17 +4,18 @@
     "output_dir": "/Users/andrewbailey/nanopore-RNN/logs",
     "model_name": "my_test_model",
     "queue_size": 10,
-    "training_iters": 300,
-    "save_model": 30,
-    "record_step": 20,
-    "n_steps": 100,
-    "batch_size": 3,
+    "training_iters": 30,
+    "save_model": 1,
+    "record_step": 10,
+    "n_steps": 30,
+    "batch_size": 5,
     "learning_rate": 0.001,
     "blstm_layer_sizes": [
         100
     ],
     "train": true,
     "inference": false,
+    "testing_accuracy": false,
     "load_trained_model": true,
     "alphabet": "ATGC",
     "kmer_len": 5,
@@ -24,5 +25,6 @@
     "use_checkpoint": true,
     "save_s3": true,
     "trace_name": "timeline.json",
-    "save_trace": true
+    "save_trace": true,
+    "profile": false
 }

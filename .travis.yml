@@ -7,6 +7,8 @@ notifications: # set notification options
       - ucsc-cgl:Edwfgt7MJEVZV9Lib3igueTF
     on_success: change
     on_failure: always
+  email: false
+
   # email:
   #   recipients:
   #     - andbaile@ucsc.edu
@@ -20,6 +22,7 @@ branches:
 before_install:
 - sudo apt-get update -qq
 - sudo apt-get install libhdf5-serial-dev
+# sudo apt-get install libbz2-dev
 
 install:
 - "cd nanonet"
