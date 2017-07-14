@@ -17,6 +17,7 @@ from __future__ import print_function
 from timeit import default_timer as timer
 import sys
 import os
+import collections
 import boto
 from boto.s3.key import Key
 from boto.s3.connection import S3Connection
@@ -109,20 +110,13 @@ def get_project_file(localpath):
     else:
         raise PathError("Path to file does not exist!")
 
-def sum_to_one(vector):
+def sum_to_one(vector, prob=True):
     """Make sure a vector sums to one, if not, create diffuse vector"""
-    total = sum(vector)
-    if total != 1:
-        if total > 1:
-            # NOTE Do we want to deal with vectors with probability over 1?
-            pass
-        else:
-            # NOTE this is pretty slow so maybe remove it?
-            leftover = 1 - total
-            amount_to_add = leftover/ (len(vector) - np.count_nonzero(vector))
-            for index, prob in enumerate(vector):
-                if prob == 0:
-                    vector[index] = amount_to_add
+    sum1 = sum(vector)
+    if prob:
+        vector = [n/sum1 for n in vector]
+        sum1 = sum(vector)
+    assert round(sum1, 10) == np.float(1.0), "Vector does not sum to one: {} != 1.0".format((round(sum1, 10)==1.0))
     return vector
 
 def add_field(np_struct_array, descr):
@@ -179,6 +173,17 @@ def upload_model(bucket, files, dir_name):
         name = file1.split("/")[-1]
         key = os.path.join(dir_name, name)
         upload_file_to_s3(bucket, file1, key)
+
+
+def check_duplicate_characters(string):
+    """make sure there are no duplicates in the alphabet"""
+    results = collections.Counter(string)
+    len_string = len(string)
+    num_characters = len(results.items())
+    assert len_string == num_characters, "String '{}' has repeat characters".format(string)
+    return string
+
+
 
 def main():
     """Test the methods"""

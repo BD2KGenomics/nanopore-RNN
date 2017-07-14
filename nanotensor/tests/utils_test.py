@@ -13,7 +13,7 @@ Place unit tests in this file
 
 import os
 import unittest
-from nanotensor.utils import list_dir, DotDict
+from nanotensor.utils import list_dir, DotDict, check_duplicate_characters
 
 
 class UtilsTest(unittest.TestCase):
@@ -33,6 +33,13 @@ class UtilsTest(unittest.TestCase):
         test_dict = {"asdf": 0}
         new_dict = DotDict(test_dict)
         self.assertEqual(test_dict["asdf"], new_dict.asdf)
+
+    def test_check_duplicate_characters(self):
+        """Make sure that check_duplicate_characters works as expected"""
+        test1 = "ABCD"
+        test2 = "AABCD"
+        self.assertEqual(test1, check_duplicate_characters(test1))
+        self.assertRaises(AssertionError, check_duplicate_characters, test2)
 
 
 
