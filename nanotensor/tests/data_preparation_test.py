@@ -188,13 +188,13 @@ class Test_data_preparation(unittest.TestCase):
         # Template strand
         test_6999 = self.T.create_kmer_labels()[6999]
         labels = os.path.join(self.HOME, \
-         "test_files/data_prep_test_files/pos6999-template-label-prob.txt")
+         "test_files/data_prep_test_files/pos6999-template-label-prob.pkl")
         pos6999 = load_pickle(labels)
         self.assertEqual(sorted(pos6999), sorted(test_6999))
         # Complement strand
         test_55 = self.C.create_kmer_labels()[55]
         labels = os.path.join(self.HOME, \
-         "test_files/data_prep_test_files/pos55-complement-label-prob.txt")
+         "test_files/data_prep_test_files/pos55-complement-label-prob.pkl")
         pos55 = load_pickle(labels)
         self.assertEqual(sorted(pos55), sorted(test_55))
         # DEEPNANO doesnt use kmer_labels
@@ -202,7 +202,7 @@ class Test_data_preparation(unittest.TestCase):
         # # CATEGORICAL
         test_6998 = self.CATEGORICAL.create_kmer_labels()[6998]
         labels = os.path.join(self.HOME, \
-         "test_files/data_prep_test_files/pos6998-CATEGORICAL-label-prob.txt")
+         "test_files/data_prep_test_files/pos6998-CATEGORICAL-label-prob.pkl")
         pos6998 = load_pickle(labels)
         self.assertEqual(sorted(pos6998), sorted(test_6998))
         # make sure categorical and probability assignments are different
