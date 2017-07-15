@@ -171,7 +171,9 @@ class TrainModel(object):
 
     # @profile
     def run_training(self, intra_op_parallelism_threads=8, log_device_placement=False):
-        """Run training steps"""
+        """Run training steps
+        use `dmesg` to get error message if training is killed
+        """
         config = tf.ConfigProto(log_device_placement=log_device_placement,\
                     intra_op_parallelism_threads=intra_op_parallelism_threads)
 

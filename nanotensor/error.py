@@ -32,6 +32,16 @@ class Usage(Exception):
         super(Usage, self).__init__()
         self.msg = msg
 
+class DataPrepBug(Exception):
+    '''Signal Bug in data preparation.
+
+    This should never be raised
+    '''
+    def __init__(self, value):
+        super(DataPrepBug, self).__init__()
+        self.value = value
+    def __str__(self):
+        return repr(self.value)
 
 
 
