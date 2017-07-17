@@ -19,6 +19,7 @@ import sys
 import os
 import collections
 import boto
+import json
 from boto.s3.key import Key
 from boto.s3.connection import S3Connection
 from nanotensor.error import PathError
@@ -183,8 +184,23 @@ def check_duplicate_characters(string):
     assert len_string == num_characters, "String '{}' has repeat characters".format(string)
     return string
 
+def load_json(path):
+    """Load a json file and make sure that path exists"""
+    path = os.path.abspath(path)
+    assert os.path.isfile(path)
+    with open(path) as json_file:
+        args = json.load(json_file)
+    return args
 
+def save_json(dict1, path):
+    """Save a python object as a json file"""
+    path = os.path.abspath(path)
+    with open(path, 'w') as outfile:
+        json.dump(dict1, outfile, indent=4)
+    assert os.path.isfile(path)
+    return path
 
+    
 def main():
     """Test the methods"""
     start = timer()

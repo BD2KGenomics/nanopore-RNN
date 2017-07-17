@@ -18,7 +18,7 @@ import argparse
 from datetime import datetime
 import numpy as np
 import time
-from nanotensor.utils import project_folder, list_dir, DotDict, upload_model
+from nanotensor.utils import project_folder, list_dir, DotDict, upload_model, load_json
 from nanotensor.error import Usage
 from nanotensor.data import DataQueue
 from nanotensor.network import BuildGraph
@@ -99,7 +99,7 @@ class CommandLine(object):
         # make sure output dir exists
         assert os.path.isdir(args["training_dir"])
         assert os.path.isdir(args["training_dir"])
-        assert isinstance(args["blstm_layer_sizes"], list)
+        # assert isinstance(args["blstm_layer_sizes"], list)
         # create new output dir
         if args["train"] and not args["load_trained_model"]:
             logfolder_path = os.path.join(args["output_dir"],
@@ -140,7 +140,7 @@ class TrainModel(object):
     def models(self):
         events, labels = self.load_data()
         model = BuildGraph(self.n_input, self.n_classes, self.args.learning_rate, n_steps=self.args.n_steps, \
-                        layer_sizes=self.args.blstm_layer_sizes, batch_size=self.args.batch_size, x=events, y=labels)
+                        network=self.args.network, x=events, y=labels, binary_cost=self.args.binary_cost)
         return model
 
     def load_data(self):
@@ -398,13 +398,9 @@ def main():
     try:
         # get config and log files
         config = command_line.args["config"]
-        # define arguments with config or arguments
-        config = os.path.abspath(config)
-        assert os.path.isfile(config)
-
         print("Using config file {}".format(config), file=sys.stderr)
-        with open(config) as json_file:
-            args = json.load(json_file)
+        # define arguments with config or arguments
+        args = load_json(config)
         # check arguments and define
         args = command_line.check_args(args)
         # Parameters
