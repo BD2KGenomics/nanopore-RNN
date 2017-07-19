@@ -9,11 +9,13 @@
 ########################################################################
 
 from __future__ import print_function
-import unittest
+
 import os
 import types
+import unittest
+
 from nanotensor.create_training_data import CommandLine, get_arguments, create_training_data_args, create_training_data
-from nanotensor.utils import create_log_file, merge_two_dicts
+from nanotensor.utils import create_log_file
 
 
 # noinspection PyTypeChecker
@@ -24,6 +26,7 @@ class CreateTrainingDataTest(unittest.TestCase):
     def setUpClass(cls):
         super(CreateTrainingDataTest, cls).setUpClass()
         cls.HOME = '/'.join(os.path.abspath(__file__).split("/")[:-3])
+        cls.TEST_DIR = os.path.join(cls.HOME, "test_files/create_training_data_test_files")
         cls.old_log_file = os.path.join(cls.HOME, "test_files/test_log_files/canonical.log.txt")
         new_log_path = os.path.join(cls.HOME, "test_files/test_log_files/real.canonical.log.txt")
         cls.log_file = create_log_file(cls.HOME, cls.old_log_file, new_log_path)
@@ -36,7 +39,6 @@ class CreateTrainingDataTest(unittest.TestCase):
             # get file paths
             cls.fast5 = os.path.abspath(line[0])
             cls.tsv = os.path.abspath(line[1])
-
 
     def test_check_args(self):
         """Test_check_args in CommandLine class"""
@@ -94,7 +96,7 @@ class CreateTrainingDataTest(unittest.TestCase):
         self.assertRaises(AssertionError, get_arguments, commandline)
         args = ["--log-file", "/Users/andrewbailey/data/log-file.1",
                 "--kmer-len", "5",
-                "--output-dir", "/Users/andrewbailey/nanopore-RNN/test_files/create_training_data_test_files",
+                "--output-dir", self.TEST_DIR,
                 "--strand-name", "template",
                 "--deepnano",
                 "--file-prefix", "canonical",
@@ -107,7 +109,7 @@ class CreateTrainingDataTest(unittest.TestCase):
         args = ["--log-file", "/Users/andrewbailey/data/log-file.1"]
         self.assertRaises(SystemExit, CommandLine, in_opts=args)
         args.extend(["--kmer-len", "5",
-                     "--output-dir", "/Users/andrewbailey/nanopore-RNN/test_files/create_training_data_test_files",
+                     "--output-dir", self.TEST_DIR,
                      "--strand-name", "template",
                      "--deepnano",
                      "--file-prefix", "canonical",
@@ -140,30 +142,29 @@ class CreateTrainingDataTest(unittest.TestCase):
         args1 = next(arg_generator)
         self.assertIsInstance(args1, dict)
 
-
     def test_create_training_data(self):
         """test_create_training_data"""
         # fails
         args = dict(cutoff=0.4, nanonet=False, verbose=True, strand_name='template', deepnano=False, debug=False,
                     file='canonical', num_cpu=5, alphabet='ATGC', kmer_len=5, signalalign_file=self.tsv,
-                    output_dir='/Users/andrewbailey/nanopore-RNN/test_files/create_training_data_test_files', forward=True, log_file=self.log_file,
+                    output_dir=self.TEST_DIR, forward=True, log_file=self.log_file,
                     output_name='file1', prob=False, fast5_file=self.fast5)
         self.assertRaises(AssertionError, create_training_data, args)
         args = dict(cutoff=0.4, nanonet=False, verbose=True, strand_name='template', deepnano=True, debug=False,
                     file='canonical', num_cpu=5, alphabet='ATGC', kmer_len=5, signalalign_file=self.tsv,
-                    output_dir='/Users/andrewbailey/nanopore-RNN/test_files/create_training_data_test_files', forward=True, log_file=self.log_file,
+                    output_dir=self.TEST_DIR, forward=True, log_file=self.log_file,
                     output_name='file1', prob=False, fast5_file=self.fast5)
         self.assertRaises(AssertionError, create_training_data, args)
         args = dict(cutoff=0.4, nanonet=False, verbose=True, strand_name='template', deepnano=True, debug=False,
                     file='canonical', num_cpu=5, alphabet='ATGC', kmer_len=4, signalalign_file=self.tsv,
-                    output_dir='/Users/andrewbailey/nanopore-RNN/test_files/create_training_data_test_files', forward=True, log_file=self.log_file,
+                    output_dir=self.TEST_DIR, forward=True, log_file=self.log_file,
                     output_name='file1', prob=True, fast5_file=self.fast5)
         self.assertRaises(AssertionError, create_training_data, args)
 
         # passes
         args = dict(cutoff=0.4, nanonet=False, verbose=True, strand_name='template', deepnano=True, debug=False,
                     file='canonical', num_cpu=5, alphabet='ATGC', kmer_len=2, signalalign_file=self.tsv,
-                    output_dir='/Users/andrewbailey/nanopore-RNN/test_files/create_training_data_test_files', forward=True, log_file=self.log_file,
+                    output_dir=self.TEST_DIR, forward=True, log_file=self.log_file,
                     output_name='deepnano1', prob=False, fast5_file=self.fast5)
         output_file_path = create_training_data(args)
         self.assertTrue(os.path.exists(output_file_path))
@@ -171,7 +172,7 @@ class CreateTrainingDataTest(unittest.TestCase):
 
         args = dict(cutoff=0.4, nanonet=True, verbose=True, strand_name='template', deepnano=False, debug=False,
                     file='canonical', num_cpu=5, alphabet='ATGC', kmer_len=2, signalalign_file=self.tsv,
-                    output_dir='/Users/andrewbailey/nanopore-RNN/test_files/create_training_data_test_files', forward=True, log_file=self.log_file,
+                    output_dir=self.TEST_DIR, forward=True, log_file=self.log_file,
                     output_name='prob1', prob=True, fast5_file=self.fast5)
         output_file_path = create_training_data(args)
         self.assertTrue(os.path.exists(output_file_path))
@@ -179,7 +180,7 @@ class CreateTrainingDataTest(unittest.TestCase):
 
         args = dict(cutoff=0.4, nanonet=True, verbose=True, strand_name='template', deepnano=False, debug=False,
                     file='canonical', num_cpu=5, alphabet='ATGC', kmer_len=5, signalalign_file=self.tsv,
-                    output_dir='/Users/andrewbailey/nanopore-RNN/test_files/create_training_data_test_files', forward=True, log_file=self.log_file,
+                    output_dir=self.TEST_DIR, forward=True, log_file=self.log_file,
                     output_name='nanonet1', prob=False, fast5_file=self.fast5)
         output_file_path = create_training_data(args)
         self.assertTrue(os.path.exists(output_file_path))
@@ -193,7 +194,7 @@ class CreateTrainingDataTest(unittest.TestCase):
         #     "file_prefix"  "canonical",
         #     "num_cpu"  5,
         #     "kmer_len"  5,
-        #     "output_dir"  "/Users/andrewbailey/nanopore-RNN/test_files/create_training_data_test_files",
+        #     "output_dir"  "self.TEST_DIR",
         #     "strand_name"  "template",
         #     "prob"  False,
         #     "deepnano"  False,
