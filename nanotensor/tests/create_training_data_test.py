@@ -14,7 +14,7 @@ import os
 import types
 import unittest
 
-from nanotensor.create_training_data import CommandLine, get_arguments, create_training_data_args, create_training_data
+from nanotensor.create_training_data import CommandLine, get_arguments, create_training_data_args, create_training_data, main
 from nanotensor.utils import create_log_file
 
 
@@ -186,24 +186,9 @@ class CreateTrainingDataTest(unittest.TestCase):
         self.assertTrue(os.path.exists(output_file_path))
         os.remove(output_file_path)
 
-        # def test_main(self):
-        #     """Test main function of create_training_data"""
-        # args = {
-        #     "nanonet"  True,
-        #     "alphabet"  "ATGC",
-        #     "file_prefix"  "canonical",
-        #     "num_cpu"  5,
-        #     "kmer_len"  5,
-        #     "output_dir"  "self.TEST_DIR",
-        #     "strand_name"  "template",
-        #     "prob"  False,
-        #     "deepnano"  False,
-        #     "log_file"  "/Users/andrewbailey/data/log-file.1",
-        #     "verbose"  True,
-        #     "cutoff"  0.4,
-        #     "debug"  False
-        # }
-
+    # def test_main(self):
+    #     """Test main function of create_training_data"""
+    #     main()
 
 if __name__ == '__main__':
     unittest.main()
