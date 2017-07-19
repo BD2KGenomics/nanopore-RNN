@@ -85,6 +85,5 @@ class UtilsTest(unittest.TestCase):
         self.assertTrue(os.path.exists(log_path))
         os.remove(log_path)
 
-
 if __name__ == '__main__':
     unittest.main()

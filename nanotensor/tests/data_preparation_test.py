@@ -38,7 +38,6 @@ def load_pickle(path):
 
 
 
-
 class DataPreparationTest(unittest.TestCase):
     """Test the functions in data_preparation.py"""
 
@@ -280,6 +279,7 @@ class DataPreparationTest(unittest.TestCase):
             first_n = key.find("N")
             if first_n != -1:
                 self.assertTrue(key == key[:first_n] + ("N" * (length - first_n)))
+
             self.assertTrue(value <= 20)
         # make sure none start with "N" except for "NN"
         for key, value in test_dict_flip.items():

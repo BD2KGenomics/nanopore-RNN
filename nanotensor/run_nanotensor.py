@@ -174,7 +174,6 @@ class TrainModel(object):
         """
         config = tf.ConfigProto(log_device_placement=log_device_placement, \
                                 intra_op_parallelism_threads=intra_op_parallelism_threads)
-
         # shows gpu memory usage
         config.gpu_options.allow_growth = True
 
