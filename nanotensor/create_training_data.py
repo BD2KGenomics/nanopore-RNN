@@ -222,13 +222,14 @@ def main(command_line=None):
         args = get_arguments(command_line)
         args = command_line.check_args(args)
         log_dir_path = create_time_directory(args.output_dir)
-        args = save_config_file(args, log_dir_path)
+        save_config_file(args, log_dir_path)
         args.output_dir = log_dir_path
 
         log_file = args.log_file
         print("Using log file {}".format(log_file), file=sys.stderr)
         # define number of workers and create queues
-        arg_generator = create_training_data_args(log_file, args.prefix, args)
+        print(type(args.prefix))
+        arg_generator = create_training_data_args(log_file, args.file_prefix, args)
         if args.debug:
             for arg in arg_generator:
                 create_training_data(arg)

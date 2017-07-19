@@ -147,8 +147,8 @@ def merge_two_dicts(dict1, dict2):
     """Given two dicts, merge them into a new dict as a shallow copy.
     source: https://stackoverflow.com/questions/38987/
     how-to-merge-two-python-dictionaries-in-a-single-expression"""
-    assert type(dict1) is dict, "Both arguments must be dictionaries: type(arg1) = {}".format(type(dict1))
-    assert type(dict2) is dict, "Both arguments must be dictionaries: type(arg2) = {}".format(type(dict2))
+    assert type(dict1) is dict or type(dict1) is DotDict, "Both arguments must be dictionaries: type(arg1) = {}".format(type(dict1))
+    assert type(dict2) is dict or type(dict2) is DotDict, "Both arguments must be dictionaries: type(arg2) = {}".format(type(dict2))
     final = dict1.copy()
     final.update(dict2)
     return final
@@ -159,6 +159,7 @@ class DotDict(dict):
     __getattr__ = dict.get
     __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
+
 
 
 def upload_file_to_s3(bucket_path, file_path, key):
@@ -269,8 +270,8 @@ def create_time_directory(output_dir):
 
 def save_config_file(config_data, log_folder_path, name="create_training_data.config.json"):
     """Save configuration dictionary as json specified log folder"""
-    assert os.path.exists(log_folder_path)
-    assert type(config_data) is dict or type(config_data) is list
+    assert os.path.exists(log_folder_path), "Log folder path does not exist: {}".format(log_folder_path)
+    assert type(config_data) is dict or type(config_data) is list or type(config_data) is DotDict
     config_path = os.path.join(log_folder_path, name)
     # save config file for training data
     save_json(config_data, config_path)
