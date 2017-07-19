@@ -283,7 +283,7 @@ class TrainingData(object):
         try:
             # make sure if one kmer has two probabilities we assign the highest probability
             vector[kmer_dict[kmer]] = 1
-            vector = sum_to_one(vector)
+            vector = sum_to_one(vector, prob=False)
         except KeyError as error:
             raise DataPrepBug("Kmer: {} not in reference kmer dictionary, check alphabet or length".format(error))
         return vector
@@ -384,7 +384,7 @@ class TrainingData(object):
         except KeyError as error:
             raise DataPrepBug("Kmer: {} not in reference kmer dictionary, check alphabet".format(error))
         # check if sums to one
-        vector = sum_to_one(vector)
+        vector = sum_to_one(vector, prob=False)
         return vector
 
     def create_features(self):
@@ -423,7 +423,7 @@ class TrainingData(object):
         output_file = os.path.join(output_dir, output_name)
         self.run_complete_analysis()
         np.save(output_file, self.training_file)
-        return output_file
+        return output_file+".npy"
 
     def interpolate(self):
         """Guess a distribution of data"""

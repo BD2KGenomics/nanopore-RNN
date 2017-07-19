@@ -1,10 +1,15 @@
 {
-    "nanonet": true, 
-    "alphabet": "ATGC", 
-    "file_prefix": "file", 
+    "nanonet": true,
+    "alphabet": "ATGC",
+    "file_prefix": "canonical",
+    "num_cpu": 5,
     "kmer_len": 5, 
-    "output_dir": "/Users/andrewbailey/nanopore-RNN", 
-    "log_file": "/Users/andrewbailey/data/log-file.1", 
-    "num_cpu": 1, 
-    "prob": false
+    "output_dir": "/Users/andrewbailey/nanopore-RNN/test_files/create_training_data_test_files",
+    "strand_name": "template", 
+    "prob": false,
+    "deepnano": false,
+    "log_file": "/Users/andrewbailey/data/log-file.1",
+    "verbose": true,
+    "cutoff": 0.4,
+    "debug": false
 }

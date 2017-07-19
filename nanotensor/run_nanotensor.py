@@ -407,19 +407,19 @@ def main():
             train = TrainModel(args)
             train.run_training(log_device_placement=False)
             print("\n#  nanotensor - finished training \n", file=sys.stderr)
-            print("\n#  nanotensor - finished training \n", file=sys.stdout)
+            print("\n#  nanotensor - finished training \n", file=sys.stderr)
 
         elif args.inference:
             infer = TrainModel(args)
             infer.call()
             print("\n#  nanotensor - finished inference \n", file=sys.stderr)
-            print("\n#  nanotensor - finished inference \n", file=sys.stdout)
+            print("\n#  nanotensor - finished inference \n", file=sys.stderr)
 
         elif args.testing_accuracy:
             test = TrainModel(args)
             test.testing_accuracy(config, save=args.save_s3)
             print("\n#  nanotensor - finished testing accuracy \n", file=sys.stderr)
-            print("\n#  nanotensor - finished testing accuracy \n", file=sys.stdout)
+            print("\n#  nanotensor - finished testing accuracy \n", file=sys.stderr)
 
         else:
             raise Usage("\nTrain, inference or testing accuracy must be set to true in the configuration file\n")
