@@ -26,7 +26,7 @@ class CreateTrainingDataTest(unittest.TestCase):
     def setUpClass(cls):
         super(CreateTrainingDataTest, cls).setUpClass()
         cls.HOME = '/'.join(os.path.abspath(__file__).split("/")[:-3])
-        cls.TEST_DIR = os.path.join(cls.HOME, "test_files/create_training_data_test_files")
+        cls.TEST_DIR = os.path.join(cls.HOME, "test_files/")
         cls.old_log_file = os.path.join(cls.HOME, "test_files/test_log_files/canonical.log.txt")
         new_log_path = os.path.join(cls.HOME, "test_files/test_log_files/real.canonical.log.txt")
         cls.log_file = create_log_file(cls.HOME, cls.old_log_file, new_log_path)
@@ -43,7 +43,7 @@ class CreateTrainingDataTest(unittest.TestCase):
     def test_check_args(self):
         """Test_check_args in CommandLine class"""
         commandline = CommandLine(in_opts=["--config", "path"])
-        bad_args = dict(output_dir="/nanopore-RNN/test_files/create_training_data_test_files")
+        bad_args = dict(output_dir="/nanopore-RNN/test_files/")
         self.assertRaises(AssertionError, commandline.check_args, bad_args)
         bad_args = dict(output_dir=self.HOME, log_file="test")
         self.assertRaises(AssertionError, commandline.check_args, bad_args)
