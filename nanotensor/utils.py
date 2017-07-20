@@ -26,6 +26,7 @@ from boto.s3.connection import S3Connection
 from nanotensor.error import PathError
 import numpy as np
 from multiprocessing import Process, current_process, Manager
+import tarfile
 
 
 # TODO create debug function and verbose options
@@ -161,8 +162,7 @@ class DotDict(dict):
     __delattr__ = dict.__delitem__
 
 
-
-def upload_file_to_s3(bucket_path, file_path, key):
+def upload_file_to_s3(bucket_path, file_path, name):
     """Upload a file or directory to an aws bucket"""
     # s3_conn = S3Connection(host='s3-us-west-1.amazonaws.com')
 
@@ -179,7 +179,7 @@ def upload_file_to_s3(bucket_path, file_path, key):
         sys.stdout.flush()
 
     k = Key(bucket)
-    k.key = key
+    k.key = name
     k.set_contents_from_filename(file_path,
                                  cb=percent_cb, num_cb=10)
     sys.stdout.write('\n')
@@ -293,17 +293,41 @@ def create_log_file(home, old_log, new_path):
     return new_path
 
 
+def tarball_files(tar_name, file_paths, output_dir='.', prefix=''):
+    """
+    Creates a tarball from a group of files
+    :param str tar_name: Name of tarball
+    :param list[str] file_paths: Absolute file paths to include in the tarball
+    :param str output_dir: Output destination for tarball
+    :param str prefix: Optional prefix for files in tarball
+    """
+    if tar_name.endswith(".tar.gz"):
+        tar_name = tar_name
+    else:
+        tar_name = tar_name + ".tar.gz"
+    tar_path = os.path.join(output_dir, tar_name)
+    with tarfile.open(tar_path, 'w:gz') as f_out:
+        for file_path in file_paths:
+            if not file_path.startswith('/'):
+                raise ValueError('Path provided is relative not absolute.')
+            file_name = prefix + os.path.basename(file_path)
+            f_out.add(file_path, arcname=file_name)
+    return tar_path
+
 def main():
     """Test the methods"""
     start = timer()
-    file_path = "/Users/andrewbailey/nanopore-RNN/logs/06Jun-29-11h-11m/checkpoint"
-    file_list = ["/Users/andrewbailey/nanopore-RNN/kmers.txt",
-                 "/Users/andrewbailey/nanopore-RNN/logs/06Jun-29-11h-11m/checkpoint",
-                 "/Users/andrewbailey/nanopore-RNN/logs/06Jun-29-11h-11m/my_test_model-3215.data-00000-of-00001"]
-    bucket = "neuralnet-accuracy"
-    dir_name = "06Jun-29-11h-30m-11.0%"
-    # upload_file_to_s3(bucket, file_path, "12.0%/checkpoint")
-    upload_model(bucket, file_list, dir_name)
+    # file_path = "/Users/andrewbailey/nanopore-RNN/test_files/create_training_files/07Jul-19-16h-48m"
+    # files = list_dir(file_path)
+    # tarball_files("test_tar", files)
+    # file_list = ["/Users/andrewbailey/nanopore-RNN/kmers.txt",
+    #              "/Users/andrewbailey/nanopore-RNN/logs/06Jun-29-11h-11m/checkpoint",
+    #              "/Users/andrewbailey/nanopore-RNN/logs/06Jun-29-11h-11m/my_test_model-3215.data-00000-of-00001"]
+    # bucket = "neuralnet-accuracy"
+    # dir_name = "06Jun-29-11h-30m-11.0%"
+    # upload_file_to_s3("nanotensor-data", "/Users/andrewbailey/nanopore-RNN/test_files/create_training_files/07Jul-19-16h-48m/create_training_data.config.json", "create_training_data.config.json")
+    # upload_model(bucket, file_list, dir_name)
+
     stop = timer()
     print("Running Time = {} seconds".format(stop - start), file=sys.stderr)
 

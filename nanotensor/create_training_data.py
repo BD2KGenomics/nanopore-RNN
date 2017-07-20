@@ -18,7 +18,7 @@ from timeit import default_timer as timer
 from nanotensor.data_preparation import TrainingData
 from nanotensor.error import Usage
 from nanotensor.utils import merge_two_dicts, load_json, DotDict, multiprocess_data, create_time_directory, \
-    save_config_file
+    save_config_file, tarball_files, list_dir, upload_file_to_s3
 
 
 class CommandLine(object):
@@ -56,7 +56,7 @@ class CommandLine(object):
                                  help="Output error messages and use process instead of multiprocessing",
                                  action='store_true')
 
-        self.parser.add_argument('-t', '--num-cpu', help='number of CPUs available for compute',
+        self.parser.add_argument('--num-cpu', help='number of CPUs available for compute',
                                  default=1)
 
         self.parser.add_argument('--cutoff',
@@ -66,6 +66,17 @@ class CommandLine(object):
         self.parser.add_argument('-p', '--prob',
                                  help='Boolean option to use probability labels. Only used for nanonet-features',
                                  action='store_true')
+
+        self.parser.add_argument('-t', '--tar',
+                                 help='Create tarball file of data',
+                                 action='store_true')
+
+        self.parser.add_argument('--save2s3',
+                                 help='Save training data to S3 bucket (forces creation of tar file)', default='store'
+                                                                                                               '-true')
+
+        self.parser.add_argument('--bucket',
+                                 help='Name of S3 bucket where training data gets saved', default='nanotensor-data')
 
         config_group = self.parser.add_argument_group('Recommended Usage: Config File')
 
@@ -141,18 +152,23 @@ class CommandLine(object):
         """Check arguments, save config file in new folder if correct"""
         # make sure output dir exists
         args = DotDict(args)
-
         assert os.path.isdir(args.output_dir), "Output directory does not exist: {}".format(args.output_dir)
         assert os.path.isfile(args.log_file), "Log file does not exist: {}".format(args.log_file)
         assert type(args.prob) is bool, "Prob must be boolean: {}".format(args.prob)
         assert type(args.kmer_len) is int, "kmer-len must be integer: {}".format(args.kmer_len)
-        assert type(args.alphabet) is unicode or str, "alphabet must be string: {}".format(args.alphabet)
+        assert type(args.alphabet) is unicode or type(args.alphabet) is str, "alphabet must be string: {}".format(
+            args.alphabet)
         assert type(args.nanonet) is bool, "nanonet-features option must be boolean: {}".format(args.nanonet)
         assert type(args.num_cpu) is int, "num-cpu must be integer: {}".format(args.num_cpu)
         assert type(args.deepnano) is bool, "deepnano must be integer: {}".format(args.deepnano)
-        assert type(args.file) is unicode or str, "file-prefix must be string: {}".format(args.file)
+        assert type(args.file_prefix) is unicode or type(
+            args.file_prefix) is str, "file-prefix must be string: {}".format(args.file_prefix)
         assert type(args.verbose) is bool, "verbose option must be a boolean: {}".format(args.verbose)
         assert type(args.debug) is bool, "debug option must be a boolean: {}".format(args.debug)
+        assert type(args.save2s3) is bool, "save2s3 option must be a bool: {}".format(args.save2s3)
+        assert type(args.tar) is bool, "tar option must be a boolean: {}".format(args.tar)
+        assert type(args.bucket) is unicode or type(args.bucket) is str, "bucket option must be a string: {}".format(
+            args.bucket)
 
         return args
 
@@ -214,6 +230,16 @@ def get_arguments(command_line):
     return args
 
 
+def get_tar_name(name, time_dir, nanonet_bool, deepnano_bool):
+    """Get name for tar file from directory and nanonet or deepnano"""
+    time = time_dir.split('/')[-1]
+    if nanonet_bool:
+        name = name + '.' + time + ".nanonet"
+    elif deepnano_bool:
+        name = name + '.' + time + "deepnano"
+    return name
+
+
 def main(command_line=None):
     """Main docstring"""
     start = timer()
@@ -237,7 +263,6 @@ def main(command_line=None):
         log_file = args.log_file
         print("Using log file {}".format(log_file), file=sys.stderr)
         # define number of workers and create queues
-        print(type(args.prefix))
         arg_generator = create_training_data_args(log_file, args.file_prefix, args)
         if args.debug:
             for arg in arg_generator:
@@ -246,6 +271,17 @@ def main(command_line=None):
             num_workers = args.num_cpu
             target = create_training_data
             multiprocess_data(num_workers, target, arg_generator)
+
+        # if tar or save files create tar archive
+        if args.save2s3 or args.tar:
+            tar_name = get_tar_name("training_data", args.output_dir, args.nanonet, args.deepnano)
+            file_paths = list_dir(args.output_dir)
+            print("Creating tarball file\n", file=sys.stderr)
+            tar_path = tarball_files(tar_name, file_paths, output_dir=args.output_dir)
+            print("Finished tarball file : {}\n".format(tar_path), file=sys.stderr)
+            if args.save2s3:
+                print("Uploading {} to s3 bucket {}".format(tar_path, args.bucket), file=sys.stderr)
+                upload_file_to_s3(args.bucket, tar_path, tar_name)
 
         print("\n#  nanotensor - finished creating data set\n", file=sys.stderr)
         print("\n#  nanotensor - finished creating data set\n", file=sys.stderr)

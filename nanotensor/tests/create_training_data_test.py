@@ -30,9 +30,9 @@ class CreateTrainingDataTest(unittest.TestCase):
         cls.old_log_file = os.path.join(cls.HOME, "test_files/test_log_files/canonical.log.txt")
         new_log_path = os.path.join(cls.HOME, "test_files/test_log_files/real.canonical.log.txt")
         cls.log_file = create_log_file(cls.HOME, cls.old_log_file, new_log_path)
-        cls.args = {'nanonet': True, 'alphabet': "ATGC", 'file': "canonical", 'num_cpu': 5, 'kmer_len': 5,
-                    'output_dir': cls.HOME, 'strand_name': "template", 'prob': False, 'deepnano': False,
-                    'log_file': cls.log_file, 'verbose': False, 'cutoff': 0.4, 'debug': False}
+        cls.args = dict(nanonet=True, alphabet="ATGC", file="canonical", num_cpu=5, kmer_len=5, output_dir=cls.HOME,
+                        strand_name="template", prob=False, deepnano=False, log_file=cls.log_file, verbose=False,
+                        cutoff=0.4, debug=False, save2s3=True, tar=True)
         with open(cls.log_file, 'r') as log:
             line = log.readline()
             line = line.rstrip().split('\t')
