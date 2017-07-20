@@ -18,7 +18,7 @@ import sys
 import os
 from timeit import default_timer as timer
 from datetime import datetime
-from nanotensor.utils import project_folder, list_dir
+from nanotensor.utils import project_folder, list_dir, load_json, save_json
 from nanotensor.data import DataQueue
 import tensorflow as tf
 from tensorflow.contrib import rnn
@@ -27,15 +27,18 @@ from tensorflow.contrib import rnn
 class BuildGraph():
     """Build a tensorflow network graph."""
     def __init__(self, n_input, n_classes, learning_rate, n_steps=1,\
-        layer_sizes=tuple([100]), forget_bias=5.0, batch_size=100, y=None, x=None):
+                forget_bias=5.0, y=None, x=None, network=None, binary_cost=True):
         # self.x = x
-        self.y = y
+        self.y = tf.placeholder_with_default(y, shape=[None, n_steps, n_classes])
         self.x = tf.placeholder_with_default(x, shape=[None, n_steps, n_input])
+
         self.batch_size = tf.shape(self.x)[0]
+
+        # self.batch_size = tf.shape(self.y)[0]
+
         # self.batch_size = batch_size
         self.y_flat = tf.reshape(self.y, [-1, n_classes])
-        self.n_layers = len(layer_sizes)
-        self.layer_sizes = layer_sizes
+
         self.n_input = n_input
         self.n_classes = n_classes
         self.learning_rate = learning_rate
@@ -44,29 +47,33 @@ class BuildGraph():
         self.output_states = []
         self.layers = []
         # list of operations to reset states of each blstm layer
-        self.zero_states = []
-        self.reset_fws = []
-        self.reset_bws = []
+        # self.zero_states = []
+        # self.reset_fws = []
+        # self.reset_bws = []
+        # Summay Information
         self.training_summaries = []
         self.testing_summaries = []
+        assert network != None, "Must specify network structure. [{'type': 'blstm', 'name': 'blstm_layer1', 'size': 128}, ...]"
+        self.network = network
+        outputs, final_layer_size = self.create_model(self.network)
+        self.rnn_outputs_flat = tf.reshape(outputs, [-1, final_layer_size])
 
-        # self.seq_len = tf.placeholder(tf.int32, [None], name="batch_size")
-        outputs = self.create_deep_blstm()
-        # outputs = self.blstm(self.x, layer_name="layer1", n_hidden=layer_sizes[0], forget_bias=self.forget_bias)
-
-        self.rnn_outputs_flat = tf.reshape(outputs, [-1, 2*layer_sizes[-1]])
         self.global_step = tf.Variable(0, name='global_step', trainable=False)
-
         # self.zero_state = self.combine_arguments(self.zero_states, "zero_states")
         # self.fw_reset = self.combine_arguments(self.reset_fws, "reset_fws")
         # self.bw_reset = self.combine_arguments(self.reset_bws, "reset_bws")
+
 
         # Linear activation, using rnn inner loop last output
         self.pred = self.create_prediction_layer()
         tf.add_to_collection("predicton", self.pred)
         self.evaluate_pred = tf.argmax(self.pred, 1, name="evaluate_pred")
         # Define loss and optimizer
-        self.cost = self.cost_function_prob()
+        if binary_cost:
+            self.cost = self.cost_function_binary()
+        else:
+            self.cost = self.cost_function_prob()
+
         self.optimizer = self.optimizer_function()
         # Evaluate model
         tf.add_to_collection("optimizer", self.optimizer)
@@ -78,14 +85,37 @@ class BuildGraph():
         self.test_summary = tf.summary.merge(self.testing_summaries)
         self.train_summary = tf.summary.merge(self.training_summaries)
 
-        # Initializing the variables
-        # self.init = tf.global_variables_initializer()
+
+
+    def create_model(self, network_model=None):
+        """Create a model from a list of dictironaries with "name", "type", and "size" keys"""
+        assert network_model != None, "Must specify network structure. [{'type': 'blstm', 'name': 'blstm_layer1', 'size': 128}, ...]"
+        ref_types = {"tanh": tf.tanh, "relu":tf.nn.relu, "sigmoid":tf.sigmoid,\
+                    "softplus":tf.nn.softplus}
+        input_vector = self.x
+        prevlayer_size = 0
+        for layer in network_model:
+            if layer["type"] == "blstm":
+                input_vector = self.blstm(input_vector=input_vector, n_hidden=layer["size"], \
+                                layer_name=layer["name"], forget_bias=layer["bias"])
+                prevlayer_size = layer["size"]*2
+            else:
+                # reshape matrix to fit into a single activation function
+                input_vector = tf.reshape(input_vector, [-1, prevlayer_size*self.n_steps])
+                input_vector = self.fulconn_layer(input_data=input_vector, output_dim=layer["size"],\
+                                seq_len=self.n_steps, activation_func=ref_types[layer["type"]])
+                # reshape matrix to correct shape from output of
+                input_vector = tf.reshape(input_vector, [-1, self.n_steps, layer["size"]])
+                prevlayer_size = layer["size"]
+
+        return input_vector, prevlayer_size
+
 
     def create_prediction_layer(self):
         """Create a prediction layer from output of blstm layers"""
         with tf.name_scope("prediction"):
             pred = self.fulconn_layer(self.rnn_outputs_flat, self.n_classes)
-            # print("pred shape", pred.shape)
+            print("pred shape = ", pred.get_shape())
         return pred
 
 
@@ -98,8 +128,10 @@ class BuildGraph():
     def cost_function_prob(self):
         """Create a cost function for optimizer"""
         with tf.name_scope("cost"):
-            loss = tf.reshape(tf.nn.softmax_cross_entropy_with_logits(logits=self.pred,\
-                labels=self.y_flat), [self.batch_size, self.n_steps])
+            loss1 = tf.nn.softmax_cross_entropy_with_logits(logits=self.pred,\
+                labels=self.y_flat)
+            loss = tf.reshape(loss1, [self.batch_size, self.n_steps])
+
             cost = tf.reduce_mean(loss)
             self.variable_summaries(cost)
         return cost
@@ -107,8 +139,11 @@ class BuildGraph():
     def cost_function_binary(self):
         """Create a cost function for optimizer"""
         with tf.name_scope("cost"):
-            loss = tf.reshape(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.pred,\
-                labels=self.y_flat), [self.batch_size, self.n_steps])
+            y_label_indices = tf.argmax(self.y_flat, 1, name="y_label_indices")
+            loss1 = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.pred,\
+                labels=y_label_indices)
+            loss = tf.reshape(loss1, [self.batch_size, self.n_steps])
+
             cost = tf.reduce_mean(loss)
             self.variable_summaries(cost)
         return cost
@@ -136,20 +171,13 @@ class BuildGraph():
             self.variable_summaries(accuracy)
         return accuracy
 
-    def create_deep_blstm(self):
-        """Create a multi-layer blstm neural network"""
-        # make sure we are making as many layers as we have layer sizes
-        input1 = self.x
-        for layer_size in range(self.n_layers):
-            input1 = self.blstm(input1, layer_name="blstm_layer"+str(layer_size),\
-            n_hidden=self.layer_sizes[layer_size], forget_bias=self.forget_bias)
-        return input1
-
-    def combine_arguments(self, tf_tensor_list, name):
+    @staticmethod
+    def combine_arguments(tf_tensor_list, name):
         """Create a single operation that can be passed to the run function"""
         return tf.tuple(tf_tensor_list, name=name)
 
-    def get_state_update_op(self, state_variables, new_states):
+    @staticmethod
+    def get_state_update_op(state_variables, new_states):
         """Update the state with new values"""
         # Add an operation to update the train states with the last state tensors
         update_ops = []
@@ -161,7 +189,8 @@ class BuildGraph():
         # The tuple's actual value should not be used.
         return update_ops
 
-    def blstm(self, input_vector, layer_name="blstm_layer1", n_hidden=128, forget_bias=5.0):
+    @staticmethod
+    def blstm(input_vector, layer_name="blstm_layer1", n_hidden=128, forget_bias=5.0):
         """Create a bidirectional LSTM using code from the example at
          https://github.com/aymericdamien/TensorFlow-Examples/blob/master/examples/3_NeuralNetworks/bidirectional_rnn.py"""
         with tf.variable_scope(layer_name):
@@ -219,14 +248,15 @@ class BuildGraph():
         # tf.summary.scalar('min', tf.reduce_min(var))
 
     @staticmethod
-    def fulconn_layer(input_data, output_dim, activation_func=None):
+    def fulconn_layer(input_data, output_dim, seq_len=1, activation_func=None):
         # pylint: disable=C0301
         """Create a fully connected layer.
         source: https://stackoverflow.com/questions/39808336/tensorflow-bidirectional-dynamic-rnn-none-values-error/40305673
         """
+        # get input dimentions
         input_dim = int(input_data.get_shape()[1])
-        weight = tf.Variable(tf.random_normal([input_dim, output_dim]))
-        bais = tf.Variable(tf.random_normal([output_dim]))
+        weight = tf.Variable(tf.random_normal([input_dim, output_dim*seq_len]))
+        bais = tf.Variable(tf.random_normal([output_dim*seq_len]))
         if activation_func:
             output = activation_func(tf.matmul(input_data, weight) + bais)
         else:
@@ -236,6 +266,13 @@ class BuildGraph():
 def main():
     """Control the flow of the program"""
     start = timer()
+
+    #
+    # input1 = self.x
+    # for layer_size in range(self.n_layers):
+    #     input1 = self.blstm(input1, layer_name="blstm_layer"+str(layer_size),\
+    #     n_hidden=self.layer_sizes[layer_size], forget_bias=self.forget_bias)
+    # return input1
 
     # TODO make hyperparameters a json file
     # Parameters
@@ -299,7 +336,7 @@ def main():
 
         print("Testing Accuracy: {}".format(sess.run(accuracy)))
         writer.close()
-
+    #
 
     stop = timer()
     print("Running Time = {} seconds".format(stop-start), file=sys.stderr)

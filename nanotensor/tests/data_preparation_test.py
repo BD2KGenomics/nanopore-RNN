@@ -21,6 +21,7 @@ import numpy as np
 from nanotensor.data_preparation import TrainingData
 from nanotensor.error import DataPrepBug
 
+
 def load_pickle(path):
     """load a python object from pickle"""
     path = os.path.abspath(path)
@@ -28,41 +29,44 @@ def load_pickle(path):
         loading = pickle.load(file1)
     return loading
 
+
 # def save_pickle(obj, path):
 #     """Save a python object as file"""
 #     path = os.path.abspath(path)
 #     loading = pickle.dump(obj, open(path, "wb"))
 #     return loading
 
-# class MyUnitTest(unittest.TestCase):
-#     @classmethod
-#     def setUpClass(cls):
 
 
-
-class Test_data_preparation(unittest.TestCase):
+class DataPreparationTest(unittest.TestCase):
     """Test the functions in data_preparation.py"""
 
     @classmethod
     def setUpClass(cls):
-        super(Test_data_preparation, cls).setUpClass()
+        super(DataPreparationTest, cls).setUpClass()
         cls.HOME = '/'.join(os.path.abspath(__file__).split("/")[:-3])
-        canonical_fast5 = os.path.join(cls.HOME,\
-        "test_files/minion-reads/canonical/miten_PC_20160820_FNFAD20259_MN17223_mux_scan_AMS_158_R9_WGA_Ecoli_08_20_16_83098_ch467_read35_strand.fast5")
+        canonical_fast5 = os.path.join(cls.HOME,
+                                       "test_files/minion-reads/canonical"
+                                       "/miten_PC_20160820_FNFAD20259_MN17223_mux_scan_AMS_158_R9_WGA_Ecoli_08_20_16_83098_ch467_read35_strand.fast5")
         # canonical_fast5 = os.path.join(cls.HOME,\
         # "test_files/minion-reads/canonical/miten_PC_20160820_FNFAD20259_MN17223_sequencing_run_AMS_158_R9_WGA_Ecoli_08_20_16_43623_ch100_read104_strand.fast5")
-        canonical_tsv = os.path.join(cls.HOME, \
-        "test_files/signalalignment_files/test_canonical/3c6e13d8-2ecb-475a-9499-d0d5c48dd1c8_Basecall_2D_2d.sm.forward.short.tsv")
+        canonical_tsv = os.path.join(cls.HOME,
+                                     'test_files/signalalignment_files/test_canonical/3c6e13d8-2ecb-475a-9499'
+                                     '-d0d5c48dd1c8_Basecall_2D_2d.sm.forward.short.tsv')
         # canonical_tsv = os.path.join(cls.HOME, \
         # "test_files/signalalignment_files/canonical/18a21abc-7827-4ed7-8919-c27c9bd06677_Basecall_2D_template.sm.forward.tsv")
 
-        cls.DEEPNANO = TrainingData(canonical_fast5, canonical_tsv, strand_name="template", prob=False, kmer_len=2, alphabet="ATGC", nanonet=False, deepnano=True)
+        cls.DEEPNANO = TrainingData(canonical_fast5, canonical_tsv, strand_name="template", prob=False, kmer_len=2,
+                                    alphabet="ATGC", nanonet=False, deepnano=True)
 
-        cls.CATEGORICAL = TrainingData(canonical_fast5, canonical_tsv, strand_name="template", prob=False, kmer_len=5, alphabet="ATGCE", nanonet=True, deepnano=False)
+        cls.CATEGORICAL = TrainingData(canonical_fast5, canonical_tsv, strand_name="template", prob=False, kmer_len=5,
+                                       alphabet="ATGCE", nanonet=True, deepnano=False)
 
-        cls.T = TrainingData(canonical_fast5, canonical_tsv, strand_name="template", prob=True, kmer_len=5, alphabet="ATGCE", nanonet=True, deepnano=False)
+        cls.T = TrainingData(canonical_fast5, canonical_tsv, strand_name="template", prob=True, kmer_len=5,
+                             alphabet="ATGCE", nanonet=True, deepnano=False)
         #
-        cls.C = TrainingData(canonical_fast5, canonical_tsv, strand_name="complement", prob=True, kmer_len=5, alphabet="ATGCE", nanonet=True, deepnano=False)
+        cls.C = TrainingData(canonical_fast5, canonical_tsv, strand_name="complement", prob=True, kmer_len=5,
+                             alphabet="ATGCE", nanonet=True, deepnano=False)
 
         cls.eq_deepnano = cls.DEEPNANO.run_complete_analysis()
         cls.eq_categorical = cls.CATEGORICAL.run_complete_analysis()
@@ -79,15 +83,15 @@ class Test_data_preparation(unittest.TestCase):
     def test_scrape_signalalign(self):
         '''test_scrape_signalalign'''
         kmers_t = self.T.scrape_signalalign()
-        dict_real = {6998:2, 6999:3, 6987:1}
-        dict_test = {6998:len(kmers_t[6998]), 6999:len(kmers_t[6999]), 6987:len(kmers_t[6987])}
+        dict_real = {6998: 2, 6999: 3, 6987: 1}
+        dict_test = {6998: len(kmers_t[6998]), 6999: len(kmers_t[6999]), 6987: len(kmers_t[6987])}
         for (k, v), (k2, v2) in zip(dict_real.items(), dict_test.items()):
             self.assertEqual((k, v), (k2, v2))
         pos6998 = kmers_t[6998]
         self.assertListEqual(pos6998, [('CAACA', 0.468349, 3777116), ('CAACC', 0.013211, 3777119)])
         kmers_c = self.C.scrape_signalalign()
-        dict_real = {54:2, 52:2, 60:1}
-        dict_test = {54:len(kmers_c[54]), 52:len(kmers_c[52]), 60:len(kmers_c[60])}
+        dict_real = {54: 2, 52: 2, 60: 1}
+        dict_test = {54: len(kmers_c[54]), 52: len(kmers_c[52]), 60: len(kmers_c[60])}
         for (k, v), (k2, v2) in zip(dict_real.items(), dict_test.items()):
             self.assertEqual((k, v), (k2, v2))
         pos54 = kmers_c[54]
@@ -112,9 +116,12 @@ class Test_data_preparation(unittest.TestCase):
         self.assertNotEqual(features_deepnano, features_categorical)
         self.assertTrue((features_t == features_categorical).all())
         deepnano_test = [0.23282488, 0.05420742, 1.16217472, 0.0025]
-        t_test = [0.0, 0.0, 0.0, 0.0, 0.40229428, 0.18797024, 0.10281436, 0.0, 0.49232142, -0.25025325, -0.11723997, 0.0971415]
-        c_test = [0.0, 0.0, 0.0, 0.0, 2.26279692, 1.12409658, 2.77720919, 0.0, 2.130275, 1.17222898,  1.01273878, -0.13769097]
-        categorical_test = [0.0, 0.0, 0.0, 0.0, 0.40229428, 0.18797024, 0.10281436, 0.0, 0.49232142, -0.25025325, -0.11723997, 0.0971415]
+        t_test = [0.0, 0.0, 0.0, 0.0, 0.40229428, 0.18797024, 0.10281436, 0.0, 0.49232142, -0.25025325, -0.11723997,
+                  0.0971415]
+        c_test = [0.0, 0.0, 0.0, 0.0, 2.26279692, 1.12409658, 2.77720919, 0.0, 2.130275, 1.17222898, 1.01273878,
+                  -0.13769097]
+        categorical_test = [0.0, 0.0, 0.0, 0.0, 0.40229428, 0.18797024, 0.10281436, 0.0, 0.49232142, -0.25025325,
+                            -0.11723997, 0.0971415]
         for i in range(4):
             self.assertAlmostEqual(deepnano_test[i], features_deepnano[0][i])
         for i in range(12):
@@ -160,8 +167,9 @@ class Test_data_preparation(unittest.TestCase):
         self.assertRaises(AssertionError, self.C.create_deepnano_labels)
         self.assertRaises(AssertionError, self.CATEGORICAL.create_deepnano_labels)
         labels = self.DEEPNANO.create_deepnano_labels()
-        test_6999 = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        self.assertListEqual(labels[6999], test_6999)
+        test_6999 = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                     0.0]
+        self.assertListEqual(list(labels[6999]), test_6999)
 
     def test_scrape_eventalign(self):
         """test_scrape_eventalign"""
@@ -188,13 +196,13 @@ class Test_data_preparation(unittest.TestCase):
         # Template strand
         test_6999 = self.T.create_kmer_labels()[6999]
         labels = os.path.join(self.HOME, \
-         "test_files/data_prep_test_files/pos6999-template-label-prob.pkl")
+                              "test_files/data_prep_test_files/pos6999-template-label-prob.pkl")
         pos6999 = load_pickle(labels)
         self.assertEqual(sorted(pos6999), sorted(test_6999))
         # Complement strand
         test_55 = self.C.create_kmer_labels()[55]
         labels = os.path.join(self.HOME, \
-         "test_files/data_prep_test_files/pos55-complement-label-prob.pkl")
+                              "test_files/data_prep_test_files/pos55-complement-label-prob.pkl")
         pos55 = load_pickle(labels)
         self.assertEqual(sorted(pos55), sorted(test_55))
         # DEEPNANO doesnt use kmer_labels
@@ -202,7 +210,7 @@ class Test_data_preparation(unittest.TestCase):
         # # CATEGORICAL
         test_6998 = self.CATEGORICAL.create_kmer_labels()[6998]
         labels = os.path.join(self.HOME, \
-         "test_files/data_prep_test_files/pos6998-CATEGORICAL-label-prob.pkl")
+                              "test_files/data_prep_test_files/pos6998-CATEGORICAL-label-prob.pkl")
         pos6998 = load_pickle(labels)
         self.assertEqual(sorted(pos6998), sorted(test_6998))
         # make sure categorical and probability assignments are different
@@ -211,10 +219,10 @@ class Test_data_preparation(unittest.TestCase):
     def test_scrape_fast5_events(self):
         row10_real_temp = [83.52333150227787, 221.1755, 1.3181877787337306, 0.0015]
         row10_real_comp = [68.825253092462106, 256.58775000000003, 2.0204697774551619, 0.0052500000000000003]
-        row10_temp= list(self.T.scrape_fast5_events()[10])
-        row10_comp= list(self.C.scrape_fast5_events()[10])
-        row10_categorical= list(self.CATEGORICAL.scrape_fast5_events()[10])
-        row10_deepnano= list(self.DEEPNANO.scrape_fast5_events()[10])
+        row10_temp = list(self.T.scrape_fast5_events()[10])
+        row10_comp = list(self.C.scrape_fast5_events()[10])
+        row10_categorical = list(self.CATEGORICAL.scrape_fast5_events()[10])
+        row10_deepnano = list(self.DEEPNANO.scrape_fast5_events()[10])
         self.assertEqual(row10_temp, row10_real_temp)
         self.assertEqual(row10_comp, row10_real_comp)
         self.assertEqual(row10_categorical, row10_real_temp)
@@ -231,7 +239,7 @@ class Test_data_preparation(unittest.TestCase):
         null = self.CATEGORICAL.create_null_label()
         null_len = len(null)
         self.assertEqual(1, sum(null))
-        self.assertEqual(null[null_len-1], 1)
+        self.assertEqual(null[null_len - 1], 1)
         # probability vector
         null = self.T.create_null_label()
         self.assertAlmostEqual(1, sum(null))
@@ -270,19 +278,20 @@ class Test_data_preparation(unittest.TestCase):
         for key, value in test_dict.items():
             first_n = key.find("N")
             if first_n != -1:
-                self.assertTrue(key == key[:first_n]+("N"*(length-first_n)))
+                self.assertTrue(key == key[:first_n] + ("N" * (length - first_n)))
+
             self.assertTrue(value <= 20)
         # make sure none start with "N" except for "NN"
         for key, value in test_dict_flip.items():
             first_n = value.find("N")
             if first_n != -1:
-                self.assertTrue(value == value[:first_n]+("N"*(length-first_n)))
+                self.assertTrue(value == value[:first_n] + ("N" * (length - first_n)))
             self.assertTrue(key <= 20)
 
     def test_null_vector_deepnano(self):
         "test_null_vector_deepnano"
         # deepnano null label
-        kmer_dict = {"NN":0}
+        kmer_dict = {"NN": 0}
         null = self.DEEPNANO.null_vector_deepnano(kmer_dict)
         self.assertEqual(null[0], 1)
         self.assertEqual(1, sum(null))
@@ -298,7 +307,7 @@ class Test_data_preparation(unittest.TestCase):
     def test_create_categorical_vector(self):
         "test_create_categorical_vector"
         # catch length error
-        kmer_dict = {"NN":0}
+        kmer_dict = {"NN": 0}
         kmer_list = [["4MER", 1, 100], ["4MER", 1, 101], ["4MER", .1, 102]]
         self.assertRaises(AssertionError, self.CATEGORICAL.create_categorical_vector, kmer_list, kmer_dict)
         kmer_list = [["4MER", 1, 100], ["4MER1", 1, 101], ["4MER", .1, 102]]
@@ -306,7 +315,7 @@ class Test_data_preparation(unittest.TestCase):
         self.assertRaises(DataPrepBug, self.CATEGORICAL.create_categorical_vector, kmer_list, kmer_dict)
 
         # make sure it works
-        kmer_dict = {"NNNNN":0}
+        kmer_dict = {"NNNNN": 0}
         kmer_list = [["NNNNA", 1, 100], ["NNNNN", 1, 101], ["NNBNN", .1, 102]]
         vector = self.CATEGORICAL.create_categorical_vector(kmer_list, kmer_dict)
         self.assertEqual(vector[0], 1)
@@ -314,7 +323,7 @@ class Test_data_preparation(unittest.TestCase):
     def test_create_prob_vector(self):
         """test_create_prob_vector"""
         # test error handling
-        kmer_dict = {"4MER":0}
+        kmer_dict = {"4MER": 0}
         kmer_list = [["4MER", 1, 100], ["4MER", 1, 101], ["4MER", .1, 102]]
         self.assertRaises(AssertionError, self.T.create_prob_vector, kmer_list, kmer_dict)
         kmer_list = [["5MER1", 1, 100], ["5MER1", 1, 101], ["5MER1", .1, 102]]
@@ -322,7 +331,7 @@ class Test_data_preparation(unittest.TestCase):
         # make sure it works
         kmer_dict = {"NNNNN": 0, "NNNNA": 1, "NNBNN": 2}
         kmer_list = [["NNNNA", 0.5, 100], ["NNNNN", 0.5, 101], ["NNBNN", 0.2, 102], \
-                    ["NNBNN", 0.0, 102]]
+                     ["NNBNN", 0.0, 102]]
 
         vector = self.T.create_prob_vector(kmer_list, kmer_dict)
         self.assertAlmostEqual(vector[2], 0.16666666666666669)
@@ -342,17 +351,18 @@ class Test_data_preparation(unittest.TestCase):
 
     def test_deepnano_features(self):
         """test_deepnano_features"""
-        events = np.array([(1.0,2.0,3.0), (1.0,2.0,3.0)],dtype=[('mean', 'f4'),('length', 'f4'), ('stdv', 'f4')])
+        events = np.array([(1.0, 2.0, 3.0), (1.0, 2.0, 3.0)], dtype=[('mean', 'f4'), ('length', 'f4'), ('stdv', 'f4')])
         labels = self.DEEPNANO.deepnano_features(events)
-        self.assertTrue(([-0.65, 0.4225, 2.0, 2.0]==labels[0]).all)
-        events = np.array([(1.0,2.0,3.0), (1.0,2.0,3.0)],dtype=[('something', 'f4'),('length', 'f4'), ('stdv', 'f4')])
+        self.assertTrue(([-0.65, 0.4225, 2.0, 2.0] == labels[0]).all)
+        events = np.array([(1.0, 2.0, 3.0), (1.0, 2.0, 3.0)],
+                          dtype=[('something', 'f4'), ('length', 'f4'), ('stdv', 'f4')])
         self.assertRaises(DataPrepBug, self.DEEPNANO.deepnano_features, events)
 
     def test_create_kmer_vector(self):
         """test_create_kmer_vector"""
         kmer_dict = {"NNNNN": 0, "NNNNA": 1, "NNBNN": 2}
         kmer_list = [["NNNNA", 0.5, 100], ["NNNNN", 0.5, 101], ["NNBNN", 0.2, 102], \
-                    ["NNBNN", 0.0, 102]]
+                     ["NNBNN", 0.0, 102]]
 
         probability = self.T.create_kmer_vector(kmer_list, kmer_dict)
         categorical = self.CATEGORICAL.create_kmer_vector(kmer_list, kmer_dict)
@@ -377,6 +387,4 @@ class Test_data_preparation(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    # suite = unittest.TestLoader().loadTestsFromTestCase(Test_data_preparation)
-    # unittest.TextTestRunner(verbosity=2).run(suite)
     unittest.main()

@@ -31,7 +31,7 @@ class DataQueue:
         self.seq_len = n_steps
 
         # TODO throw error here
-        if batch_size > queue_size/10:
+        if batch_size > queue_size/3:
             print("Increase Queue size", file=sys.stderr)
 
         data = np.load(self.file_list[0])

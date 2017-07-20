@@ -1,10 +1,15 @@
 {
-    "nanonet": true, 
-    "alphabet": "ATGC", 
-    "file_prefix": "file", 
-    "kmer_len": 5, 
-    "output_dir": "/Users/andrewbailey/nanopore-RNN", 
-    "log_file": "/Users/andrewbailey/data/log-file.1", 
-    "num_cpu": 1, 
-    "prob": false
+    "nanonet": true,
+    "alphabet": "ATGC",
+    "file_prefix": "nanonet_canonical",
+    "num_cpu": 8,
+    "kmer_len": 5,
+    "output_dir": "/Users/andrewbailey/nanopore-RNN/test_files/create_training_files",
+    "strand_name": "template",
+    "prob": false,
+    "deepnano": false,
+    "log_file": "/Users/andrewbailey/nanopore-RNN/test_files/test_log_files/real.canonical.log.txt",
+    "verbose": true,
+    "cutoff": 0.2,
+    "debug": false
 }

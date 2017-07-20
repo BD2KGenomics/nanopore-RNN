@@ -1,0 +1,1 @@
+/Not/a/file/path/	/Users/andrewbailey/nanopore-RNN/test_files/signalalignment_files/canonical/3c6e13d8-2ecb-475a-9499-d0d5c48dd1c8_Basecall_2D_template.sm.forward.tsv
