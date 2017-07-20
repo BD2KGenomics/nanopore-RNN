@@ -195,8 +195,9 @@ def create_training_data_args(log_file, prefix, args, exception=AssertionError):
                 arguments = merge_two_dicts(paths, args)
                 counter += 1
                 yield arguments
-            except exception:
-                continue
+            except exception as error:
+                if args["verbose"]:
+                    print(error, file=sys.stderr)
 
 
 def get_arguments(command_line):
@@ -222,10 +223,15 @@ def main(command_line=None):
         command_line = CommandLine()
 
     try:
+        # get arguments from command line or config file
         args = get_arguments(command_line)
+        # make sure they are right format
         args = command_line.check_args(args)
+        # create directory in the output directory
         log_dir_path = create_time_directory(args.output_dir)
+        # save config file in log directory
         save_config_file(args, log_dir_path)
+        # reset output directory to new log directory so files are written to correct location
         args.output_dir = log_dir_path
 
         log_file = args.log_file

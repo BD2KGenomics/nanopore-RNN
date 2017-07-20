@@ -32,7 +32,7 @@ class CreateTrainingDataTest(unittest.TestCase):
         cls.log_file = create_log_file(cls.HOME, cls.old_log_file, new_log_path)
         cls.args = {'nanonet': True, 'alphabet': "ATGC", 'file': "canonical", 'num_cpu': 5, 'kmer_len': 5,
                     'output_dir': cls.HOME, 'strand_name': "template", 'prob': False, 'deepnano': False,
-                    'log_file': cls.log_file, 'verbose': True, 'cutoff': 0.4, 'debug': False}
+                    'log_file': cls.log_file, 'verbose': False, 'cutoff': 0.4, 'debug': False}
         with open(cls.log_file, 'r') as log:
             line = log.readline()
             line = line.rstrip().split('\t')
@@ -134,6 +134,10 @@ class CreateTrainingDataTest(unittest.TestCase):
         log_file = self.old_log_file
         arg_generator = create_training_data_args(log_file, prefix, self.args)
         self.assertRaises(StopIteration, next, arg_generator)
+        prefix = "file"
+        log_file = self.old_log_file
+        arg_generator = create_training_data_args(log_file, prefix, self.args, exception=None)
+        self.assertRaises(AssertionError, next, arg_generator)
         # passes
         prefix = "file"
         log_file = self.args["log_file"]
