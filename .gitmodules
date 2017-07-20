@@ -4,9 +4,3 @@
 [submodule "nanonet"]
 	path = nanonet
 	url = https://github.com/adbailey4/nanonet.git
-[submodule "deepnano"]
-	path = deepnano
-	url = https://bitbucket.org/vboza/deepnano.git
-[submodule "Docker/nanomod/nanomod"]
-	path = Docker/nanomod/nanomod
-	url = https://github.com/scottgigante/nanomod.git

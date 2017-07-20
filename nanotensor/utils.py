@@ -29,9 +29,6 @@ from multiprocessing import Process, current_process, Manager
 import tarfile
 
 
-# TODO create debug function and verbose options
-
-
 def no_skipped_events(file_path):
     """Find if there are any skipped events in a signalalign file"""
     # this is quite slow but it works
@@ -45,8 +42,7 @@ def no_skipped_events(file_path):
 def check_sequential(list_of_integers):
     """Make sure there are no gaps in a list of integers"""
     # returns true if there are no gaps
-    return bool(sorted(list_of_integers) == list(range(min(list_of_integers), \
-                                                       max(list_of_integers) + 1)))
+    return bool(sorted(list_of_integers) == list(range(min(list_of_integers), max(list_of_integers) + 1)))
 
 
 def grab_s3_files(bucket_path, ext=""):
@@ -148,8 +144,10 @@ def merge_two_dicts(dict1, dict2):
     """Given two dicts, merge them into a new dict as a shallow copy.
     source: https://stackoverflow.com/questions/38987/
     how-to-merge-two-python-dictionaries-in-a-single-expression"""
-    assert type(dict1) is dict or type(dict1) is DotDict, "Both arguments must be dictionaries: type(arg1) = {}".format(type(dict1))
-    assert type(dict2) is dict or type(dict2) is DotDict, "Both arguments must be dictionaries: type(arg2) = {}".format(type(dict2))
+    assert type(dict1) is dict or type(dict1) is DotDict, "Both arguments must be dictionaries: type(arg1) = {}".format(
+        type(dict1))
+    assert type(dict2) is dict or type(dict2) is DotDict, "Both arguments must be dictionaries: type(arg2) = {}".format(
+        type(dict2))
     final = dict1.copy()
     final.update(dict2)
     return final
@@ -313,6 +311,7 @@ def tarball_files(tar_name, file_paths, output_dir='.', prefix=''):
             file_name = prefix + os.path.basename(file_path)
             f_out.add(file_path, arcname=file_name)
     return tar_path
+
 
 def main():
     """Test the methods"""

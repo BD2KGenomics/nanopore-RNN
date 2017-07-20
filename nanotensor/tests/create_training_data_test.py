@@ -14,7 +14,8 @@ import os
 import types
 import unittest
 
-from nanotensor.create_training_data import CommandLine, get_arguments, create_training_data_args, create_training_data, main, get_tar_name
+from nanotensor.create_training_data import CommandLine, get_arguments, create_training_data_args, \
+    create_training_data, get_tar_name
 from nanotensor.utils import create_log_file
 
 
@@ -30,7 +31,8 @@ class CreateTrainingDataTest(unittest.TestCase):
         cls.old_log_file = os.path.join(cls.HOME, "test_files/test_log_files/canonical.log.txt")
         new_log_path = os.path.join(cls.HOME, "test_files/test_log_files/real.canonical.log.txt")
         cls.log_file = create_log_file(cls.HOME, cls.old_log_file, new_log_path)
-        cls.args = dict(nanonet=True, alphabet="ATGC", file_prefix="canonical", num_cpu=5, kmer_len=5, output_dir=cls.HOME,
+        cls.args = dict(nanonet=True, alphabet="ATGC", file_prefix="canonical", num_cpu=5, kmer_len=5,
+                        output_dir=cls.HOME,
                         strand_name="template", prob=False, deepnano=False, log_file=cls.log_file, verbose=False,
                         cutoff=0.4, debug=False, save2s3=False, tar=False, bucket="someBucket")
         with open(cls.log_file, 'r') as log:
@@ -172,7 +174,8 @@ class CreateTrainingDataTest(unittest.TestCase):
         args = dict(cutoff=0.4, nanonet=False, verbose=False, strand_name='template', deepnano=True, debug=False,
                     file='canonical', num_cpu=5, alphabet='ATGC', kmer_len=2, signalalign_file=self.tsv,
                     output_dir=self.TEST_DIR, forward=True, log_file=self.log_file,
-                    output_name='deepnano1', prob=False, fast5_file=self.fast5, save2s3=False, tar=False, bucket="someBucket")
+                    output_name='deepnano1', prob=False, fast5_file=self.fast5, save2s3=False, tar=False,
+                    bucket="someBucket")
         output_file_path = create_training_data(args)
         self.assertTrue(os.path.exists(output_file_path))
         os.remove(output_file_path)
@@ -180,7 +183,8 @@ class CreateTrainingDataTest(unittest.TestCase):
         args = dict(cutoff=0.4, nanonet=True, verbose=False, strand_name='template', deepnano=False, debug=False,
                     file='canonical', num_cpu=5, alphabet='ATGC', kmer_len=2, signalalign_file=self.tsv,
                     output_dir=self.TEST_DIR, forward=True, log_file=self.log_file,
-                    output_name='prob1', prob=True, fast5_file=self.fast5, save2s3=False, tar=False, bucket="someBucket")
+                    output_name='prob1', prob=True, fast5_file=self.fast5, save2s3=False, tar=False,
+                    bucket="someBucket")
         output_file_path = create_training_data(args)
         self.assertTrue(os.path.exists(output_file_path))
         os.remove(output_file_path)
@@ -188,7 +192,8 @@ class CreateTrainingDataTest(unittest.TestCase):
         args = dict(cutoff=0.4, nanonet=True, verbose=False, strand_name='template', deepnano=False, debug=False,
                     file='canonical', num_cpu=5, alphabet='ATGC', kmer_len=5, signalalign_file=self.tsv,
                     output_dir=self.TEST_DIR, forward=True, log_file=self.log_file,
-                    output_name='nanonet1', prob=False, fast5_file=self.fast5, save2s3=False, tar=False, bucket="someBucket")
+                    output_name='nanonet1', prob=False, fast5_file=self.fast5, save2s3=False, tar=False,
+                    bucket="someBucket")
         output_file_path = create_training_data(args)
         self.assertTrue(os.path.exists(output_file_path))
         os.remove(output_file_path)
@@ -205,9 +210,9 @@ class CreateTrainingDataTest(unittest.TestCase):
         self.assertRaises(AssertionError, get_tar_name, name, time_dir, nanonet_bool, deepnano_bool)
 
 
-    # def test_main(self):
-    #     """Test main function of create_training_data"""
-    #     main(in_opts=self.args)
+        # def test_main(self):
+        #     """Test main function of create_training_data"""
+        #     main(in_opts=self.args)
 
 
 if __name__ == '__main__':
