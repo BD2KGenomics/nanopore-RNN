@@ -176,6 +176,7 @@ def create_training_data_args(log_file, prefix, args, exception=AssertionError):
     counter = 0
     with open(log_file, 'r') as log:
         for line in log:
+
             try:
                 line = line.rstrip().split('\t')
                 # get file paths
@@ -198,6 +199,20 @@ def create_training_data_args(log_file, prefix, args, exception=AssertionError):
             except exception as error:
                 if args["verbose"]:
                     print(error, file=sys.stderr)
+
+
+def get_arguments(command_line):
+    """Get arguments from config file or from the command line"""
+    config = command_line.args["config"]
+    if config:
+        config = os.path.abspath(config)
+        assert os.path.isfile(config), "There is no configuration file: {}".format(config)
+        print("Using config file {}".format(config), file=sys.stderr)
+        args = load_json(config)
+    else:
+        args = command_line.args
+
+    return args
 
 
 def get_arguments(command_line):
