@@ -192,7 +192,6 @@ def create_training_data_args(log_file, prefix, args, exception=AssertionError):
     counter = 0
     with open(log_file, 'r') as log:
         for line in log:
-
             try:
                 line = line.rstrip().split('\t')
                 # get file paths
@@ -234,20 +233,23 @@ def get_arguments(command_line):
 def get_tar_name(name, time_dir, nanonet_bool, deepnano_bool):
     """Get name for tar file from directory and nanonet or deepnano"""
     time = time_dir.split('/')[-1]
+    assert nanonet_bool != deepnano_bool, "Nanonet or Deepnano must be True"
     if nanonet_bool:
         name = name + '.' + time + ".nanonet"
     elif deepnano_bool:
-        name = name + '.' + time + "deepnano"
+        name = name + '.' + time + ".deepnano"
     return name
 
 
-def main(command_line=None):
+def main(in_opts=None):
     """Main docstring"""
     start = timer()
 
     # allow for a command line to be input into main
-    if command_line is None:
+    if in_opts is None:
         command_line = CommandLine()
+    else:
+        command_line = CommandLine(in_opts=in_opts)
 
     try:
         # get arguments from command line or config file
