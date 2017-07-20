@@ -133,7 +133,7 @@ class CreateTrainingDataTest(unittest.TestCase):
         prefix = "file"
         log_file = self.old_log_file
         arg_generator = create_training_data_args(log_file, prefix, self.args)
-        self.assertRaises(AssertionError, next, arg_generator)
+        self.assertRaises(StopIteration, next, arg_generator)
         # passes
         prefix = "file"
         log_file = self.args["log_file"]
@@ -162,7 +162,7 @@ class CreateTrainingDataTest(unittest.TestCase):
         self.assertRaises(AssertionError, create_training_data, args)
 
         # passes
-        args = dict(cutoff=0.4, nanonet=False, verbose=True, strand_name='template', deepnano=True, debug=False,
+        args = dict(cutoff=0.4, nanonet=False, verbose=False, strand_name='template', deepnano=True, debug=False,
                     file='canonical', num_cpu=5, alphabet='ATGC', kmer_len=2, signalalign_file=self.tsv,
                     output_dir=self.TEST_DIR, forward=True, log_file=self.log_file,
                     output_name='deepnano1', prob=False, fast5_file=self.fast5)
@@ -170,7 +170,7 @@ class CreateTrainingDataTest(unittest.TestCase):
         self.assertTrue(os.path.exists(output_file_path))
         os.remove(output_file_path)
 
-        args = dict(cutoff=0.4, nanonet=True, verbose=True, strand_name='template', deepnano=False, debug=False,
+        args = dict(cutoff=0.4, nanonet=True, verbose=False, strand_name='template', deepnano=False, debug=False,
                     file='canonical', num_cpu=5, alphabet='ATGC', kmer_len=2, signalalign_file=self.tsv,
                     output_dir=self.TEST_DIR, forward=True, log_file=self.log_file,
                     output_name='prob1', prob=True, fast5_file=self.fast5)
@@ -178,7 +178,7 @@ class CreateTrainingDataTest(unittest.TestCase):
         self.assertTrue(os.path.exists(output_file_path))
         os.remove(output_file_path)
 
-        args = dict(cutoff=0.4, nanonet=True, verbose=True, strand_name='template', deepnano=False, debug=False,
+        args = dict(cutoff=0.4, nanonet=True, verbose=False, strand_name='template', deepnano=False, debug=False,
                     file='canonical', num_cpu=5, alphabet='ATGC', kmer_len=5, signalalign_file=self.tsv,
                     output_dir=self.TEST_DIR, forward=True, log_file=self.log_file,
                     output_name='nanonet1', prob=False, fast5_file=self.fast5)
