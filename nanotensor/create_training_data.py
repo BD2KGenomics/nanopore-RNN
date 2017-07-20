@@ -169,31 +169,50 @@ def create_training_data(args):
     return output_file_path
 
 
-def create_training_data_args(log_file, prefix, args):
+def create_training_data_args(log_file, prefix, args, exception=AssertionError):
     """Create generator of specific arguments for create_training_data"""
     assert os.path.exists(log_file), "Log file does not exist: {}".format(log_file)
     assert type(prefix) is str or type(prefix) is unicode
     counter = 0
     with open(log_file, 'r') as log:
         for line in log:
-            line = line.rstrip().split('\t')
-            # get file paths
-            fast5 = os.path.abspath(line[0])
-            tsv = os.path.abspath(line[1])
-            assert os.path.exists(fast5), "Fast5 file does not exist: {}".format(fast5)
-            assert os.path.exists(tsv), "alignment file does not exist: {}".format(tsv)
-            # define new file name
-            name = str(prefix) + str(counter)
-            if "forward" in tsv:
-                paths = {"fast5_file": fast5, "signalalign_file": tsv, "output_name": name, "forward": True}
-            elif "backward" in tsv:
-                paths = {"fast5_file": fast5, "signalalign_file": tsv, "output_name": name, "forward": False}
-            else:
-                raise Usage("TSV does not have forward or backward in it's name")
-            # create final arguments and add to queue
-            arguments = merge_two_dicts(paths, args)
-            counter += 1
-            yield arguments
+
+            try:
+                line = line.rstrip().split('\t')
+                # get file paths
+                fast5 = os.path.abspath(line[0])
+                tsv = os.path.abspath(line[1])
+                assert os.path.exists(fast5), "Fast5 file does not exist: {}".format(fast5)
+                assert os.path.exists(tsv), "alignment file does not exist: {}".format(tsv)
+                # define new file name
+                name = str(prefix) + str(counter)
+                if "forward" in tsv:
+                    paths = {"fast5_file": fast5, "signalalign_file": tsv, "output_name": name, "forward": True}
+                elif "backward" in tsv:
+                    paths = {"fast5_file": fast5, "signalalign_file": tsv, "output_name": name, "forward": False}
+                else:
+                    raise Usage("TSV does not have forward or backward in it's name")
+                # create final arguments and add to queue
+                arguments = merge_two_dicts(paths, args)
+                counter += 1
+                yield arguments
+            except exception as error:
+                if args["verbose"]:
+                    print(error, file=sys.stderr)
+
+
+def get_arguments(command_line):
+    """Get arguments from config file or from the command line"""
+    config = command_line.args["config"]
+    if config:
+        config = os.path.abspath(config)
+        assert os.path.isfile(config), "There is no configuration file: {}".format(config)
+        print("Using config file {}".format(config), file=sys.stderr)
+        args = load_json(config)
+    else:
+        args = command_line.args
+
+    return args
 
 
 def get_arguments(command_line):
@@ -219,10 +238,15 @@ def main(command_line=None):
         command_line = CommandLine()
 
     try:
+        # get arguments from command line or config file
         args = get_arguments(command_line)
+        # make sure they are right format
         args = command_line.check_args(args)
+        # create directory in the output directory
         log_dir_path = create_time_directory(args.output_dir)
+        # save config file in log directory
         save_config_file(args, log_dir_path)
+        # reset output directory to new log directory so files are written to correct location
         args.output_dir = log_dir_path
 
         log_file = args.log_file

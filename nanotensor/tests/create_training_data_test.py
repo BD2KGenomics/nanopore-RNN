@@ -32,7 +32,7 @@ class CreateTrainingDataTest(unittest.TestCase):
         cls.log_file = create_log_file(cls.HOME, cls.old_log_file, new_log_path)
         cls.args = {'nanonet': True, 'alphabet': "ATGC", 'file': "canonical", 'num_cpu': 5, 'kmer_len': 5,
                     'output_dir': cls.HOME, 'strand_name': "template", 'prob': False, 'deepnano': False,
-                    'log_file': cls.log_file, 'verbose': True, 'cutoff': 0.4, 'debug': False}
+                    'log_file': cls.log_file, 'verbose': False, 'cutoff': 0.4, 'debug': False}
         with open(cls.log_file, 'r') as log:
             line = log.readline()
             line = line.rstrip().split('\t')
@@ -133,6 +133,10 @@ class CreateTrainingDataTest(unittest.TestCase):
         prefix = "file"
         log_file = self.old_log_file
         arg_generator = create_training_data_args(log_file, prefix, self.args)
+        self.assertRaises(StopIteration, next, arg_generator)
+        prefix = "file"
+        log_file = self.old_log_file
+        arg_generator = create_training_data_args(log_file, prefix, self.args, exception=None)
         self.assertRaises(AssertionError, next, arg_generator)
         # passes
         prefix = "file"
@@ -162,7 +166,7 @@ class CreateTrainingDataTest(unittest.TestCase):
         self.assertRaises(AssertionError, create_training_data, args)
 
         # passes
-        args = dict(cutoff=0.4, nanonet=False, verbose=True, strand_name='template', deepnano=True, debug=False,
+        args = dict(cutoff=0.4, nanonet=False, verbose=False, strand_name='template', deepnano=True, debug=False,
                     file='canonical', num_cpu=5, alphabet='ATGC', kmer_len=2, signalalign_file=self.tsv,
                     output_dir=self.TEST_DIR, forward=True, log_file=self.log_file,
                     output_name='deepnano1', prob=False, fast5_file=self.fast5)
@@ -170,7 +174,7 @@ class CreateTrainingDataTest(unittest.TestCase):
         self.assertTrue(os.path.exists(output_file_path))
         os.remove(output_file_path)
 
-        args = dict(cutoff=0.4, nanonet=True, verbose=True, strand_name='template', deepnano=False, debug=False,
+        args = dict(cutoff=0.4, nanonet=True, verbose=False, strand_name='template', deepnano=False, debug=False,
                     file='canonical', num_cpu=5, alphabet='ATGC', kmer_len=2, signalalign_file=self.tsv,
                     output_dir=self.TEST_DIR, forward=True, log_file=self.log_file,
                     output_name='prob1', prob=True, fast5_file=self.fast5)
@@ -178,7 +182,7 @@ class CreateTrainingDataTest(unittest.TestCase):
         self.assertTrue(os.path.exists(output_file_path))
         os.remove(output_file_path)
 
-        args = dict(cutoff=0.4, nanonet=True, verbose=True, strand_name='template', deepnano=False, debug=False,
+        args = dict(cutoff=0.4, nanonet=True, verbose=False, strand_name='template', deepnano=False, debug=False,
                     file='canonical', num_cpu=5, alphabet='ATGC', kmer_len=5, signalalign_file=self.tsv,
                     output_dir=self.TEST_DIR, forward=True, log_file=self.log_file,
                     output_name='nanonet1', prob=False, fast5_file=self.fast5)
