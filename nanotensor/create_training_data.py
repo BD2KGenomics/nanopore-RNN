@@ -192,6 +192,7 @@ def create_training_data_args(log_file, prefix, args, exception=AssertionError):
     counter = 0
     with open(log_file, 'r') as log:
         for line in log:
+
             try:
                 line = line.rstrip().split('\t')
                 # get file paths
