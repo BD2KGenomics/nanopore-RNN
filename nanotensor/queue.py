@@ -20,7 +20,7 @@ import tensorflow as tf
 class DataQueue:
     """Parses data and feeds inputs to the tf graph"""
 
-    def __init__(self, file_list, batch_size=10, queue_size=100, verbose=False, pad=0, trim=True, n_steps=1):
+    def __init__(self, file_list, batch_size=10, queue_size=100, verbose=False, pad=0, trim=True, n_steps=1, min_in_queue=1):
 
         # test if inputs are correct types
         assert type(file_list) is list, "file_list is not list: type(file_list) = {}".format(type(file_list))
@@ -34,16 +34,22 @@ class DataQueue:
         assert queue_size / 3 >= batch_size, "Batch size is larger than 1/3 of the queue size"
 
         # assign class objects
-        self.file_list = file_list
-        self.num_files = len(self.file_list)
         self.file_index = 0
         self.batch_size = batch_size
         self.verbose = verbose
         self.trim = trim
         self.seq_len = n_steps
-
         # TODO implement padding
         self.pad = 0
+
+        # test if files can be read
+        self.file_list, self.bad_files = self.read_numpy_files(file_list)
+        self.num_files = len(self.file_list)
+        print("Creating Queue of with {} npy files".format(self.num_files), file=sys.stderr)
+        print("Throwing away {} files".format(len(self.bad_files)), file=sys.stderr)
+        assert self.num_files >= 1, "There are no passing npy files to read into queue"
+        if self.verbose:
+            print(self.bad_files, file=sys.stderr)
 
         # get size of inputs and classes
         data = np.load(self.file_list[0])
@@ -59,7 +65,8 @@ class DataQueue:
         self.queue = tf.RandomShuffleQueue(shapes=[[n_steps, self.n_input], [n_steps, self.n_classes]],
                                            dtypes=[tf.float32, tf.float32],
                                            capacity=queue_size,
-                                           min_after_dequeue=queue_size / 2)
+                                           min_after_dequeue=min_in_queue,
+                                           seed=1)
         # define the enqueue operation
         self.enqueue_op = self.queue.enqueue([self.dataX, self.dataY])
         # True if there are files that have not been read into the queue
@@ -69,35 +76,26 @@ class DataQueue:
         """Shuffle the input file order"""
         if self.verbose:
             print("Shuffle data files", file=sys.stderr)
+        np.random.seed(1)
         np.random.shuffle(self.file_list)
         self.files_left = False
         return True
 
     def add_to_queue(self, batch, sess, pad=0):
         """Add a batch to the queue"""
-        if pad > 0:
-            # if we want to pad sequences with zeros
-            batch = self.pad_with_zeros(batch, pad=pad)
+        # if pad > 0:
+        #     # if we want to pad sequences with zeros
+        #     batch = self.pad_with_zeros(batch, pad=pad)
         features = batch[:, 0]
         labels = batch[:, 1]
         features = np.asarray([np.asarray(features[n]) for n in range(len(features))])
         labels = np.asarray([np.asarray(labels[n]) for n in range(len(labels))])
         sess.run(self.enqueue_op, feed_dict={self.dataX: features, self.dataY: labels})
 
-    @staticmethod
-    def pad_with_zeros(matrix, pad=0):
-        """Pad an array with zeros so it has the correct shape for the batch"""
-        column1 = len(matrix[0][0])
-        column2 = len(matrix[0][1])
-        one_row = np.array([[np.zeros([column1]), np.zeros([column2])]])
-        new_rows = np.repeat(one_row, pad, axis=0)
-        # print(new_rows.shape)
-        return np.append(matrix, new_rows, axis=0)
-
     def create_batches(self, data, sess):
         """Create batches from input data array"""
         num_batches = (len(data) // self.seq_len)
-        pad = self.seq_len - (len(data) % self.seq_len)
+        # pad = self.seq_len - (len(data) % self.seq_len)
         if self.verbose:
             print("{} batches in this file".format(num_batches), file=sys.stderr)
         batch_number = 0
@@ -109,13 +107,13 @@ class DataQueue:
             batch_number += 1
             index_1 += self.seq_len
             index_2 += self.seq_len
-
-        if not self.trim:
-            # moved this down because we don't care about connecting between reads right now
-            self.add_to_queue(np.array([[str(pad), str(pad)]]), sess)
-            next_in = data[index_1:index_2]
-            # print(np.array([pad]))
-            self.add_to_queue(next_in, sess, pad=pad)
+        #
+        # if not self.trim:
+        #     # moved this down because we don't care about connecting between reads right now
+        #     self.add_to_queue(np.array([[str(pad), str(pad)]]), sess)
+        #     next_in = data[index_1:index_2]
+        #     # print(np.array([pad]))
+        #     self.add_to_queue(next_in, sess, pad=pad)
 
         return True
 
@@ -142,19 +140,10 @@ class DataQueue:
         """
         Return's tensors containing a batch of images and labels
         """
-        # batch_size = np.random.randint(1, self.batch_size)
         reads_batch, labels_batch = self.queue.dequeue_many(self.batch_size, name="dequeue")
         tf.add_to_collection("read_batch", reads_batch)
         tf.add_to_collection("labels_batch", labels_batch)
-        # print(tf.shape(reads_batch))
         return reads_batch, labels_batch
-
-    def thread_main(self, sess, data_obj):
-        """
-        Function run on alternate thread. Basically, keep adding data to the queue.
-        """
-        for x_data, y_data in data_obj.batch_generator():
-            sess.run(self.enqueue_op, feed_dict={self.dataX: x_data, self.dataY: y_data})
 
     def start_threads(self, sess, n_threads=1):
         """ Start background threads to feed queue """
@@ -166,6 +155,32 @@ class DataQueue:
             threads.append(t)
         return threads
 
+    # @staticmethod
+    # def pad_with_zeros(matrix, pad=0):
+    #     """Pad an array with zeros so it has the correct shape for the batch"""
+    #     column1 = len(matrix[0][0])
+    #     column2 = len(matrix[0][1])
+    #     one_row = np.array([[np.zeros([column1]), np.zeros([column2])]])
+    #     new_rows = np.repeat(one_row, pad, axis=0)
+    #     # print(new_rows.shape)
+    #     return np.append(matrix, new_rows, axis=0)
+
+    @staticmethod
+    def read_numpy_files(path_list):
+        """Test if files in list are readable by numpy"""
+        assert type(path_list) is list, "path_list is not list: type(path_list) = {}".format(type(path_list))
+        # passing files and files which threw error
+        good = []
+        bad = []
+        for file1 in path_list:
+            try:
+                np.load(file1)
+                good.append(file1)
+            except IOError:
+                bad.append(file1)
+
+        return good, bad
+
 
 def main():
     """Main docstring"""
@@ -176,50 +191,38 @@ def main():
     training_dir = "/Users/andrewbailey/nanopore-RNN/test_files/create_training_files/07Jul-20-11h-28m"
     training_files = list_dir(training_dir, ext="npy")
 
-    for file1 in training_files:
-        data = np.load(file1)
-        data2 = data[:500]
-        print(len(data2))
-        assert (data2 == data).all()
-
-        # np.save(file1, data2)
-
     # Doing anything with data on the CPU is generally a good idea.
-    # data = DataQueue(training_files, batch_size=2, queue_size=10, verbose=False, pad=0, trim=True, n_steps=10)
-    # images_batch, labels_batch = data.get_inputs()
-    # images_batch1 = tf.reshape(images_batch, [-1, data.n_input])
-    # labels_batch1 = tf.reshape(labels_batch, [-1, data.n_classes])
-    #
-    # # simple model
-    # input_dim = int(images_batch1.get_shape()[1])
-    # weight = tf.Variable(tf.random_normal([input_dim, data.n_classes]))
-    # bias = tf.Variable(tf.random_normal([data.n_classes]))
-    # prediction = tf.matmul(images_batch1, weight) + bias
-    #
-    # print(tf.shape(prediction))
-    # print(tf.shape(labels_batch))
-    # print(tf.shape(labels_batch1))
-    # loss = tf.nn.softmax_cross_entropy_with_logits(logits=prediction, labels=labels_batch1)
-    #
-    # train_op = tf.train.AdamOptimizer().minimize(loss)
-    #
-    # sess = tf.Session(config=tf.ConfigProto(intra_op_parallelism_threads=8))
-    # init = tf.global_variables_initializer()
-    # sess.run(init)
-    #
-    # # start the tensorflow QueueRunner's
-    # tf.train.start_queue_runners(sess=sess)
-    # # start our custom queue runner's threads
-    # coord = tf.train.Coordinator()
-    # threads = tf.train.start_queue_runners(sess=sess, coord=coord)
-    # data.start_threads(sess)
-    #
-    # _, loss_val = sess.run([train_op, loss])
-    # print(loss_val)
-    #
-    # coord.request_stop()
-    # coord.join(threads)
-    # sess.close()
+    data = DataQueue(training_files, batch_size=2, queue_size=10, verbose=False, pad=0, trim=True, n_steps=10)
+    images_batch, labels_batch = data.get_inputs()
+    images_batch1 = tf.reshape(images_batch, [-1, data.n_input])
+    labels_batch1 = tf.reshape(labels_batch, [-1, data.n_classes])
+
+    # simple model
+    input_dim = int(images_batch1.get_shape()[1])
+    weight = tf.Variable(tf.random_normal([input_dim, data.n_classes]))
+    bias = tf.Variable(tf.random_normal([data.n_classes]))
+    prediction = tf.matmul(images_batch1, weight) + bias
+
+    print(tf.shape(prediction))
+    print(tf.shape(labels_batch))
+    print(tf.shape(labels_batch1))
+    loss = tf.nn.softmax_cross_entropy_with_logits(logits=prediction, labels=labels_batch1)
+
+    train_op = tf.train.AdamOptimizer().minimize(loss)
+
+    sess = tf.Session()
+    init = tf.global_variables_initializer()
+    sess.run(init)
+
+    # start the tensorflow QueueRunner's
+    tf.train.start_queue_runners(sess=sess)
+    # start our custom queue runner's threads
+    data.start_threads(sess)
+
+    _, loss_val = sess.run([train_op, loss])
+    print(loss_val)
+
+    sess.close()
 
     stop = timer()
     print("Running Time = {} seconds".format(stop - start), file=sys.stderr)
