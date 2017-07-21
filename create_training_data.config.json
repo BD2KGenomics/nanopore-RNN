@@ -11,5 +11,8 @@
     "log_file": "/Users/andrewbailey/nanopore-RNN/test_files/test_log_files/real.canonical.log.txt",
     "verbose": true,
     "cutoff": 0.2,
-    "debug": false
+    "debug": false,
+    "save2s3": false,
+    "tar": true,
+    "bucket": "nanotensor-data"
 }

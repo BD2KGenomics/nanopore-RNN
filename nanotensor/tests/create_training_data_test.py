@@ -14,7 +14,8 @@ import os
 import types
 import unittest
 
-from nanotensor.create_training_data import CommandLine, get_arguments, create_training_data_args, create_training_data, main
+from nanotensor.create_training_data import CommandLine, get_arguments, create_training_data_args, \
+    create_training_data, get_tar_name
 from nanotensor.utils import create_log_file
 
 
@@ -26,13 +27,14 @@ class CreateTrainingDataTest(unittest.TestCase):
     def setUpClass(cls):
         super(CreateTrainingDataTest, cls).setUpClass()
         cls.HOME = '/'.join(os.path.abspath(__file__).split("/")[:-3])
-        cls.TEST_DIR = os.path.join(cls.HOME, "test_files/")
+        cls.TEST_DIR = os.path.join(cls.HOME, "test_files/create_training_files")
         cls.old_log_file = os.path.join(cls.HOME, "test_files/test_log_files/canonical.log.txt")
         new_log_path = os.path.join(cls.HOME, "test_files/test_log_files/real.canonical.log.txt")
         cls.log_file = create_log_file(cls.HOME, cls.old_log_file, new_log_path)
-        cls.args = {'nanonet': True, 'alphabet': "ATGC", 'file': "canonical", 'num_cpu': 5, 'kmer_len': 5,
-                    'output_dir': cls.HOME, 'strand_name': "template", 'prob': False, 'deepnano': False,
-                    'log_file': cls.log_file, 'verbose': False, 'cutoff': 0.4, 'debug': False}
+        cls.args = dict(nanonet=True, alphabet="ATGC", file_prefix="canonical", num_cpu=5, kmer_len=5,
+                        output_dir=cls.HOME,
+                        strand_name="template", prob=False, deepnano=False, log_file=cls.log_file, verbose=False,
+                        cutoff=0.4, debug=False, save2s3=False, tar=False, bucket="someBucket")
         with open(cls.log_file, 'r') as log:
             line = log.readline()
             line = line.rstrip().split('\t')
@@ -66,15 +68,15 @@ class CreateTrainingDataTest(unittest.TestCase):
         self.assertRaises(AssertionError, commandline.check_args, bad_args)
         bad_args = dict(output_dir=self.HOME, log_file=self.log_file, prob=bool(), kmer_len=int(), alphabet=0,
                         nanonet=bool(),
-                        num_cpu=int(), deepnano=bool(), file=0)
+                        num_cpu=int(), deepnano=bool(), file_prefix=0)
         self.assertRaises(AssertionError, commandline.check_args, bad_args)
         bad_args = dict(output_dir=self.HOME, log_file=self.log_file, prob=bool(), kmer_len=int(), alphabet=0,
                         nanonet=bool(),
-                        num_cpu=int(), deepnano=bool(), file=str(), verbose="test")
+                        num_cpu=int(), deepnano=bool(), file_prefix=str(), verbose="test")
         self.assertRaises(AssertionError, commandline.check_args, bad_args)
         bad_args = dict(output_dir=self.HOME, log_file=self.log_file, prob=bool(), kmer_len=int(), alphabet=0,
                         nanonet=bool(),
-                        num_cpu=int(), deepnano=bool(), file=str(), verbose=bool(), debug="test")
+                        num_cpu=int(), deepnano=bool(), file_prefix=str(), verbose=bool(), debug="test")
         self.assertRaises(AssertionError, commandline.check_args, bad_args)
         new_args = commandline.check_args(self.args)
         self.assertEqual(self.args["output_dir"], new_args.output_dir)
@@ -85,9 +87,12 @@ class CreateTrainingDataTest(unittest.TestCase):
         self.assertEqual(self.args["nanonet"], new_args.nanonet)
         self.assertEqual(self.args["num_cpu"], new_args.num_cpu)
         self.assertEqual(self.args["deepnano"], new_args.deepnano)
-        self.assertEqual(self.args["file"], new_args.file)
+        self.assertEqual(self.args["file_prefix"], new_args.file_prefix)
         self.assertEqual(self.args["verbose"], new_args.verbose)
         self.assertEqual(self.args["debug"], new_args.debug)
+        self.assertEqual(self.args["save2s3"], new_args.save2s3)
+        self.assertEqual(self.args["bucket"], new_args.bucket)
+        self.assertEqual(self.args["tar"], new_args.tar)
 
     def test_get_arguments(self):
         """Test get_arguments function"""
@@ -169,7 +174,8 @@ class CreateTrainingDataTest(unittest.TestCase):
         args = dict(cutoff=0.4, nanonet=False, verbose=False, strand_name='template', deepnano=True, debug=False,
                     file='canonical', num_cpu=5, alphabet='ATGC', kmer_len=2, signalalign_file=self.tsv,
                     output_dir=self.TEST_DIR, forward=True, log_file=self.log_file,
-                    output_name='deepnano1', prob=False, fast5_file=self.fast5)
+                    output_name='deepnano1', prob=False, fast5_file=self.fast5, save2s3=False, tar=False,
+                    bucket="someBucket")
         output_file_path = create_training_data(args)
         self.assertTrue(os.path.exists(output_file_path))
         os.remove(output_file_path)
@@ -177,7 +183,8 @@ class CreateTrainingDataTest(unittest.TestCase):
         args = dict(cutoff=0.4, nanonet=True, verbose=False, strand_name='template', deepnano=False, debug=False,
                     file='canonical', num_cpu=5, alphabet='ATGC', kmer_len=2, signalalign_file=self.tsv,
                     output_dir=self.TEST_DIR, forward=True, log_file=self.log_file,
-                    output_name='prob1', prob=True, fast5_file=self.fast5)
+                    output_name='prob1', prob=True, fast5_file=self.fast5, save2s3=False, tar=False,
+                    bucket="someBucket")
         output_file_path = create_training_data(args)
         self.assertTrue(os.path.exists(output_file_path))
         os.remove(output_file_path)
@@ -185,14 +192,28 @@ class CreateTrainingDataTest(unittest.TestCase):
         args = dict(cutoff=0.4, nanonet=True, verbose=False, strand_name='template', deepnano=False, debug=False,
                     file='canonical', num_cpu=5, alphabet='ATGC', kmer_len=5, signalalign_file=self.tsv,
                     output_dir=self.TEST_DIR, forward=True, log_file=self.log_file,
-                    output_name='nanonet1', prob=False, fast5_file=self.fast5)
+                    output_name='nanonet1', prob=False, fast5_file=self.fast5, save2s3=False, tar=False,
+                    bucket="someBucket")
         output_file_path = create_training_data(args)
         self.assertTrue(os.path.exists(output_file_path))
         os.remove(output_file_path)
 
-    # def test_main(self):
-    #     """Test main function of create_training_data"""
-    #     main()
+    def test_get_tar_name(self):
+        """Test get_tar_name"""
+        name = "test"
+        time_dir = "/some/path/time"
+        nanonet_bool = False
+        deepnano_bool = True
+        tar_name = get_tar_name(name, time_dir, nanonet_bool, deepnano_bool)
+        self.assertEqual("test.time.deepnano", tar_name)
+        deepnano_bool = False
+        self.assertRaises(AssertionError, get_tar_name, name, time_dir, nanonet_bool, deepnano_bool)
+
+
+        # def test_main(self):
+        #     """Test main function of create_training_data"""
+        #     main(in_opts=self.args)
+
 
 if __name__ == '__main__':
     unittest.main()
