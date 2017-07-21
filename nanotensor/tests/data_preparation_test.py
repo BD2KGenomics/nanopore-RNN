@@ -128,7 +128,7 @@ class DataPreparationTest(unittest.TestCase):
             self.assertAlmostEqual(t_test[i], features_t[0][i])
             self.assertAlmostEqual(c_test[i], features_c[0][i])
             self.assertAlmostEqual(categorical_test[i], features_categorical[0][i])
-        self.assertTrue((features_deepnano == self.DEEPNANO.features).all())
+        self.assertTrue((features_deepnano == self.DEEPNANO.features).all.())
         self.assertTrue((features_t == self.T.features).all())
         self.assertTrue((features_c == self.C.features).all())
         self.assertTrue((features_categorical == self.CATEGORICAL.features).all())
@@ -195,13 +195,13 @@ class DataPreparationTest(unittest.TestCase):
         """test_create_kmer_labels"""
         # Template strand
         test_6999 = self.T.create_kmer_labels()[6999]
-        labels = os.path.join(self.HOME, \
+        labels = os.path.join(self.HOME,
                               "test_files/data_prep_test_files/pos6999-template-label-prob.pkl")
         pos6999 = load_pickle(labels)
         self.assertEqual(sorted(pos6999), sorted(test_6999))
         # Complement strand
         test_55 = self.C.create_kmer_labels()[55]
-        labels = os.path.join(self.HOME, \
+        labels = os.path.join(self.HOME,
                               "test_files/data_prep_test_files/pos55-complement-label-prob.pkl")
         pos55 = load_pickle(labels)
         self.assertEqual(sorted(pos55), sorted(test_55))
@@ -209,7 +209,7 @@ class DataPreparationTest(unittest.TestCase):
         self.assertRaises(AssertionError, self.DEEPNANO.create_kmer_labels)
         # # CATEGORICAL
         test_6998 = self.CATEGORICAL.create_kmer_labels()[6998]
-        labels = os.path.join(self.HOME, \
+        labels = os.path.join(self.HOME,
                               "test_files/data_prep_test_files/pos6998-CATEGORICAL-label-prob.pkl")
         pos6998 = load_pickle(labels)
         self.assertEqual(sorted(pos6998), sorted(test_6998))
@@ -232,7 +232,6 @@ class DataPreparationTest(unittest.TestCase):
         """test create_null_labels"""
         # deepnano null label
         null = self.DEEPNANO.create_null_label()
-        null_len = len(null)
         self.assertEqual(null[15], 1)
         self.assertEqual(1, sum(null))
         # categorical vector label for nanonet
@@ -248,8 +247,8 @@ class DataPreparationTest(unittest.TestCase):
             self.assertEqual(null[0], prob)
 
     def test_getkmer_dict(self):
-        first = "AAAAA"
-        last = "TTTTT"
+        first = 'AAAAA'
+        last = 'TTTTT'
         kmer_dict = self.T.getkmer_dict("ATCGE", 5, flip=False)
         self.assertEqual(0, kmer_dict[first])
         self.assertEqual(3124, kmer_dict[last])
@@ -258,7 +257,7 @@ class DataPreparationTest(unittest.TestCase):
         self.assertEqual(last, kmer_dict_flip[3124])
 
     def test_deepnano_dict(self):
-        "Test if deepnano_dictionary creates correct dictionary"
+        """Test if deepnano_dictionary creates correct dictionary"""
         # No N in alphabet
         length = 2
         test1 = "AN"
@@ -289,7 +288,7 @@ class DataPreparationTest(unittest.TestCase):
             self.assertTrue(key <= 20)
 
     def test_null_vector_deepnano(self):
-        "test_null_vector_deepnano"
+        """test_null_vector_deepnano"""
         # deepnano null label
         kmer_dict = {"NN": 0}
         null = self.DEEPNANO.null_vector_deepnano(kmer_dict)
@@ -297,7 +296,7 @@ class DataPreparationTest(unittest.TestCase):
         self.assertEqual(1, sum(null))
 
     def test_get_most_probable_kmer(self):
-        "test_get_most_probable_kmer"
+        """test_get_most_probable_kmer"""
         kmer_list = [["KMER", 1, 100], ["KMER2", 1, 101], ["KMER3", .1, 102]]
         best_kmer, prob, position = self.T.get_most_probable_kmer(kmer_list)
         self.assertEqual("KMER2", best_kmer)
@@ -305,7 +304,7 @@ class DataPreparationTest(unittest.TestCase):
         self.assertEqual(101, position)
 
     def test_create_categorical_vector(self):
-        "test_create_categorical_vector"
+        """test_create_categorical_vector"""
         # catch length error
         kmer_dict = {"NN": 0}
         kmer_list = [["4MER", 1, 100], ["4MER", 1, 101], ["4MER", .1, 102]]
@@ -383,7 +382,6 @@ class DataPreparationTest(unittest.TestCase):
         best_kmer = "ATGCB"
         vector = self.DEEPNANO.create_deepnano_vector(kmer_dict, diff, best_kmer)
         self.assertEqual(vector[2], 1)
-
 
 
 if __name__ == '__main__':

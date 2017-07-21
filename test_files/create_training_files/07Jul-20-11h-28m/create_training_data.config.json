@@ -1,0 +1,18 @@
+{
+    "cutoff": 0.2, 
+    "nanonet": true, 
+    "verbose": true, 
+    "tar": true, 
+    "strand_name": "template", 
+    "file_prefix": "nanonet_canonical", 
+    "deepnano": false, 
+    "num_cpu": 8, 
+    "alphabet": "ATGC", 
+    "bucket": "nanotensor-data", 
+    "save2s3": true, 
+    "kmer_len": 5, 
+    "output_dir": "/Users/andrewbailey/nanopore-RNN/test_files/create_training_files", 
+    "debug": false, 
+    "log_file": "/Users/andrewbailey/nanopore-RNN/test_files/test_log_files/real.canonical.log.txt", 
+    "prob": false
+}

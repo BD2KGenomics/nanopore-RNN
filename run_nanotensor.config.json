@@ -1,6 +1,6 @@
 {
-    "testing_dir": "/Users/andrewbailey/nanopore-RNN/validation",
-    "training_dir": "/Users/andrewbailey/nanopore-RNN/training",
+    "testing_dir": "/Users/andrewbailey/nanopore-RNN/test_files/create_training_files/07Jul-20-11h-28m",
+    "training_dir": "/Users/andrewbailey/nanopore-RNN/test_files/create_training_files/07Jul-20-11h-28m",
     "output_dir": "/Users/andrewbailey/nanopore-RNN/logs",
     "model_name": "my_test_model",
     "queue_size": 10,
