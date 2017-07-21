@@ -42,10 +42,8 @@ def main():
                           "python-dateutil==2.6.0",
                           "codecov==2.0.9",
                           "coverage==4.4.1",
-                          "pytest==3.0.7"],
-        # extras_require={
-        #     "tf": ["tensorflow>=1.0.0"],
-        #     "tf_gpu": ["tensorflow-gpu>=1.0.0"]}
+                          "pytest==3.0.7",
+                          "tensorflow>=1.0.0"],
         zip_safe=False
     )
 
