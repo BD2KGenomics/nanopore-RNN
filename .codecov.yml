@@ -1,11 +1,10 @@
 codecov:
-  token: 3806b863-7185-4be7-9787-a0c1d7963703
   notify:
     slack:
       url: "https://hooks.slack.com/services/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"
       # only_pulls: false
-      attachments: "sunburst, diff"
-      # branches: default
+      attachments: "diff"
+       branches: "master"
 
 coverage:
   precision: 2

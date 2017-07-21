@@ -39,11 +39,9 @@ class DataQueue:
         self.n_classes = len(data[0][1])
         # print(self.n_input, self.n_classes)
 
-
         self.dataX = tf.placeholder("float", [n_steps, self.n_input], name='X')
         self.dataY = tf.placeholder("float", [n_steps, self.n_classes], name='Y')
-        # The actual queue of data. The queue contains a vector for
-        # the mnist features, and a scalar label.
+        # The actual queue of data.
         self.queue = tf.RandomShuffleQueue(shapes=[[n_steps, self.n_input], [n_steps, self.n_classes]],
                                            dtypes=[tf.float32, tf.float32],
                                            capacity=queue_size,

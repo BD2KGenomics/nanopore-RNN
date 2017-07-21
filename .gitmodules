@@ -3,4 +3,4 @@
 	url = https://github.com/adbailey4/signalAlign.git
 [submodule "nanonet"]
 	path = nanonet
-	url = https://github.com/adbailey4/nanonet.git
+	url = https://github.com/nanoporetech/nanonet.git

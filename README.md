@@ -1,5 +1,5 @@
-[![Build Status](https://travis-ci.com/BD2KGenomics/nanopore-RNN.svg?token=q4uTfLUSZiuL53MqFw8k&branch=master)](https://travis-ci.com/BD2KGenomics/nanopore-RNN)
-[![codecov](https://codecov.io/gh/BD2KGenomics/nanopore-RNN/branch/master/graph/badge.svg)](https://codecov.io/gh/BD2KGenomics/nanopore-RNN)
+[![Build Status](https://travis-ci.org/UCSC-nanopore-cgl/nanopore-RNN.svg?branch=master)](https://travis-ci.org/UCSC-nanopore-cgl/nanopore-RNN)
+[![codecov](https://codecov.io/gh/UCSC-nanopore-cgl/nanopore-RNN/branch/master/graph/badge.svg)](https://codecov.io/gh/UCSC-nanopore-cgl/nanopore-RNN)
 
 # NanoTensor
 
