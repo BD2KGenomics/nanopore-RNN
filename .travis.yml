@@ -23,6 +23,8 @@ before_install:
 - sudo apt-get update -qq
 - sudo apt-get install libhdf5-serial-dev
 - pip install google-compute-engine
+- pip install tensorflow
+
 # sudo apt-get install libbz2-dev
 
 install:
