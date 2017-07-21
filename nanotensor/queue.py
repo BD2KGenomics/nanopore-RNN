@@ -13,14 +13,19 @@ import sys
 from timeit import default_timer as timer
 import threading
 import numpy as np
-from nanotensor.utils import project_folder, list_dir
+try:
+    import Queue as queue
+except ImportError:
+    import queue
+from nanotensor.utils import list_dir
 import tensorflow as tf
 
 
 class DataQueue:
     """Parses data and feeds inputs to the tf graph"""
 
-    def __init__(self, file_list, batch_size=10, queue_size=100, verbose=False, pad=0, trim=True, n_steps=1, min_in_queue=1):
+    def __init__(self, file_list, batch_size=10, queue_size=100, verbose=False, pad=0, trim=True, n_steps=1,
+                 min_in_queue=1):
 
         # test if inputs are correct types
         assert type(file_list) is list, "file_list is not list: type(file_list) = {}".format(type(file_list))
@@ -32,16 +37,15 @@ class DataQueue:
         assert type(trim) is bool, "trim is not bool: type(trim) = {}".format(type(trim))
         assert type(n_steps) is int, "n_steps is not int: type(n_steps) = {}".format(type(n_steps))
         assert queue_size / 3 >= batch_size, "Batch size is larger than 1/3 of the queue size"
+        assert type(min_in_queue) is int, "min_in_queue is not int: type(min_in_queue) = {}".format(type(min_in_queue))
 
         # assign class objects
-        self.file_index = 0
         self.batch_size = batch_size
         self.verbose = verbose
         self.trim = trim
         self.seq_len = n_steps
         # TODO implement padding
         self.pad = 0
-
         # test if files can be read
         self.file_list, self.bad_files = self.read_numpy_files(file_list)
         self.num_files = len(self.file_list)
@@ -71,17 +75,13 @@ class DataQueue:
         self.enqueue_op = self.queue.enqueue([self.dataX, self.dataY])
         # True if there are files that have not been read into the queue
         self.files_left = True
+        self.files_read = 0
+        # create threading queue for file list so there can be asynchronous data batching
+        self.file_list_queue = queue.Queue()
+        for file1 in self.file_list:
+            self.file_list_queue.put(file1)
 
-    def shuffle(self):
-        """Shuffle the input file order"""
-        if self.verbose:
-            print("Shuffle data files", file=sys.stderr)
-        np.random.seed(1)
-        np.random.shuffle(self.file_list)
-        self.files_left = False
-        return True
-
-    def add_to_queue(self, batch, sess, pad=0):
+    def add_to_queue(self, batch, sess):
         """Add a batch to the queue"""
         # if pad > 0:
         #     # if we want to pad sequences with zeros
@@ -119,22 +119,19 @@ class DataQueue:
 
     def read_in_file(self, sess):
         """Read in file from file list"""
-        data = np.load(self.file_list[self.file_index])
-        self.file_index += 1
+        file_path = self.file_list_queue.get()
+        data = np.load(file_path)
         self.create_batches(data, sess)
+        self.file_list_queue.put(file_path)
         return True
 
     def load_data(self, sess):
         """Create infinite loop of adding to queue and shuffling files"""
-        counter = 0
-        while counter <= 10:
+        while True:
             self.read_in_file(sess)
-            if self.verbose:
-                print("File Index = {}".format(self.file_index), file=sys.stderr)
-            if self.file_index == self.num_files:
-                self.shuffle()
-                self.file_index = 0
-        return True
+            self.files_read += 1
+            if self.files_read == self.num_files:
+                self.files_left = False
 
     def get_inputs(self):
         """
@@ -155,16 +152,6 @@ class DataQueue:
             threads.append(t)
         return threads
 
-    # @staticmethod
-    # def pad_with_zeros(matrix, pad=0):
-    #     """Pad an array with zeros so it has the correct shape for the batch"""
-    #     column1 = len(matrix[0][0])
-    #     column2 = len(matrix[0][1])
-    #     one_row = np.array([[np.zeros([column1]), np.zeros([column2])]])
-    #     new_rows = np.repeat(one_row, pad, axis=0)
-    #     # print(new_rows.shape)
-    #     return np.append(matrix, new_rows, axis=0)
-
     @staticmethod
     def read_numpy_files(path_list):
         """Test if files in list are readable by numpy"""
@@ -180,6 +167,16 @@ class DataQueue:
                 bad.append(file1)
 
         return good, bad
+
+        # @staticmethod
+        # def pad_with_zeros(matrix, pad=0):
+        #     """Pad an array with zeros so it has the correct shape for the batch"""
+        #     column1 = len(matrix[0][0])
+        #     column2 = len(matrix[0][1])
+        #     one_row = np.array([[np.zeros([column1]), np.zeros([column2])]])
+        #     new_rows = np.repeat(one_row, pad, axis=0)
+        #     # print(new_rows.shape)
+        #     return np.append(matrix, new_rows, axis=0)
 
 
 def main():

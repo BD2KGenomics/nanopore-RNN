@@ -16,6 +16,7 @@ import unittest
 import os
 import numpy as np
 import threading
+import time
 from nanotensor.queue import DataQueue
 from nanotensor.utils import list_dir
 import tensorflow as tf
@@ -31,7 +32,7 @@ class QueueTest(unittest.TestCase):
         cls.training_files = list_dir(os.path.join(cls.HOME, "test_files/create_training_files/07Jul-20-11h-28m"))
         cls.no_npy = list_dir(os.path.join(cls.HOME, "test_files/create_training_files/"))
         cls.data = DataQueue(cls.training_files, batch_size=2, queue_size=1000, verbose=True, pad=0, trim=True,
-                             n_steps=10)
+                             n_steps=10, min_in_queue=1)
 
     def test_init(self):
         """Test init of DataQueue class"""
@@ -47,6 +48,8 @@ class QueueTest(unittest.TestCase):
                           pad=0, trim="True", n_steps=10)
         self.assertRaises(AssertionError, DataQueue, self.training_files, batch_size=2, queue_size=10, verbose=False,
                           pad=0, trim=True, n_steps="10")
+        self.assertRaises(AssertionError, DataQueue, self.training_files, batch_size=2, queue_size=10, verbose=False,
+                          pad=0, trim=True, n_steps=10, min_in_queue="10")
         self.assertIsInstance(self.data, DataQueue)
         self.assertIsInstance(self.data, DataQueue)
         self.assertEqual(len(self.data.bad_files), 2)
@@ -60,17 +63,6 @@ class QueueTest(unittest.TestCase):
         passing, fails = self.data.read_numpy_files(self.training_files)
         self.assertEqual(len(passing), 5)
         self.assertEqual(len(fails), 2)
-
-    def test_shuffle(self):
-        """Test if shuffle of read files works"""
-        np.random.seed(1)
-        testlist = self.data.file_list[:]
-        self.data.shuffle()
-        self.assertTrue(testlist != self.data.file_list)
-        new_indexes = [2, 1, 4, 0, 3]
-        for index in range(len(testlist)):
-            self.assertTrue(self.data.file_list[index] == testlist[new_indexes[index]])
-        self.assertFalse(self.data.files_left)
 
     def test_add_to_queue(self):
         """Test add to queue function"""
@@ -166,15 +158,13 @@ class QueueTest(unittest.TestCase):
         tf.train.start_queue_runners(sess=sess)
 
         # get test data
-        data = np.load(self.data.file_list[self.data.file_index])
+        data = np.load(self.data.file_list[0])
         data_x = np.asarray([np.asarray(data[:, 0][n]) for n in range(len(data[:, 0]))])
         data_y = np.asarray([np.asarray(data[:, 1][n]) for n in range(len(data[:, 1]))])
-        prev_index = self.data.file_index
 
         # read in first file
         self.data.read_in_file(sess)
         # make sure file index was increased
-        self.assertEqual(prev_index, self.data.file_index - 1)
 
         # get data
         same_data_x, same_data_y = sess.run([dequeue_x_op, dequeue_y_op])
@@ -193,56 +183,95 @@ class QueueTest(unittest.TestCase):
         self.assertTrue(np.isclose(same_data_y4[0], data_y[100:110]).all())
         sess.close()
 
-    # def test_load_data(self):
-    #     """Test read_in_file method"""
-    #     tf.set_random_seed(1)
-    #     # define dequeue operations
-    #     dequeue_x_op, dequeue_y_op = self.data.queue.dequeue_many(1)
-    #     # initialize and start tf session
-    #     init = tf.global_variables_initializer()
-    #     sess = tf.Session()
-    #     sess.run(init)
-    #     tf.train.start_queue_runners(sess=sess)
-    #     # get initial training data
-    #     data = np.load(self.data.file_list[self.data.file_index])
-    #     data_x = np.asarray([np.asarray(data[:, 0][n]) for n in range(len(data[:, 0]))])
-    #     data_y = np.asarray([np.asarray(data[:, 1][n]) for n in range(len(data[:, 1]))])
-    #     prev_index = self.data.file_index
-    #     self.assertEqual(0, prev_index)
-    #     # send process to background so we can continue
-    #     t = threading.Thread(target=self.data.load_data, args=(sess,))
-    #     t.daemon = True  # thread will close when parent quits
-    #     t.start()
-    #     # start = 0
-    #     # end = 10
-    #     #
-    #     # for x in range(100):
-    #     #     if np.isclose(same_data_x4[0], data_x[start:end]).all():
-    #     #         print("DING DING DING")
-    #     #         print(start, end)
-    #     #     start += 10
-    #     #     end += 10
-    #
-    #     #
-    #     # get data from queue
-    #     same_data_x, same_data_y = sess.run([dequeue_x_op, dequeue_y_op])
-    #     same_data_x2, same_data_y2 = sess.run([dequeue_x_op, dequeue_y_op])
-    #     same_data_x3, same_data_y3 = sess.run([dequeue_x_op, dequeue_y_op])
-    #     same_data_x4, same_data_y4 = sess.run([dequeue_x_op, dequeue_y_op])
-    #     #
-    #     t.join()
-    #     sess.close()
+    def test_load_data(self):
+        """Test read_in_file method"""
+        tf.set_random_seed(2)
+        data_queue = DataQueue(self.training_files, batch_size=2, queue_size=100, verbose=True, pad=0, trim=True,
+                               n_steps=10)
+        # define dequeue operations
+        dequeue_x_op, dequeue_y_op = data_queue.queue.dequeue_many(1)
 
-        # # make sure it is same data we expected
-        # self.assertTrue(np.isclose(same_data_x[0], data_x[270:280]).all())
-        # self.assertTrue(np.isclose(same_data_y[0], data_y[270:280]).all())
-        # self.assertTrue(np.isclose(same_data_x2[0], data_x[170:180]).all())
-        # self.assertTrue(np.isclose(same_data_y2[0], data_y[170:180]).all())
-        # self.assertTrue(np.isclose(same_data_x3[0], data_x[330:340]).all())
-        # self.assertTrue(np.isclose(same_data_y3[0], data_y[330:340]).all())
-        # self.assertTrue(np.isclose(same_data_x4[0], data_x[100:110]).all())
-        # self.assertTrue(np.isclose(same_data_y4[0], data_y[100:110]).all())
+        # initialize and start tf session
+        init = tf.global_variables_initializer()
+        coord = tf.train.Coordinator()
+        sess = tf.Session()
+        sess.run(init)
+        tf.train.start_queue_runners(sess=sess, coord=coord)
+        # send process to background so we can continue
+        t = threading.Thread(target=data_queue.load_data, args=(sess,))
+        t.daemon = True  # thread will close when parent quits
+        t.start()
 
+        # making sure the queue is full before dequeue in order to maintain consistancy with a random queue
+        time.sleep(1)
+        same_data_x, same_data_y = sess.run([dequeue_x_op, dequeue_y_op])
+        time.sleep(1)
+        same_data_x2, same_data_y2 = sess.run([dequeue_x_op, dequeue_y_op])
+        time.sleep(1)
+        same_data_x3, same_data_y3 = sess.run([dequeue_x_op, dequeue_y_op])
+        # load data from first two files to make sure we are getting correct data
+        data = np.load(data_queue.file_list[0])
+        data_x_0 = np.asarray([np.asarray(data[:, 0][n]) for n in range(len(data[:, 0]))])
+        data_y_0 = np.asarray([np.asarray(data[:, 1][n]) for n in range(len(data[:, 1]))])
+        data = np.load(data_queue.file_list[1])
+        data_x_1 = np.asarray([np.asarray(data[:, 0][n]) for n in range(len(data[:, 0]))])
+        data_y_1 = np.asarray([np.asarray(data[:, 1][n]) for n in range(len(data[:, 1]))])
+
+        # make sure it is same data we expected
+        self.assertTrue(np.isclose(same_data_x[0], data_x_1[240:250]).all())
+        self.assertTrue(np.isclose(same_data_y[0], data_y_1[240:250]).all())
+        self.assertTrue(np.isclose(same_data_x2[0], data_x_0[270:280]).all())
+        self.assertTrue(np.isclose(same_data_y2[0], data_y_0[270:280]).all())
+        self.assertTrue(np.isclose(same_data_x3[0], data_x_0[0:10]).all())
+        self.assertTrue(np.isclose(same_data_y3[0], data_y_0[0:10]).all())
+
+        dequeue_x_op, dequeue_y_op = data_queue.queue.dequeue_many(50)
+        _, _ = sess.run([dequeue_x_op, dequeue_y_op])
+        _, _ = sess.run([dequeue_x_op, dequeue_y_op])
+        _, _ = sess.run([dequeue_x_op, dequeue_y_op])
+        time.sleep(1)
+        self.assertFalse(data_queue.files_left)
+        sess.close()
+
+    def test_start_threads(self):
+        """Test start threads method"""
+        tf.set_random_seed(2)
+        data_queue = DataQueue(self.training_files, batch_size=1, queue_size=3, verbose=True, pad=0, trim=True,
+                               n_steps=10)
+        # define dequeue operations
+        dequeue_x_op, dequeue_y_op = data_queue.queue.dequeue_many(1)
+
+        # initialize and start tf session
+        init = tf.global_variables_initializer()
+        coord = tf.train.Coordinator()
+        sess = tf.Session()
+        sess.run(init)
+        tf.train.start_queue_runners(sess=sess, coord=coord)
+        # send process to background so we can continue
+        threads = data_queue.start_threads(sess, n_threads=3)
+        # three threads on three different files have started and stopped
+        self.assertEqual(len(threads), 3)
+        self.assertEqual(self.training_files[4], data_queue.file_list_queue.get())
+        self.assertEqual(self.training_files[5], data_queue.file_list_queue.get())
+        self.assertTrue(data_queue.file_list_queue.empty())
+
+        sess.close()
 
 if __name__ == '__main__':
     unittest.main()
+# start = 0
+# end = 10
+
+# for x in range(100):
+#     if np.isclose(same_data_x[0], data_x_1[start:end]).all():
+#         print("DING DING DING X")
+#         print(start, end)
+#     # if np.isclose(same_data_x2[0], data_x_1[start:end]).all():
+#     #     print("DING DING DING X2")
+#     #     print(start, end)
+#     # if np.isclose(same_data_x3[0], data_x_1[start:end]).all():
+#     #     print("DING DING DING X3")
+#     #     print(start, end)
+#
+#     start += 10
+#     end += 10
