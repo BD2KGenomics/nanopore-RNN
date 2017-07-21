@@ -128,7 +128,7 @@ class DataPreparationTest(unittest.TestCase):
             self.assertAlmostEqual(t_test[i], features_t[0][i])
             self.assertAlmostEqual(c_test[i], features_c[0][i])
             self.assertAlmostEqual(categorical_test[i], features_categorical[0][i])
-        self.assertTrue((features_deepnano == self.DEEPNANO.features).all.())
+        self.assertTrue((features_deepnano == self.DEEPNANO.features).all())
         self.assertTrue((features_t == self.T.features).all())
         self.assertTrue((features_c == self.C.features).all())
         self.assertTrue((features_categorical == self.CATEGORICAL.features).all())
