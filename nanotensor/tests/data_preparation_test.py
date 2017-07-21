@@ -114,7 +114,7 @@ class DataPreparationTest(unittest.TestCase):
         self.assertNotEqual(features_deepnano, features_t)
         self.assertNotEqual(features_deepnano, features_c)
         self.assertNotEqual(features_deepnano, features_categorical)
-        self.assertTrue((features_t == features_categorical).all())
+        self.assertTrue(np.isclose(features_t, features_categorical).all())
         deepnano_test = [0.23282488, 0.05420742, 1.16217472, 0.0025]
         t_test = [0.0, 0.0, 0.0, 0.0, 0.40229428, 0.18797024, 0.10281436, 0.0, 0.49232142, -0.25025325, -0.11723997,
                   0.0971415]
@@ -128,10 +128,10 @@ class DataPreparationTest(unittest.TestCase):
             self.assertAlmostEqual(t_test[i], features_t[0][i])
             self.assertAlmostEqual(c_test[i], features_c[0][i])
             self.assertAlmostEqual(categorical_test[i], features_categorical[0][i])
-        self.assertTrue((features_deepnano == self.DEEPNANO.features).all())
-        self.assertTrue((features_t == self.T.features).all())
-        self.assertTrue((features_c == self.C.features).all())
-        self.assertTrue((features_categorical == self.CATEGORICAL.features).all())
+        self.assertTrue(np.isclose(features_deepnano, self.DEEPNANO.features).all())
+        self.assertTrue(np.isclose(features_t, self.T.features).all())
+        self.assertTrue(np.isclose(features_c, self.C.features).all())
+        self.assertTrue(np.isclose(features_categorical, self.CATEGORICAL.features).all())
 
     def test_match_label_with_feature(self):
         """test_match_label_with_feature"""
@@ -139,10 +139,13 @@ class DataPreparationTest(unittest.TestCase):
         final_t = self.T.match_label_with_feature()
         final_c = self.C.match_label_with_feature()
         final_categorical = self.CATEGORICAL.match_label_with_feature()
-        self.assertTrue((final_deepnano == self.DEEPNANO.training_file).all())
-        self.assertTrue((final_t == self.T.training_file).all())
-        self.assertTrue((final_c == self.C.training_file).all())
-        self.assertTrue((final_categorical == self.CATEGORICAL.training_file).all())
+
+        for x in range(len(final_deepnano)):
+            self.assertListEqual(list(final_deepnano[x]), list(self.DEEPNANO.training_file[x]))
+            self.assertListEqual(list(final_c[x]), list(self.C.training_file[x]))
+            self.assertListEqual(list(final_t[x]), list(self.T.training_file[x]))
+            self.assertListEqual(list(final_categorical[x]), list(self.CATEGORICAL.training_file[x]))
+
         self.assertEqual(len(final_deepnano), len(final_t))
         self.assertEqual(len(final_deepnano), len(final_categorical))
         self.assertEqual((15, 2), final_deepnano.shape)
