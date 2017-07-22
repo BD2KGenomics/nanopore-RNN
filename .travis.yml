@@ -23,6 +23,8 @@ before_install:
 - sudo apt-get update -qq
 - sudo apt-get install libhdf5-serial-dev
 - pip install google-compute-engine
+- pip install tensorflow
+
 # sudo apt-get install libbz2-dev
 
 install:
@@ -42,3 +44,4 @@ script:
 
 after_success:
   - codecov -t 3806b863-7185-4be7-9787-a0c1d7963703
+
