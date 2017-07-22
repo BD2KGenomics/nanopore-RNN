@@ -17,7 +17,7 @@ import os
 import numpy as np
 import threading
 import time
-from nanotensor.queue import DataQueue
+from nanotensor.queue import DataQueue, main
 from nanotensor.utils import list_dir
 import tensorflow as tf
 
@@ -251,14 +251,19 @@ class QueueTest(unittest.TestCase):
         threads = data_queue.start_threads(sess, n_threads=3)
         # three threads on three different files have started and stopped
         self.assertEqual(len(threads), 3)
-        self.assertEqual(self.training_files[4], data_queue.file_list_queue.get())
-        self.assertEqual(self.training_files[5], data_queue.file_list_queue.get())
+        self.assertEqual(data_queue.file_list[3], data_queue.file_list_queue.get())
+        self.assertEqual(data_queue.file_list[4], data_queue.file_list_queue.get())
         self.assertTrue(data_queue.file_list_queue.empty())
 
         sess.close()
 
+    def test_main(self):
+        """Test that main does not error"""
+        self.assertIsNone(main())
+
 if __name__ == '__main__':
     unittest.main()
+
 # start = 0
 # end = 10
 

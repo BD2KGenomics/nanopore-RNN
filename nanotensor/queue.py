@@ -183,43 +183,43 @@ def main():
     """Main docstring"""
     start = timer()
 
-    tf.set_random_seed(1234)
-
-    training_dir = "/Users/andrewbailey/nanopore-RNN/test_files/create_training_files/07Jul-20-11h-28m"
-    training_files = list_dir(training_dir, ext="npy")
-
-    # Doing anything with data on the CPU is generally a good idea.
-    data = DataQueue(training_files, batch_size=2, queue_size=10, verbose=False, pad=0, trim=True, n_steps=10)
-    images_batch, labels_batch = data.get_inputs()
-    images_batch1 = tf.reshape(images_batch, [-1, data.n_input])
-    labels_batch1 = tf.reshape(labels_batch, [-1, data.n_classes])
-
-    # simple model
-    input_dim = int(images_batch1.get_shape()[1])
-    weight = tf.Variable(tf.random_normal([input_dim, data.n_classes]))
-    bias = tf.Variable(tf.random_normal([data.n_classes]))
-    prediction = tf.matmul(images_batch1, weight) + bias
-
-    print(tf.shape(prediction))
-    print(tf.shape(labels_batch))
-    print(tf.shape(labels_batch1))
-    loss = tf.nn.softmax_cross_entropy_with_logits(logits=prediction, labels=labels_batch1)
-
-    train_op = tf.train.AdamOptimizer().minimize(loss)
-
-    sess = tf.Session()
-    init = tf.global_variables_initializer()
-    sess.run(init)
-
-    # start the tensorflow QueueRunner's
-    tf.train.start_queue_runners(sess=sess)
-    # start our custom queue runner's threads
-    data.start_threads(sess)
-
-    _, loss_val = sess.run([train_op, loss])
-    print(loss_val)
-
-    sess.close()
+    # tf.set_random_seed(1234)
+    #
+    # training_files = list_dir(training_dir, ext="npy")
+    # training_dir = "/Users/andrewbailey/nanopore-RNN/test_files/create_training_files/07Jul-20-11h-28m"
+    #
+    # # Doing anything with data on the CPU is generally a good idea.
+    # data = DataQueue(training_files, batch_size=2, queue_size=10, verbose=False, pad=0, trim=True, n_steps=10)
+    # images_batch, labels_batch = data.get_inputs()
+    # images_batch1 = tf.reshape(images_batch, [-1, data.n_input])
+    # labels_batch1 = tf.reshape(labels_batch, [-1, data.n_classes])
+    #
+    # # simple model
+    # input_dim = int(images_batch1.get_shape()[1])
+    # weight = tf.Variable(tf.random_normal([input_dim, data.n_classes]))
+    # bias = tf.Variable(tf.random_normal([data.n_classes]))
+    # prediction = tf.matmul(images_batch1, weight) + bias
+    #
+    # print(tf.shape(prediction))
+    # print(tf.shape(labels_batch))
+    # print(tf.shape(labels_batch1))
+    # loss = tf.nn.softmax_cross_entropy_with_logits(logits=prediction, labels=labels_batch1)
+    #
+    # train_op = tf.train.AdamOptimizer().minimize(loss)
+    #
+    # sess = tf.Session()
+    # init = tf.global_variables_initializer()
+    # sess.run(init)
+    #
+    # # start the tensorflow QueueRunner's
+    # tf.train.start_queue_runners(sess=sess)
+    # # start our custom queue runner's threads
+    # data.start_threads(sess)
+    #
+    # _, loss_val = sess.run([train_op, loss])
+    # print(loss_val)
+    #
+    # sess.close()
 
     stop = timer()
     print("Running Time = {} seconds".format(stop - start), file=sys.stderr)
