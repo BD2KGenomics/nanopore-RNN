@@ -3,8 +3,6 @@ channels:
 - defaults
 dependencies:
 - boto=2.47.0=py27_0
-- cudatoolkit=7.5=0
-- cudnn=5.1=0
 - funcsigs=1.0.2=py27_0
 - h5py=2.7.0=np112py27_0
 - hdf5=1.8.17=1
@@ -21,7 +19,6 @@ dependencies:
 - setuptools=27.2.0=py27_0
 - six=1.10.0=py27_0
 - sqlite=3.13.0=0
-- tensorflow-gpu=1.1.0=np112py27_0
 - tk=8.5.18=0
 - werkzeug=0.12.2=py27_0
 - wheel=0.29.0=py27_0

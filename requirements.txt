@@ -2,12 +2,11 @@ biopython==1.69
 boto==2.46.1
 mmtf-python==1.0.5
 msgpack-python==0.4.8
-numpy==1.12.1
+numpy>=1.11.2
 olefile==0.44
 pillow==4.1.0
 pip==9.0.1
-pysam==0.11.1
-python==2.7.13
+pysam>=0.8.2.1
 scipy==0.19.0
 six==1.10.0
 h5py==2.6.0

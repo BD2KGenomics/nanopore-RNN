@@ -1,6 +1,7 @@
 [submodule "signalAlign"]
 	path = signalAlign
 	url = https://github.com/adbailey4/signalAlign.git
+	branch = toil_refactor
 [submodule "nanonet"]
 	path = nanonet
 	url = https://github.com/nanoporetech/nanonet.git
