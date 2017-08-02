@@ -8,7 +8,7 @@
 # TODO Implement scraping into signalAlign C code so we can just ouptut what
 #      we need directly from signalAlign
 # TODO Create updates on when things are being completed
-# Author: Andrew Bailey
+# Authors: Andrew Bailey
 # History: 05/17/17 Created
 ########################################################################
 

@@ -20,7 +20,7 @@ import numpy as np
 import time
 from nanotensor.utils import project_folder, list_dir, DotDict, upload_model, load_json
 from nanotensor.error import Usage
-from nanotensor.data import DataQueue
+from nanotensor.queue import DataQueue
 from nanotensor.network import BuildGraph
 from nanotensor.data_preparation import TrainingData
 import tensorflow as tf

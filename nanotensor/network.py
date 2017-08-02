@@ -19,7 +19,7 @@ import os
 from timeit import default_timer as timer
 from datetime import datetime
 from nanotensor.utils import project_folder, list_dir, load_json, save_json
-from nanotensor.data import DataQueue
+from nanotensor.queue import DataQueue
 import tensorflow as tf
 from tensorflow.contrib import rnn
 
@@ -262,6 +262,24 @@ class BuildGraph():
         else:
             output = tf.matmul(input_data, weight) + bais
         return output
+
+    @staticmethod
+    def fulconn_layer_forTestingOnly(input_data, output_dim, seq_len=1, activation_func=None):
+        # pylint: disable=C0301
+        """Create a fully connected layer.
+        source: https://stackoverflow.com/questions/39808336/tensorflow-bidirectional-dynamic-rnn-none-values-error/40305673
+        """
+        # get input dimentions
+        input_dim = int(input_data.get_shape()[1])
+        weight = tf.Variable(tf.random_normal([input_dim, output_dim*seq_len]))
+        bais = tf.Variable(tf.random_normal([output_dim*seq_len]))
+        if activation_func:
+            output = activation_func(tf.matmul(input_data, weight) + bais)
+        else:
+            output = tf.matmul(input_data, weight) + bais
+        return output, weight, bais
+
+
 
 def main():
     """Control the flow of the program"""
