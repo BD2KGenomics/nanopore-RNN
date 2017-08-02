@@ -94,7 +94,7 @@ class NetworkTest(unittest.TestCase):
         sess.run(init)
         nn = sess.run(u)
         sess.close()
-        np.testing.assert_array_almost_equal(nn[0], np.matmul((self.images_batch.reshape([-1,4])),nn[1]) + nn[2], decimal=5)
+        np.testing.assert_array_almost_equal(nn[0], np.matmul((self.images_batch.reshape([-1,4])),nn[1]) + nn[2], decimal=3)
 
 
 
