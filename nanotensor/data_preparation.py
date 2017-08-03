@@ -7,7 +7,6 @@
 #           and create multiple ways to create labels
 # TODO Implement scraping into signalAlign C code so we can just ouptut what
 #      we need directly from signalAlign
-# TODO Create updates on when things are being completed
 # Author: Andrew Bailey
 # History: 05/17/17 Created
 ########################################################################
@@ -19,17 +18,23 @@ from timeit import default_timer as timer
 import csv
 import itertools
 import os
+import subprocess
 from nanotensor.utils import get_project_file, project_folder, sum_to_one, check_duplicate_characters
 from nanotensor.error import Usage, DataPrepBug
 import h5py
 import numpy as np
 import numpy.lib.recfunctions
 from nanonet.features import events_to_features as nanonet_features
+from signalalign.scripts.nanoporeParamRunner import estimate_params
 
 
 class TrainingData(object):
     """docstring for TrainingData."""
-    def __init__(self, fast5_file, alignment_file, strand_name="template", prob=False, kmer_len=5, alphabet="ATGC", nanonet=True, deepnano=False, forward=True, cutoff=0.4):
+    def __init__(self, fast5_file, alignment_file, strand_name="template", prob=False, kmer_len=5, alphabet="ATGC",
+                 nanonet=True, deepnano=False, forward=True, cutoff=0.4,
+                 template_model="../signalAlign/models/testModelR9p4_acegt_template.model",
+                 complement_model="../signalAlign/models/testModelR9_complement_pop2.model"):
+
         self.fast5_file = fast5_file
         self.alignment_file = alignment_file
         assert self.fast5_file.endswith("fast5"), "Expecting ONT fast5 file: {}".format(fast5_file)
@@ -43,6 +48,9 @@ class TrainingData(object):
         self.prob = prob
         self.nanonet = nanonet
         self.deepnano = deepnano
+        if self.deepnano:
+            output = subprocess.check_output("estimateNanoporeParams;  exit 0", shell=True, stderr=subprocess.STDOUT)
+            assert "Could not" == str(output)[:9], "estimateNanoporeParams is not in path"
         self.strand_name = strand_name
         self.forward = forward
         self.cutoff = cutoff
@@ -55,6 +63,8 @@ class TrainingData(object):
         self.training_file = []
         ## QC metrics for Deepnano labels
         self.missed = []
+        self.template_lookup_table = template_model
+        self.complement_lookup_table = complement_model
 
     def run_complete_analysis(self):
         """Run complete flow of analysis"""
@@ -398,11 +408,18 @@ class TrainingData(object):
 
     def deepnano_features(self, events):
         """Replicating deepnano's feature definition"""
+        params = estimate_params(self.fast5_file, binary_path="estimateNanoporeParams",
+                                 template_lookup_table=self.template_lookup_table,
+                                 complement_lookup_table=self.complement_lookup_table,
+                                 twoD=True, verbose=False)
+        # print(params)
         new_events = []
         try:
             for event in events:
-                mean = event["mean"]
-                stdv = event["stdv"]
+                mean = (event["mean"] - params["shift"]) / params["scale"]
+                stdv = event["stdv"] / params["scale_sd"]
+                # mean = event["mean"]
+                # stdv = event["stdv"]
                 length = event["length"]
                 new_events.append(self.preproc_event(mean, stdv, length))
             new_events = np.asarray(new_events)
@@ -442,23 +459,23 @@ def main():
     #
     DEEPNANO = TrainingData(canonical_fast5, canonical_tsv, strand_name="template", prob=False, kmer_len=2, alphabet="ATGC", nanonet=False, deepnano=True)
 
-    CATEGORICAL = TrainingData(canonical_fast5, canonical_tsv, strand_name="template", prob=False, kmer_len=5, alphabet="ATGCE", nanonet=True, deepnano=False)
-
-    T = TrainingData(canonical_fast5, canonical_tsv, strand_name="template", prob=True, kmer_len=5, alphabet="ATGCE", nanonet=True, deepnano=False)
-
-    C = TrainingData(canonical_fast5, canonical_tsv, strand_name="complement", prob=True, kmer_len=5, alphabet="ATGCE", nanonet=True, deepnano=False)
+    # CATEGORICAL = TrainingData(canonical_fast5, canonical_tsv, strand_name="template", prob=False, kmer_len=5, alphabet="ATGCE", nanonet=True, deepnano=False)
+    #
+    # T = TrainingData(canonical_fast5, canonical_tsv, strand_name="template", prob=True, kmer_len=5, alphabet="ATGCE", nanonet=True, deepnano=False)
+    #
+    # C = TrainingData(canonical_fast5, canonical_tsv, strand_name="complement", prob=True, kmer_len=5, alphabet="ATGCE", nanonet=True, deepnano=False)
 
     # data = TrainingData(canonical_fast5, canonical_tsv, strand_name="template", prob=False, kmer_len=2, alphabet="ATGC", nanonet=False, deepnano=True)
     # data.scrape_signalalign()
     # labels = data.create_deepnano_labels()
     a = DEEPNANO.run_complete_analysis()
     print(a)
-    b = CATEGORICAL.run_complete_analysis()
-    print(b)
-    c = T.run_complete_analysis()
-    print(c)
-    d = C.run_complete_analysis()
-    print(d)
+    # b = CATEGORICAL.run_complete_analysis()
+    # print(b)
+    # c = T.run_complete_analysis()
+    # print(c)
+    # d = C.run_complete_analysis()
+    # print(d)
 
     # kmer_dict = {"NN":0}
     # kmer_list = [["4MER", 1, 100], ["4MER", 1, 101], ["4MER", .1, 102]]

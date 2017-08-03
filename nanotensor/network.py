@@ -91,7 +91,7 @@ class BuildGraph():
         """Create a model from a list of dictironaries with "name", "type", and "size" keys"""
         assert network_model != None, "Must specify network structure. [{'type': 'blstm', 'name': 'blstm_layer1', 'size': 128}, ...]"
         ref_types = {"tanh": tf.tanh, "relu":tf.nn.relu, "sigmoid":tf.sigmoid,\
-                    "softplus":tf.nn.softplus}
+                    "softplus":tf.nn.softplus, "none": None}
         input_vector = self.x
         prevlayer_size = 0
         for layer in network_model:
@@ -265,81 +265,81 @@ class BuildGraph():
 
 def main():
     """Control the flow of the program"""
-    start = timer()
-
+    # start = timer()
     #
-    # input1 = self.x
-    # for layer_size in range(self.n_layers):
-    #     input1 = self.blstm(input1, layer_name="blstm_layer"+str(layer_size),\
-    #     n_hidden=self.layer_sizes[layer_size], forget_bias=self.forget_bias)
-    # return input1
-
-    # TODO make hyperparameters a json file
-    # Parameters
-    learning_rate = 0.001
-    training_iters = 100
-    batch_size = 2
-    queue_size = 10
-    display_step = 10
-    n_steps = 300 # one vector per timestep
-    layer_sizes = tuple([100]) # hidden layer num of features
-    training_dir = project_folder()+"/training2"
-    training_files = list_dir(training_dir, ext="npy")
-
-    # continually load data on the CPU
-    with tf.device("/cpu:0"):
-        data = DataQueue(training_files, batch_size, queue_size=queue_size, verbose=False, \
-                pad=0, trim=True, n_steps=n_steps)
-        images_batch, labels_batch = data.get_inputs()
-    # build model
-    model = BuildGraph(data.n_input, data.n_classes, learning_rate, n_steps=n_steps, \
-            layer_sizes=layer_sizes, batch_size=batch_size, x=images_batch, y=labels_batch)
-    cost = model.cost
-    accuracy = model.accuracy
-    merged_summaries = model.merged_summaries
-    optimizer = model.optimizer
-    # define what we want from the optimizer run
-    init = tf.global_variables_initializer()
-
-    saver = tf.train.Saver(max_to_keep=4, keep_checkpoint_every_n_hours=2)
-    # Launch the graph
-    with tf.Session(config=tf.ConfigProto(intra_op_parallelism_threads=8)) as sess:
-        # create logs
-        logfolder_path = os.path.join(project_folder(), 'logs/', \
-                        datetime.now().strftime("%m%b-%d-%Hh-%Mm"))
-        writer = tf.summary.FileWriter((logfolder_path), sess.graph)
-        # initialize
-        sess.run(init)
-        step = 1
-        # start queue
-        tf.train.start_queue_runners(sess=sess)
-        data.start_threads(sess)
-        # Keep training until reach max iterations
-        while step * batch_size < training_iters:
-            # Run optimization and update layers
-            output_states = sess.run([optimizer, model.zero_state])
-            if step % display_step == 0:
-                # Calculate batch loss and accuracy
-                run_metadata = tf.RunMetadata()
-                acc, summary, loss = sess.run([accuracy, merged_summaries, cost], run_metadata=run_metadata)
-                # add summary statistics
-                writer.add_summary(summary, step)
-                print("Iter " + str(step*batch_size) + ", Minibatch Loss= " + \
-                      "{:.6f}".format(loss) + ", Training Accuracy= " + \
-                      "{:.5f}".format(acc))
-            step += 1
-
-        print("Optimization Finished!")
-        # Calculate accuracy for a bunch of test data
-
-        saver.save(sess, project_folder()+'/testing/my_test_model.ckpt', global_step=model.global_step)
-
-        print("Testing Accuracy: {}".format(sess.run(accuracy)))
-        writer.close()
+    # #
+    # # input1 = self.x
+    # # for layer_size in range(self.n_layers):
+    # #     input1 = self.blstm(input1, layer_name="blstm_layer"+str(layer_size),\
+    # #     n_hidden=self.layer_sizes[layer_size], forget_bias=self.forget_bias)
+    # # return input1
     #
-
-    stop = timer()
-    print("Running Time = {} seconds".format(stop-start), file=sys.stderr)
+    # # TODO make hyperparameters a json file
+    # # Parameters
+    # learning_rate = 0.001
+    # training_iters = 100
+    # batch_size = 2
+    # queue_size = 10
+    # display_step = 10
+    # n_steps = 300 # one vector per timestep
+    # layer_sizes = tuple([100]) # hidden layer num of features
+    # training_dir = project_folder()+"/training2"
+    # training_files = list_dir(training_dir, ext="npy")
+    #
+    # # continually load data on the CPU
+    # with tf.device("/cpu:0"):
+    #     data = DataQueue(training_files, batch_size, queue_size=queue_size, verbose=False, \
+    #             pad=0, trim=True, n_steps=n_steps)
+    #     images_batch, labels_batch = data.get_inputs()
+    # # build model
+    # model = BuildGraph(data.n_input, data.n_classes, learning_rate, n_steps=n_steps, \
+    #         layer_sizes=layer_sizes, batch_size=batch_size, x=images_batch, y=labels_batch)
+    # cost = model.cost
+    # accuracy = model.accuracy
+    # merged_summaries = model.merged_summaries
+    # optimizer = model.optimizer
+    # # define what we want from the optimizer run
+    # init = tf.global_variables_initializer()
+    #
+    # saver = tf.train.Saver(max_to_keep=4, keep_checkpoint_every_n_hours=2)
+    # # Launch the graph
+    # with tf.Session(config=tf.ConfigProto(intra_op_parallelism_threads=8)) as sess:
+    #     # create logs
+    #     logfolder_path = os.path.join(project_folder(), 'logs/', \
+    #                     datetime.now().strftime("%m%b-%d-%Hh-%Mm"))
+    #     writer = tf.summary.FileWriter((logfolder_path), sess.graph)
+    #     # initialize
+    #     sess.run(init)
+    #     step = 1
+    #     # start queue
+    #     tf.train.start_queue_runners(sess=sess)
+    #     data.start_threads(sess)
+    #     # Keep training until reach max iterations
+    #     while step * batch_size < training_iters:
+    #         # Run optimization and update layers
+    #         output_states = sess.run([optimizer, model.zero_state])
+    #         if step % display_step == 0:
+    #             # Calculate batch loss and accuracy
+    #             run_metadata = tf.RunMetadata()
+    #             acc, summary, loss = sess.run([accuracy, merged_summaries, cost], run_metadata=run_metadata)
+    #             # add summary statistics
+    #             writer.add_summary(summary, step)
+    #             print("Iter " + str(step*batch_size) + ", Minibatch Loss= " + \
+    #                   "{:.6f}".format(loss) + ", Training Accuracy= " + \
+    #                   "{:.5f}".format(acc))
+    #         step += 1
+    #
+    #     print("Optimization Finished!")
+    #     # Calculate accuracy for a bunch of test data
+    #
+    #     saver.save(sess, project_folder()+'/testing/my_test_model.ckpt', global_step=model.global_step)
+    #
+    #     print("Testing Accuracy: {}".format(sess.run(accuracy)))
+    #     writer.close()
+    # #
+    #
+    # stop = timer()
+    # print("Running Time = {} seconds".format(stop-start), file=sys.stderr)
 
 
 if __name__ == "__main__":

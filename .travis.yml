@@ -32,6 +32,9 @@ install:
 - "python setup.py install"
 - "cd .."
 - "python setup.py install"
+- "cd signalAlign"
+- "make"
+- "cd .."
 - "cd nanotensor"
 
 script:
