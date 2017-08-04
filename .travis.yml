@@ -22,21 +22,51 @@ branches:
 before_install:
 - sudo apt-get update -qq
 - sudo apt-get install libhdf5-serial-dev
+- sudo apt-get install zlib1g-dev
 - pip install google-compute-engine
 - pip install tensorflow
+- git clone https://github.com/lh3/bwa.git
+- cd bwa
+- make
+- export $PATH=$(pwd):$PATH
 
 # sudo apt-get install libbz2-dev
 
 install:
+- sudo apt-get update
+# We do this conditionally because it saves us some downloading if the
+# version is the same.
+- if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]]; then
+    wget https://repo.continuum.io/miniconda/Miniconda2-latest-Linux-x86_64.sh -O miniconda.sh;
+  else
+    wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh;
+  fi
+- bash miniconda.sh -b -p $HOME/miniconda
+- export PATH="$HOME/miniconda/bin:$PATH"
+- hash -r
+- conda config --set always_yes yes --set changeps1 no
+- conda update -q conda
+# Useful for debugging any issues with conda
+- conda info -a
 - "git submodule update --remote"
+- "conda create env -f environment2.yml"
+- "source activate nanotensor2"
 - "cd nanonet"
 - "python setup.py install"
 - "cd ../signalAlign"
 - "make"
+- "export $PATH=$(pwd)/bin:$PATH"
 - "python setup.py install"
 - "cd .."
 - "python setup.py install"
 - "cd nanotensor"
+
+
+
+# Replace dep1 dep2 ... with your dependencies
+- conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION dep1 dep2 ...
+- source activate test-environment
+- python setup.py install
 
 script:
 - coverage run --source nanotensor -m pytest
