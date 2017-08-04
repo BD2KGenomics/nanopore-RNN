@@ -50,6 +50,8 @@ install:
 # Useful for debugging any issues with conda
 - conda info -a
 - git submodule update --remote
+- ls
+- pwd
 - conda create env -f requirements2.yml
 - source activate nanotensor2
 - cd nanonet
