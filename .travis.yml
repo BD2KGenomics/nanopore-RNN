@@ -29,6 +29,7 @@ before_install:
 - cd bwa
 - make
 - export PATH=$PATH:$PWD
+- cd ..
 
 # sudo apt-get install libbz2-dev
 
@@ -48,18 +49,18 @@ install:
 - conda update -q conda
 # Useful for debugging any issues with conda
 - conda info -a
-- "git submodule update --remote"
-- "conda create env -f requirements2.yml"
-- "source activate nanotensor2"
-- "cd nanonet"
-- "python setup.py install"
-- "cd ../signalAlign"
-- "make"
-- "export PATH=$PATH:$PWD/bin"
-- "python setup.py install"
-- "cd .."
-- "python setup.py install"
-- "cd nanotensor"
+- git submodule update --remote
+- conda create env -f requirements2.yml
+- source activate nanotensor2
+- cd nanonet
+- python setup.py install
+- cd ../signalAlign
+- make
+- export PATH=$PATH:$PWD/bin
+- python setup.py install
+- cd ..
+- python setup.py install
+- cd nanotensor
 
 
 
