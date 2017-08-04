@@ -31,7 +31,7 @@ install:
 - "git submodule update --remote"
 - "cd nanonet"
 - "python setup.py install"
-- "cd signalAlign"
+- "cd ../signalAlign"
 - "make"
 - "python setup.py install"
 - "cd .."
