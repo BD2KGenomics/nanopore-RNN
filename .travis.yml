@@ -28,14 +28,14 @@ before_install:
 # sudo apt-get install libbz2-dev
 
 install:
+- "git submodule update --remote"
 - "cd nanonet"
-- "python setup.py install"
-- "cd .."
 - "python setup.py install"
 - "cd signalAlign"
 - "make"
 - "python setup.py install"
 - "cd .."
+- "python setup.py install"
 - "cd nanotensor"
 
 script:
