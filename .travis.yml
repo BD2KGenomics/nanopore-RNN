@@ -52,7 +52,7 @@ install:
 - git submodule update --remote
 - ls
 - pwd
-- conda create env -f requirements2.yml
+- conda env create -f requirements2.yml
 - source activate nanotensor2
 - cd nanonet
 - python setup.py install
