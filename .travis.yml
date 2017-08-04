@@ -28,7 +28,7 @@ before_install:
 - git clone https://github.com/lh3/bwa.git
 - cd bwa
 - make
-- export $PATH=$(pwd):$PATH
+- export PATH=$PATH:$PWD
 
 # sudo apt-get install libbz2-dev
 
@@ -55,7 +55,7 @@ install:
 - "python setup.py install"
 - "cd ../signalAlign"
 - "make"
-- "export $PATH=$(pwd)/bin:$PATH"
+- "export PATH=$PATH:$PWD/bin"
 - "python setup.py install"
 - "cd .."
 - "python setup.py install"
