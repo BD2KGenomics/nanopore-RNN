@@ -52,6 +52,7 @@ install:
 - git submodule update --remote
 - ls
 - pwd
+- pip install marginalign
 - conda env create -f requirements.yml
 - source activate nanotensor
 - cd nanonet

@@ -71,7 +71,7 @@ dependencies:
   - docutils==0.13.1
   - futures==2.2.0
   - jmespath==0.9.1
-  - marginalign==1.1.9
+#  - marginalign==1.1.9
   - myriad==0.1.4
   - pyasn1==0.3.2
   - pyvcf==0.6.7
