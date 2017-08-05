@@ -63,6 +63,7 @@ install:
 - python setup.py install
 - cd ..
 - python setup.py install
+- conda install numpy
 - cd nanotensor
 
 script:
