@@ -55,10 +55,12 @@ class DataPreparationTest(unittest.TestCase):
                                      '-d0d5c48dd1c8_Basecall_2D_2d.sm.forward.short.tsv')
         # canonical_tsv = os.path.join(cls.HOME, \
         # "test_files/signalalignment_files/canonical/18a21abc-7827-4ed7-8919-c27c9bd06677_Basecall_2D_template.sm.forward.tsv")
+        template_model = os.path.join(cls.HOME, "signalAlign/models/testModelR9p4_acegt_template.model")
+        complement_model = os.path.join(cls.HOME, "signalAlign/models/testModelR9_complement_pop2.model")
 
         cls.DEEPNANO = TrainingData(canonical_fast5, canonical_tsv, strand_name="template", prob=False, kmer_len=2,
-                                    alphabet="ATGC", nanonet=False, deepnano=True, template_model="../../signalAlign/models/testModelR9p4_acegt_template.model",
-                                    complement_model="../../signalAlign/models/testModelR9_complement_pop2.model")
+                                    alphabet="ATGC", nanonet=False, deepnano=True, template_model=template_model,
+                                    complement_model=complement_model)
 
         cls.CATEGORICAL = TrainingData(canonical_fast5, canonical_tsv, strand_name="template", prob=False, kmer_len=5,
                                        alphabet="ATGCE", nanonet=True, deepnano=False)
