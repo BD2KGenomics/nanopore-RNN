@@ -61,9 +61,10 @@ install:
 - make
 - export PATH=$PATH:$PWD/bin
 - python setup.py install
+- ./bin/testSignalAlign
 - cd ..
 - python setup.py install
-- conda install numpy
+- pip install --update numpy
 - cd nanotensor
 
 script:
