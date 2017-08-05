@@ -30,6 +30,7 @@ from signalalign.scripts.nanoporeParamRunner import estimate_params
 
 class TrainingData(object):
     """docstring for TrainingData."""
+
     def __init__(self, fast5_file, alignment_file, strand_name="template", prob=False, kmer_len=5, alphabet="ATGC",
                  nanonet=True, deepnano=False, forward=True, cutoff=0.4,
                  template_model="../signalAlign/models/testModelR9p4_acegt_template.model",
@@ -39,18 +40,27 @@ class TrainingData(object):
         self.alignment_file = alignment_file
         assert self.fast5_file.endswith("fast5"), "Expecting ONT fast5 file: {}".format(fast5_file)
         assert self.alignment_file.endswith("tsv"), "Expecting signalAlign tsv file: {}".format(alignment_file)
+        self.template_lookup_table = template_model
+        self.complement_lookup_table = complement_model
         assert nanonet != deepnano, "Must select Deepnano or Nanonet"
         if deepnano:
             assert not prob, "Proabability vector is not an option when using deepnano data preparation"
-        # define arguments
+            output = subprocess.check_output("estimateNanoporeParams;  exit 0", shell=True, stderr=subprocess.STDOUT)
+            assert "Could not" == str(output)[:9], "estimateNanoporeParams is not in path"
+            assert os.path.isfile(template_model), "Template model file does not exist"
+            assert os.path.isfile(complement_model), "Complement model file does not exist"
+            self.params = estimate_params(self.fast5_file, binary_path="estimateNanoporeParams",
+                                          template_lookup_table=self.template_lookup_table,
+                                          complement_lookup_table=self.complement_lookup_table,
+                                          twoD=True, verbose=False)
+            # print(params)
+
+            # define arguments
         self.alphabet = ''.join(sorted(alphabet))
         self.length = kmer_len
         self.prob = prob
         self.nanonet = nanonet
         self.deepnano = deepnano
-        if self.deepnano:
-            output = subprocess.check_output("estimateNanoporeParams;  exit 0", shell=True, stderr=subprocess.STDOUT)
-            assert "Could not" == str(output)[:9], "estimateNanoporeParams is not in path"
         self.strand_name = strand_name
         self.forward = forward
         self.cutoff = cutoff
@@ -63,8 +73,6 @@ class TrainingData(object):
         self.training_file = []
         ## QC metrics for Deepnano labels
         self.missed = []
-        self.template_lookup_table = template_model
-        self.complement_lookup_table = complement_model
 
     def run_complete_analysis(self):
         """Run complete flow of analysis"""
@@ -115,10 +123,10 @@ class TrainingData(object):
                 # only grab template strand
                 kmer_list = (kmer, prob, seq_pos)
                 if self.strand_name == "template":
-                    if strand =="t":
+                    if strand == "t":
                         kmers[event_index].append(kmer_list)
                 elif self.strand_name == "complement":
-                    if strand =="c":
+                    if strand == "c":
                         kmers[event_index].append(kmer_list)
         self.kmers = kmers
         return kmers
@@ -141,9 +149,9 @@ class TrainingData(object):
             counter = index
             if prev_counter != -1:
                 # if there are skipped events, label them with null labels
-                while counter != prev_counter+1:
+                while counter != prev_counter + 1:
                     null = self.create_null_label()
-                    final_matrix.append([self.features[prev_counter+1], null])
+                    final_matrix.append([self.features[prev_counter + 1], null])
                     prev_counter += 1
             # label this specific event
             final_matrix.append([self.features[index], label])
@@ -159,11 +167,11 @@ class TrainingData(object):
             kmer_dict = self.deepnano_dict(self.alphabet, self.length)
             vector = self.null_vector_deepnano(kmer_dict)
         elif self.prob:
-            vector_len = (len(self.alphabet)**self.length)
-            vector = numpy.array([1.0/vector_len]*vector_len)
+            vector_len = (len(self.alphabet) ** self.length)
+            vector = numpy.array([1.0 / vector_len] * vector_len)
         else:
-            vector_len = (len(self.alphabet)**self.length)
-            vector = numpy.zeros(vector_len+1)
+            vector_len = (len(self.alphabet) ** self.length)
+            vector = numpy.zeros(vector_len + 1)
             vector[vector_len] = 1
         return vector
 
@@ -190,7 +198,7 @@ class TrainingData(object):
         # determine starting position depending on direction of read
         if forward:
             old_position = 0
-        else: # backward
+        else:  # backward
             old_position = float('inf')
         # get translation dictionary
         kmer_dict = self.deepnano_dict(self.alphabet, self.length)
@@ -224,25 +232,25 @@ class TrainingData(object):
                 else:
                     # current event has lower proability than previous so assign null vector
                     labels[index] = self.null_vector_deepnano(kmer_dict)
-            elif prob < cutoff: # assign low probability events with null labels
+            elif prob < cutoff:  # assign low probability events with null labels
                 labels[index] = self.null_vector_deepnano(kmer_dict)
             else:
                 # NOTE looping around the start and end of circular chromosome?
                 if forward:
                     diff = position - old_position
-                else: # backward
+                else:  # backward
                     diff = old_position - position
-                if diff > 0 or first: # if we moved in correct direction assign kmer
+                if diff > 0 or first:  # if we moved in correct direction assign kmer
                     labels[index] = self.create_deepnano_vector(kmer_dict, diff, best_kmer, index, position, prob)
                     old_position, old_prob, old_index = position, prob, index
                     # not first event
                     first = False
-                else: # moved in wrong direction
+                else:  # moved in wrong direction
                     # assign null label
                     labels[index] = self.null_vector_deepnano(kmer_dict)
                     # print("###### CREATED null LABEL ###########", index, position, diff, prob)
                     # if difference is greater than -10 the alignment was reset and
-                    if diff < -10:# or prob > cutoff:
+                    if diff < -10:  # or prob > cutoff:
                         # print("REASSIGN", index, position, diff, prob)
                         old_position = position
                         old_prob = prob
@@ -256,21 +264,22 @@ class TrainingData(object):
                             print("JUST A SKIP BACK = ", diff, index)
 
         if self.debug:
-            print(sum(self.counter_list)/len(self.counter_list))
+            print(sum(self.counter_list) / len(self.counter_list))
             print(max(self.counter_list), min(self.counter_list))
             print("Length of sequence =", abs(first_position - position), sum(self.counter_list))
             print("Number of misses =", len(self.missed))
             print("Skipped Bases =", sum([x[0] for x in self.missed][1:]))
-            print("Percent Missed =", float(sum([x[0] for x in self.missed][1:]))/float(abs(first_position - position)) * 100)
+            print("Percent Missed =",
+                  float(sum([x[0] for x in self.missed][1:])) / float(abs(first_position - position)) * 100)
             print((self.counter_list))
-            print(sum(self.counter_list)/len(self.counter_list))
-            print("Average Proabability = ", sum(probs)/(len(probs)))
+            print(sum(self.counter_list) / len(self.counter_list))
+            print("Average Proabability = ", sum(probs) / (len(probs)))
         return labels
 
     def null_vector_deepnano(self, kmer_dict):
         "Creat null_vector_deepnano"
         vector = numpy.zeros(len(kmer_dict))
-        zero_label = "N"*self.length
+        zero_label = "N" * self.length
         vector[kmer_dict[zero_label]] = 1
         return vector
 
@@ -278,18 +287,20 @@ class TrainingData(object):
         """Label indices with correct deepnano label"""
         vector = numpy.zeros(len(kmer_dict))
         if diff <= self.length:
-            kmer = best_kmer[-diff:]+("N" * (self.length-diff))
+            kmer = best_kmer[-diff:] + ("N" * (self.length - diff))
             if self.debug:
                 self.good_counter += diff
         else:
             kmer = best_kmer[-self.length:]
             if self.debug:
-                print("NEW COUNTER = ", self.good_counter, "Missed {}".format(diff-self.length), index, position, prob)
+                print("NEW COUNTER = ", self.good_counter, "Missed {}".format(diff - self.length), index, position,
+                      prob)
                 self.counter_list.append(self.good_counter)
                 self.good_counter = 2
                 # print("Missed a base!!!", index, position, diff-self.length, prob)
-                self.missed.append([diff-self.length, index, position])
-        assert len(kmer) == self.length, "Length of kmer is not equal to defined length: len({}) != {}".format(kmer, self.length)
+                self.missed.append([diff - self.length, index, position])
+        assert len(kmer) == self.length, "Length of kmer is not equal to defined length: len({}) != {}".format(kmer,
+                                                                                                               self.length)
         try:
             # make sure if one kmer has two probabilities we assign the highest probability
             vector[kmer_dict[kmer]] = 1
@@ -317,7 +328,7 @@ class TrainingData(object):
         """Create translation dictionary for deepnano labels"""
         assert "N" not in alphabet
         # remove =
-        kmer_dict = self.getkmer_dict(alphabet+"N", length, flip=flip, deepnano=True)
+        kmer_dict = self.getkmer_dict(alphabet + "N", length, flip=flip, deepnano=True)
         return kmer_dict
 
     def create_kmer_labels(self):
@@ -341,12 +352,12 @@ class TrainingData(object):
         kmers = [''.join(p) for p in itertools.product(alphabet, repeat=length)]
         if deepnano:
             # remove kmers with incorrect syntax
-            kmers = [kmer for kmer in kmers if kmer.find("N") == -1 or kmer ==\
-                    kmer[:kmer.find("N")]+("N"*(length-kmer.find("N")))]
+            kmers = [kmer for kmer in kmers if kmer.find("N") == -1 or kmer == \
+                     kmer[:kmer.find("N")] + ("N" * (length - kmer.find("N")))]
         else:
             # add null label for categorical classification
             if not prob:
-                kmers.append("N"*length)
+                kmers.append("N" * length)
 
         # create dictionary depending on kmer to index or index to kmer
         if flip:
@@ -371,7 +382,9 @@ class TrainingData(object):
         vector = numpy.zeros(len(kmer_dict))
         for kmer in kmer_list:
             trimmed_kmer = kmer[0][-self.length:]
-            assert len(trimmed_kmer) == self.length, "Length of kmer is not equal to defined length: len({}) != {}".format(trimmed_kmer, self.length)
+            assert len(
+                trimmed_kmer) == self.length, "Length of kmer is not equal to defined length: len({}) != {}".format(
+                trimmed_kmer, self.length)
             try:
                 # make sure if one kmer has two probabilities we assign the highest probability
                 if vector[kmer_dict[trimmed_kmer]] < kmer[1]:
@@ -387,8 +400,9 @@ class TrainingData(object):
         # check all kmers for most probable
         best_kmer, _, _ = self.get_most_probable_kmer(kmer_list)
         final_kmer = best_kmer[-self.length:]
-        assert len(final_kmer) == self.length, "Length of kmer is not equal to defined length: len({}) != {}".format(final_kmer, self.length)
-        try: # to put most probable kmer into vector
+        assert len(final_kmer) == self.length, "Length of kmer is not equal to defined length: len({}) != {}".format(
+            final_kmer, self.length)
+        try:  # to put most probable kmer into vector
             vector = numpy.zeros(len(kmer_dict))
             vector[kmer_dict[final_kmer]] = 1
         except KeyError as error:
@@ -408,16 +422,11 @@ class TrainingData(object):
 
     def deepnano_features(self, events):
         """Replicating deepnano's feature definition"""
-        params = estimate_params(self.fast5_file, binary_path="estimateNanoporeParams",
-                                 template_lookup_table=self.template_lookup_table,
-                                 complement_lookup_table=self.complement_lookup_table,
-                                 twoD=True, verbose=False)
-        # print(params)
         new_events = []
         try:
             for event in events:
-                mean = (event["mean"] - params["shift"]) / params["scale"]
-                stdv = event["stdv"] / params["scale_sd"]
+                mean = (event["mean"] - self.params["shift"]) / self.params["scale"]
+                stdv = event["stdv"] / self.params["scale_sd"]
                 # mean = event["mean"]
                 # stdv = event["stdv"]
                 length = event["length"]
@@ -432,7 +441,7 @@ class TrainingData(object):
         "Normalizing event information for deepnano feature generation"
         mean = mean / 100.0 - 0.66
         std = std - 1
-        return [mean, mean*mean, std, length]
+        return [mean, mean * mean, std, length]
 
     def save_training_file(self, output_name, output_dir):
         """Create training file and save it as an .npy file"""
@@ -440,24 +449,27 @@ class TrainingData(object):
         output_file = os.path.join(output_dir, output_name)
         self.run_complete_analysis()
         np.save(output_file, self.training_file)
-        return output_file+".npy"
+        return output_file + ".npy"
 
     def interpolate(self):
         """Guess a distribution of data"""
         return "from scipy.interpolate import interp1d"
+
 
 def main():
     """Mainly used for testing the methods within data_preparation.py"""
     start = timer()
     #
     canonical_fast5 = \
-    get_project_file("test_files/minion-reads/canonical/miten_PC_20160820_FNFAD20259_MN17223_sequencing_run_AMS_158_R9_WGA_Ecoli_08_20_16_43623_ch100_read104_strand.fast5")
-
+        get_project_file(
+            "test_files/minion-reads/canonical/miten_PC_20160820_FNFAD20259_MN17223_sequencing_run_AMS_158_R9_WGA_Ecoli_08_20_16_43623_ch100_read104_strand.fast5")
 
     canonical_tsv = \
-    get_project_file("test_files/signalalignment_files/canonical/18a21abc-7827-4ed7-8919-c27c9bd06677_Basecall_2D_template.sm.forward.tsv")
+        get_project_file(
+            "test_files/signalalignment_files/canonical/18a21abc-7827-4ed7-8919-c27c9bd06677_Basecall_2D_template.sm.forward.tsv")
     #
-    DEEPNANO = TrainingData(canonical_fast5, canonical_tsv, strand_name="template", prob=False, kmer_len=2, alphabet="ATGC", nanonet=False, deepnano=True)
+    DEEPNANO = TrainingData(canonical_fast5, canonical_tsv, strand_name="template", prob=False, kmer_len=2,
+                            alphabet="ATGC", nanonet=False, deepnano=True)
 
     # CATEGORICAL = TrainingData(canonical_fast5, canonical_tsv, strand_name="template", prob=False, kmer_len=5, alphabet="ATGCE", nanonet=True, deepnano=False)
     #
@@ -488,7 +500,8 @@ def main():
     # np.load(project_folder()+"/events.npy")
 
     stop = timer()
-    print("Running Time = {} seconds".format(stop-start), file=sys.stderr)
+    print("Running Time = {} seconds".format(stop - start), file=sys.stderr)
+
 
 if __name__ == "__main__":
     main()

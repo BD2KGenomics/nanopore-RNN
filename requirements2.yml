@@ -1,4 +1,4 @@
-name: nanotensor2
+name: nanotensor
 channels:
 - bioconda
 - r
@@ -79,5 +79,5 @@ dependencies:
   - rsa==3.4.2
   - s3transfer==0.1.10
   - sonlib==1.1.0
-prefix: /Users/andrewbailey/anaconda3/envs/nanotensor2
+  - google-compute-engine==2.4.1
 
