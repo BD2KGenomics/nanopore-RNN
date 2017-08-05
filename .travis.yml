@@ -53,7 +53,7 @@ install:
 - ls
 - pwd
 - conda env create -f requirements.yml
-- source activate nanotensor2
+- source activate nanotensor
 - cd nanonet
 - python setup.py install
 - cd ../signalAlign
