@@ -26,7 +26,7 @@ def main():
 
     setup(
         name="nanotensor",
-        version='0.1',
+        version='0.2',
         description='BLSTM for basecaling ONT reads',
         url='https://github.com/BD2KGenomics/nanopore-RNN',
         author='Andrew Bailey',
@@ -36,9 +36,8 @@ def main():
                           "boto==2.46.1",
                           "numpy>=1.12.1",
                           "pip>=9.0.1",
-                          "pysam==0.11.1",
-                          "python==2.7.13",
-                          "h5py==2.6.0",
+                          "pysam>=0.8.2.1",
+                          "h5py>=2.6.0",
                           "python-dateutil==2.6.0",
                           "codecov==2.0.9",
                           "coverage==4.4.1",
