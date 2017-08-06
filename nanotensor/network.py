@@ -103,7 +103,7 @@ class BuildGraph():
                 # reshape matrix to fit into a single activation function
                 input_vector = tf.reshape(input_vector, [-1, prevlayer_size*self.n_steps])
                 input_vector = self.fulconn_layer(input_data=input_vector, output_dim=layer["size"],\
-                                seq_len=self.n_steps, activation_func=ref_types[layer["type"]])
+                                seq_len=self.n_steps, activation_func=ref_types[layer["type"]])[0]
                 # reshape matrix to correct shape from output of
                 input_vector = tf.reshape(input_vector, [-1, self.n_steps, layer["size"]])
                 prevlayer_size = layer["size"]
@@ -114,7 +114,7 @@ class BuildGraph():
     def create_prediction_layer(self):
         """Create a prediction layer from output of blstm layers"""
         with tf.name_scope("prediction"):
-            pred = self.fulconn_layer(self.rnn_outputs_flat, self.n_classes)
+            pred = self.fulconn_layer(self.rnn_outputs_flat, self.n_classes)[0]
             print("pred shape = ", pred.get_shape())
         return pred
 
@@ -249,22 +249,6 @@ class BuildGraph():
 
     @staticmethod
     def fulconn_layer(input_data, output_dim, seq_len=1, activation_func=None):
-        # pylint: disable=C0301
-        """Create a fully connected layer.
-        source: https://stackoverflow.com/questions/39808336/tensorflow-bidirectional-dynamic-rnn-none-values-error/40305673
-        """
-        # get input dimentions
-        input_dim = int(input_data.get_shape()[1])
-        weight = tf.Variable(tf.random_normal([input_dim, output_dim*seq_len]))
-        bais = tf.Variable(tf.random_normal([output_dim*seq_len]))
-        if activation_func:
-            output = activation_func(tf.matmul(input_data, weight) + bais)
-        else:
-            output = tf.matmul(input_data, weight) + bais
-        return output
-
-    @staticmethod
-    def fulconn_layer_forTestingOnly(input_data, output_dim, seq_len=1, activation_func=None):
         # pylint: disable=C0301
         """Create a fully connected layer.
         source: https://stackoverflow.com/questions/39808336/tensorflow-bidirectional-dynamic-rnn-none-values-error/40305673

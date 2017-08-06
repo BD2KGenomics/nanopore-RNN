@@ -86,9 +86,9 @@ class NetworkTest(unittest.TestCase):
         self.assertEqual(j,  0.25)
         sess.close()
 
-    def test_fulconn_layer_function(self):
+    def test_fulconn_layer(self):
         output_dim = self.n_classes
-        u = self.model.fulconn_layer_forTestingOnly(self.images_batch_reshaped,output_dim)
+        u = self.model.fulconn_layer(self.images_batch_reshaped,output_dim)
         init = tf.global_variables_initializer()
         sess = tf.Session()
         sess.run(init)
