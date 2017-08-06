@@ -52,7 +52,6 @@ install:
 - git submodule update --remote
 - ls
 - pwd
-- pip install marginalign
 - conda env create -f requirements.yml
 - source activate nanotensor
 - cd nanonet
@@ -61,10 +60,12 @@ install:
 - make
 - export PATH=$PATH:$PWD/bin
 - python setup.py install
+- cd marginAlign
+- python setup.py install
+- cd ..
 - ./bin/testSignalAlign
 - cd ..
 - python setup.py install
-- pip install --update numpy
 - cd nanotensor
 
 script:
