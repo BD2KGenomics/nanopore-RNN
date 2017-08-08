@@ -60,8 +60,10 @@ install:
 - make
 - export PATH=$PATH:$PWD/bin
 - python setup.py install
-- cd marginAlign
-- python setup.py install
+- pip install marginAlign
+#- cd marginAlign
+#- make test
+#- export PYTHONPATH=$PYTHONPATH:$PWD/src
 - cd ..
 - ./bin/testSignalAlign
 - cd ..
