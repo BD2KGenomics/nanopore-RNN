@@ -44,13 +44,12 @@ class BuildGraph:
     """Build a tensorflow network graph."""
 
     def __init__(self, n_input, n_classes, learning_rate, n_steps=1,
-                 forget_bias=5.0, y=None, x=None, network=None, binary_cost=True):
+                 forget_bias=5.0, y=None, x=None, network=None, binary_cost=True, reuse=None):
         # self.x = x
         self.y = tf.placeholder_with_default(y, shape=[None, n_steps, n_classes])
         self.x = tf.placeholder_with_default(x, shape=[None, n_steps, n_input])
-
         self.batch_size = tf.shape(self.x)[0]
-
+        self.reuse = reuse
         # self.batch_size = tf.shape(self.y)[0]
 
         # self.batch_size = batch_size
@@ -113,16 +112,17 @@ class BuildGraph:
         for layer in network_model:
             if layer["type"] == "blstm":
                 input_vector = self.blstm(input_vector=input_vector, n_hidden=layer["size"],
-                                          layer_name=layer["name"], forget_bias=layer["bias"])
+                                          layer_name=layer["name"], forget_bias=layer["bias"], reuse=self.reuse)
                 prevlayer_size = layer["size"] * 2
             else:
-                # reshape matrix to fit into a single activation function
-                input_vector = tf.reshape(input_vector, [-1, prevlayer_size * self.n_steps])
-                input_vector = self.fulconn_layer(input_data=input_vector, output_dim=layer["size"],
-                                                  seq_len=self.n_steps, activation_func=ref_types[layer["type"]])[0]
-                # reshape matrix to correct shape from output of
-                input_vector = tf.reshape(input_vector, [-1, self.n_steps, layer["size"]])
-                prevlayer_size = layer["size"]
+                with tf.variable_scope(layer["name"]):
+                    # reshape matrix to fit into a single activation function
+                    input_vector = tf.reshape(input_vector, [-1, prevlayer_size * self.n_steps])
+                    input_vector = self.fulconn_layer(input_data=input_vector, output_dim=layer["size"],
+                                                      seq_len=self.n_steps, activation_func=ref_types[layer["type"]])[0]
+                    # reshape matrix to correct shape from output of
+                    input_vector = tf.reshape(input_vector, [-1, self.n_steps, layer["size"]])
+                    prevlayer_size = layer["size"]
 
         return input_vector, prevlayer_size
 
@@ -206,16 +206,16 @@ class BuildGraph:
         return update_ops
 
     @staticmethod
-    def blstm(input_vector, layer_name="blstm_layer1", n_hidden=128, forget_bias=5.0):
+    def blstm(input_vector, layer_name="blstm_layer1", n_hidden=128, forget_bias=5.0, reuse=None):
         """Create a bidirectional LSTM using code from the example at
         https://github.com/aymericdamien/TensorFlow-Examples/blob/master/examples/3_NeuralNetworks/bidirectional_rnn.py
         """
         with tf.variable_scope(layer_name):
             # Define lstm cells with tensorflow
             # Forward direction cell
-            lstm_fw_cell = rnn.LSTMCell(n_hidden, forget_bias=forget_bias, state_is_tuple=True)
+            lstm_fw_cell = rnn.LSTMCell(n_hidden, forget_bias=forget_bias, state_is_tuple=True, reuse=reuse)
             # Backward direction cell
-            lstm_bw_cell = rnn.LSTMCell(n_hidden, forget_bias=forget_bias, state_is_tuple=True)
+            lstm_bw_cell = rnn.LSTMCell(n_hidden, forget_bias=forget_bias, state_is_tuple=True, reuse=reuse)
 
             # forward states
             # fw_state_c, fw_state_h = lstm_fw_cell.zero_state(self.batch_size, tf.float32)
@@ -273,13 +273,16 @@ class BuildGraph:
         """
         # get input dimensions
         input_dim = int(input_data.get_shape()[1])
-        weight = tf.Variable(tf.random_normal([input_dim, output_dim * seq_len]))
-        bais = tf.Variable(tf.random_normal([output_dim * seq_len]))
+        weight = tf.get_variable(name="weights", shape=[input_dim, output_dim * seq_len], initializer=tf.random_normal_initializer)
+        bias = tf.get_variable(name="bias", shape=[output_dim * seq_len], initializer=tf.random_normal_initializer)
+
+        # weight = tf.Variable(tf.random_normal([input_dim, output_dim * seq_len]), name="weights")
+        # bias = tf.Variable(tf.random_normal([output_dim * seq_len]), name="bias")
         if activation_func:
-            output = activation_func(tf.matmul(input_data, weight) + bais)
+            output = activation_func(tf.matmul(input_data, weight) + bias)
         else:
-            output = tf.matmul(input_data, weight) + bais
-        return output, weight, bais
+            output = tf.matmul(input_data, weight) + bias
+        return output, weight, bias
 
 
 def main():

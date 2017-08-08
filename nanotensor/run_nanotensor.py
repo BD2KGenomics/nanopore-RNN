@@ -145,17 +145,23 @@ class TrainModel(object):
         global_step = tf.get_variable(
             'global_step', [],
             initializer=tf.constant_initializer(0), trainable=False)
-
+        reuse = None
         opt = tf.train.AdamOptimizer(learning_rate=self.args.learning_rate)
         with tf.variable_scope(tf.get_variable_scope()):
             for i in range(self.args.num_gpu):
-                with tf.name_scope("layer_{}".format(i)) as scope:
-                    events, labels = self.training.get_inputs()
-                    # with tf.device('/gpu:%d' % i):
-                    model = BuildGraph(self.n_input, self.n_classes, self.args.learning_rate, n_steps=self.args.n_steps,
-                                       network=self.args.network, x=events, y=labels, binary_cost=self.args.binary_cost)
-                    tower_grads.append(opt.compute_gradients(model.cost))
+                # with tf.device('/gpu:%d' % i):
+
+                events, labels = self.training.get_inputs()
+                model = BuildGraph(self.n_input, self.n_classes, self.args.learning_rate, n_steps=self.args.n_steps,
+                                   network=self.args.network, x=events, y=labels, binary_cost=self.args.binary_cost, reuse=reuse)
+                tf.get_variable_scope().reuse_variables()
+                reuse = True
+                gradients = opt.compute_gradients(model.cost)
+                tower_grads.append(gradients)
+                print(gradients)
+                print(len(gradients))
         grads = average_gradients(tower_grads)
+
         self.apply_gradient_op = opt.apply_gradients(grads, global_step=global_step)
         # variable_averages = tf.train.ExponentialMovingAverage(
         # cifar10.MOVING_AVERAGE_DECAY, global_step)
@@ -190,7 +196,7 @@ class TrainModel(object):
         return events, labels
 
     # @profile
-    def run_training(self, intra_op_parallelism_threads=8, log_device_placement=False):
+    def run_training(self, intra_op_parallelism_threads=8, log_device_placement=True):
         """Run training steps
         use `dmesg` to get error message if training is killed
         """
@@ -424,11 +430,16 @@ def average_gradients(tower_grads):
        across all towers.
     """
     average_grads = []
+    # # print(tower_grads)
     for grad_and_vars in zip(*tower_grads):
         # Note that each grad_and_vars looks like the following:
         #   ((grad0_gpu0, var0_gpu0), ... , (grad0_gpuN, var0_gpuN))
+        # print(grad_and_vars)
         grads = []
-        for g, _ in grad_and_vars:
+        for g, v in grad_and_vars:
+            # print(g)
+            print(v)
+            # print("Another gradient and variable")
             # Add 0 dimension to the gradients to represent the tower.
             expanded_g = tf.expand_dims(g, 0)
 
@@ -438,10 +449,10 @@ def average_gradients(tower_grads):
         # Average over the 'tower' dimension.
         grad = tf.concat(axis=0, values=grads)
         grad = tf.reduce_mean(grad, 0)
-
-        # Keep in mind that the Variables are redundant because they are shared
-        # across towers. So .. we will just return the first tower's pointer to
-        # the Variable.
+        #
+        # # Keep in mind that the Variables are redundant because they are shared
+        # # across towers. So .. we will just return the first tower's pointer to
+        # # the Variable.
         v = grad_and_vars[0][1]
         grad_and_var = (grad, v)
         average_grads.append(grad_and_var)
