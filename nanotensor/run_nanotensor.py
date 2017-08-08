@@ -28,7 +28,7 @@ from tensorflow.python.client import timeline
 
 
 class CommandLine(object):
-    '''
+    """
     Handle the command line, usage and help requests.
 
     attributes:
@@ -39,14 +39,14 @@ class CommandLine(object):
     do_usage_and_die()
     prints usage and help and terminates with an error.
 
-    '''
+    """
 
     def __init__(self, in_opts=None):
-        '''CommandLine constructor.
+        """CommandLine constructor.
 
         Implements a parser to interpret the command line argv string using
         argparse.
-        '''
+        """
         # define program description, usage and epilog
         self.parser = argparse.ArgumentParser(description='This program \
         takes a config file with network configurations and paths to data directories.'
@@ -61,7 +61,7 @@ class CommandLine(object):
                                     help='path to a json config file with all \
                                     required arguments defined')
 
-        self.parser.add_argument('-v', '--verbose', action='store_true', \
+        self.parser.add_argument('-v', '--verbose', action='store_true',
                                  help='print out more information')
 
         # allow optional arguments not passed by the command line
@@ -136,30 +136,52 @@ class TrainModel(object):
             self.trained_model_path = self.args.trained_model_path
 
     def models(self):
-        events, labels = self.load_data()
-        model = BuildGraph(self.n_input, self.n_classes, self.args.learning_rate, n_steps=self.args.n_steps, \
-                           network=self.args.network, x=events, y=labels, binary_cost=self.args.binary_cost)
+        tower_grads = []
+        self.training = DataQueue(self.training_files, self.args.batch_size,
+                                  queue_size=self.args.queue_size, verbose=False, pad=0, trim=True,
+                                  n_steps=self.args.n_steps)
+        self.n_input = self.training.n_input
+        self.n_classes = self.training.n_classes
+        global_step = tf.get_variable(
+            'global_step', [],
+            initializer=tf.constant_initializer(0), trainable=False)
+
+        opt = tf.train.AdamOptimizer(learning_rate=self.args.learning_rate)
+        with tf.variable_scope(tf.get_variable_scope()):
+            for i in range(self.args.num_gpu):
+                with tf.name_scope("layer_{}".format(i)) as scope:
+                    events, labels = self.training.get_inputs()
+                    # with tf.device('/gpu:%d' % i):
+                    model = BuildGraph(self.n_input, self.n_classes, self.args.learning_rate, n_steps=self.args.n_steps,
+                                       network=self.args.network, x=events, y=labels, binary_cost=self.args.binary_cost)
+                    tower_grads.append(opt.compute_gradients(model.cost))
+        grads = average_gradients(tower_grads)
+        self.apply_gradient_op = opt.apply_gradients(grads, global_step=global_step)
+        # variable_averages = tf.train.ExponentialMovingAverage(
+        # cifar10.MOVING_AVERAGE_DECAY, global_step)
+        # variables_averages_op = variable_averages.apply(tf.trainable_variables())
+
         return model
 
     def load_data(self):
         """Create training and testing queues from training and testing files"""
         if self.args.train:
-            self.training = DataQueue(self.training_files, self.args.batch_size, \
-                                      queue_size=self.args.queue_size, verbose=False, pad=0, trim=True, \
+            self.training = DataQueue(self.training_files, self.args.batch_size,
+                                      queue_size=self.args.queue_size, verbose=False, pad=0, trim=True,
                                       n_steps=self.args.n_steps)
-            self.testing = DataQueue(self.testing_files, self.args.batch_size, \
-                                     queue_size=self.args.queue_size, verbose=False, pad=0, trim=True, \
+            self.testing = DataQueue(self.testing_files, self.args.batch_size,
+                                     queue_size=self.args.queue_size, verbose=False, pad=0, trim=True,
                                      n_steps=self.args.n_steps)
-            events, labels = tf.cond(self.testing_bool, \
-                                     lambda: self.testing.get_inputs(), \
+            events, labels = tf.cond(self.testing_bool,
+                                     lambda: self.testing.get_inputs(),
                                      lambda: self.training.get_inputs(), name="events")
             assert self.training.n_input == self.testing.n_input
             assert self.training.n_classes == self.testing.n_classes
             self.n_input = self.training.n_input
             self.n_classes = self.training.n_classes
         else:
-            self.testing = DataQueue(self.testing_files, self.args.batch_size, \
-                                     queue_size=self.args.queue_size, verbose=False, pad=0, trim=True, \
+            self.testing = DataQueue(self.testing_files, self.args.batch_size,
+                                     queue_size=self.args.queue_size, verbose=False, pad=0, trim=True,
                                      n_steps=self.args.n_steps)
             events, labels = self.testing.get_inputs()
             self.n_input = self.testing.n_input
@@ -172,7 +194,7 @@ class TrainModel(object):
         """Run training steps
         use `dmesg` to get error message if training is killed
         """
-        config = tf.ConfigProto(log_device_placement=log_device_placement, \
+        config = tf.ConfigProto(log_device_placement=log_device_placement,
                                 intra_op_parallelism_threads=intra_op_parallelism_threads)
         # shows gpu memory usage
         config.gpu_options.allow_growth = True
@@ -194,33 +216,36 @@ class TrainModel(object):
                 sess.run(tf.global_variables_initializer())
                 save_model_path = os.path.join(self.args.output_dir, self.args.model_name)
                 saver = tf.train.Saver()
-                saver.save(sess, save_model_path, \
+                saver.save(sess, save_model_path,
                            global_step=self.model.global_step)
                 saver = tf.train.Saver(max_to_keep=4, keep_checkpoint_every_n_hours=2)
             # start queue
             coord = tf.train.Coordinator()
             threads = tf.train.start_queue_runners(sess=sess, coord=coord)
             self.training.start_threads(sess)
-            self.testing.start_threads(sess)
+            # self.testing.start_threads(sess)
             run_metadata = tf.RunMetadata()
             # Keep training until reach max iterations
             # print("Training Has Started!")
             while step < self.args.training_iters:
                 for _ in range(self.args.record_step):
                     # Run optimization training step
-                    _ = sess.run([self.model.optimizer], \
-                                 feed_dict={self.testing_bool: False})
+                    _ = sess.run([self.apply_gradient_op])#,
+                                # feed_dict={self.testing_bool: False})
+                    loss = sess.run([self.model.cost])
+                    print(loss)
                     step += 1
 
+                print("Trained for a bit")
                 # get testing accuracy stats
                 summary, global_step = sess.run([self.model.train_summary,
-                                                 self.model.global_step], \
+                                                 self.model.global_step],
                                                 feed_dict={self.testing_bool: True})
                 # add summary statistics
                 writer.add_summary(summary, global_step)
                 # get training accuracy stats
                 summary, global_step = sess.run([self.model.test_summary,
-                                                 self.model.global_step], \
+                                                 self.model.global_step],
                                                 feed_dict={self.testing_bool: False})
                 # add summary statistics
                 writer.add_summary(summary, global_step)
@@ -228,24 +253,24 @@ class TrainModel(object):
                 # if it has been enough time save model and print training stats
                 if self.test_time():
                     # Calculate batch loss and accuracy for training
-                    _, acc, summary, cost, global_step = sess.run([self.model.optimizer, \
-                                                                   self.model.accuracy, self.model.train_summary, \
-                                                                   self.model.cost, self.model.global_step], \
+                    _, acc, summary, cost, global_step = sess.run([self.model.optimizer,
+                                                                   self.model.accuracy, self.model.train_summary,
+                                                                   self.model.cost, self.model.global_step],
                                                                   feed_dict={self.testing_bool: False})
                     # add summary statistics
                     writer.add_summary(summary, global_step)
                     # Calculate batch loss and accuracy for testing
                     summary, global_step, test_acc, test_cost = sess.run([self.model.test_summary,
                                                                           self.model.global_step, self.model.accuracy,
-                                                                          self.model.cost], \
+                                                                          self.model.cost],
                                                                          feed_dict={self.testing_bool: True})
                     # add summary statistics
                     writer.add_summary(summary, global_step)
 
-                    print("Iter " + str(step) + ", Training Cost= " + \
-                          "{:.6f}".format(cost) + ", Training Accuracy= " + \
-                          "{:.5f}".format(acc) + ", Testing Cost= " + \
-                          "{:.6f}".format(test_cost) + ", Testing Accuracy= " + \
+                    print("Iter " + str(step) + ", Training Cost= " +
+                          "{:.6f}".format(cost) + ", Training Accuracy= " +
+                          "{:.5f}".format(acc) + ", Testing Cost= " +
+                          "{:.6f}".format(test_cost) + ", Testing Accuracy= " +
                           "{:.5f}".format(test_acc))
                     # sys.stdout.flush()
 
@@ -256,10 +281,11 @@ class TrainModel(object):
 
                     # very expensive profiling steps to add time statistics
                     if self.args.profile:
-                        _, acc, summary, cost, global_step = sess.run([self.model.optimizer, self.model.accuracy, self.model.train_summary,
-                                                                       self.model.cost, self.model.global_step], \
-                                                                      run_metadata=run_metadata, options=run_options, \
-                                                                      feed_dict={self.testing_bool: False})
+                        _, acc, summary, cost, global_step = sess.run(
+                            [self.model.optimizer, self.model.accuracy, self.model.train_summary,
+                             self.model.cost, self.model.global_step],
+                            run_metadata=run_metadata, options=run_options,
+                            feed_dict={self.testing_bool: False})
                         # add summary statistics
                         writer.add_summary(summary, global_step)
                         writer.add_run_metadata(run_metadata, "step{}_train".format(global_step))
@@ -267,28 +293,28 @@ class TrainModel(object):
                             self.chrome_trace(run_metadata, self.args.trace_name)
 
                         # Calculate batch loss and accuracy for testing
-                        summary, global_step, test_acc, test_cost = sess.run([self.model.test_summary, \
+                        summary, global_step, test_acc, test_cost = sess.run([self.model.test_summary,
                                                                               self.model.global_step,
-                                                                              self.model.accuracy, self.model.cost], \
+                                                                              self.model.accuracy, self.model.cost],
                                                                              run_metadata=run_metadata,
-                                                                             options=run_options, \
+                                                                             options=run_options,
                                                                              feed_dict={self.testing_bool: True})
                         # add summary statistics
                         writer.add_summary(summary, global_step)
                         writer.add_run_metadata(run_metadata, "step{}_test".format(global_step))
 
-                        print("Iter " + str(step) + ", Training Cost= " + \
-                              "{:.6f}".format(cost) + ", Training Accuracy= " + \
-                              "{:.5f}".format(acc) + ", Testing Cost= " + \
-                              "{:.6f}".format(test_cost) + ", Testing Accuracy= " + \
+                        print("Iter " + str(step) + ", Training Cost= " +
+                              "{:.6f}".format(cost) + ", Training Accuracy= " +
+                              "{:.5f}".format(acc) + ", Testing Cost= " +
+                              "{:.6f}".format(test_cost) + ", Testing Accuracy= " +
                               "{:.5f}".format(test_acc))
 
                         # save session
-                        saver.save(sess, save_model_path, \
+                        saver.save(sess, save_model_path,
                                    global_step=self.model.global_step, write_meta_graph=False)
                         step += 1
 
-            saver.save(sess, save_model_path, \
+            saver.save(sess, save_model_path,
                        global_step=self.model.global_step, write_meta_graph=False)
 
             coord.request_stop()
@@ -384,6 +410,42 @@ class TrainModel(object):
         for file1 in files:
             file_list.append(file1)
         return file_list
+
+
+def average_gradients(tower_grads):
+    """Calculate the average gradient for each shared variable across all towers.
+    Note that this function provides a synchronization point across all towers.
+    Args:
+      tower_grads: List of lists of (gradient, variable) tuples. The outer list
+        is over individual gradients. The inner list is over the gradient
+        calculation for each tower.
+    Returns:
+       List of pairs of (gradient, variable) where the gradient has been averaged
+       across all towers.
+    """
+    average_grads = []
+    for grad_and_vars in zip(*tower_grads):
+        # Note that each grad_and_vars looks like the following:
+        #   ((grad0_gpu0, var0_gpu0), ... , (grad0_gpuN, var0_gpuN))
+        grads = []
+        for g, _ in grad_and_vars:
+            # Add 0 dimension to the gradients to represent the tower.
+            expanded_g = tf.expand_dims(g, 0)
+
+            # Append on a 'tower' dimension which we will average over below.
+            grads.append(expanded_g)
+
+        # Average over the 'tower' dimension.
+        grad = tf.concat(axis=0, values=grads)
+        grad = tf.reduce_mean(grad, 0)
+
+        # Keep in mind that the Variables are redundant because they are shared
+        # across towers. So .. we will just return the first tower's pointer to
+        # the Variable.
+        v = grad_and_vars[0][1]
+        grad_and_var = (grad, v)
+        average_grads.append(grad_and_var)
+    return average_grads
 
 
 def main():
