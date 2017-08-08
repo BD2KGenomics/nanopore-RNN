@@ -19,7 +19,7 @@ import os
 from timeit import default_timer as timer
 from datetime import datetime
 from nanotensor.utils import project_folder, list_dir, load_json, save_json
-from nanotensor.data import DataQueue
+from nanotensor.queue import DataQueue
 import tensorflow as tf
 from tensorflow.contrib import rnn
 
@@ -103,7 +103,7 @@ class BuildGraph():
                 # reshape matrix to fit into a single activation function
                 input_vector = tf.reshape(input_vector, [-1, prevlayer_size*self.n_steps])
                 input_vector = self.fulconn_layer(input_data=input_vector, output_dim=layer["size"],\
-                                seq_len=self.n_steps, activation_func=ref_types[layer["type"]])
+                                seq_len=self.n_steps, activation_func=ref_types[layer["type"]])[0]
                 # reshape matrix to correct shape from output of
                 input_vector = tf.reshape(input_vector, [-1, self.n_steps, layer["size"]])
                 prevlayer_size = layer["size"]
@@ -114,7 +114,7 @@ class BuildGraph():
     def create_prediction_layer(self):
         """Create a prediction layer from output of blstm layers"""
         with tf.name_scope("prediction"):
-            pred = self.fulconn_layer(self.rnn_outputs_flat, self.n_classes)
+            pred = self.fulconn_layer(self.rnn_outputs_flat, self.n_classes)[0]
             print("pred shape = ", pred.get_shape())
         return pred
 
@@ -261,7 +261,9 @@ class BuildGraph():
             output = activation_func(tf.matmul(input_data, weight) + bais)
         else:
             output = tf.matmul(input_data, weight) + bais
-        return output
+        return output, weight, bais
+
+
 
 def main():
     """Control the flow of the program"""
