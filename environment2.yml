@@ -1,4 +1,4 @@
-name: nanotensor
+name: nanotensor2
 channels:
 - bioconda
 - r
@@ -10,14 +10,9 @@ dependencies:
 - htslib=1.4.1=0
 - pysam=0.11.1=py27_0
 - samtools=1.4.1=0
-- backports.weakref=1.0rc1=py27_0
 - codecov=2.0.9=py27_0
-- html5lib=0.9999999=py27_0
 - mmtf-python=1.0.5=py27_0
 - setuptools=32.1.0=py27_0
-- tensorflow=1.2.1=py27_0
-- webencodings=0.5=py27_0
-- bleach=1.5.0=py27_0
 - boto=2.46.1=py27_0
 - bzip2=1.0.6=3
 - certifi=2016.2.28=py27_0
@@ -25,7 +20,7 @@ dependencies:
 - curl=7.54.1=0
 - freetype=2.5.5=2
 - funcsigs=1.0.2=py27_0
-- h5py=2.7.0=np113py27_0
+- h5py=2.7.0=np112py27_0
 - hdf5=1.8.17=1
 - jbig=2.1=0
 - jpeg=9b=0
@@ -34,11 +29,10 @@ dependencies:
 - libprotobuf=3.2.0=0
 - libssh2=1.8.0=0
 - libtiff=4.0.6=3
-- markdown=2.6.8=py27_0
 - mkl=2017.0.1=0
 - mock=2.0.0=py27_0
 - msgpack-python=0.4.8=py27_0
-- numpy=1.13.1=py27_0
+- numpy=1.12.1=py27_0
 - olefile=0.44=py27_0
 - openssl=1.0.2l=0
 - pandas=0.20.3=py27_0
@@ -54,9 +48,10 @@ dependencies:
 - readline=6.2=2
 - reportlab=3.4.0=py27_0
 - requests=2.14.2=py27_0
-- scipy=0.19.1=np113py27_0
+- scipy=0.19.1=np112py27_0
 - six=1.10.0=py27_0
 - sqlite=3.13.0=0
+- tensorflow=1.1.0=np112py27_0
 - tk=8.5.18=0
 - werkzeug=0.12.2=py27_0
 - wheel=0.29.0=py27_0
@@ -71,13 +66,10 @@ dependencies:
   - docutils==0.13.1
   - futures==2.2.0
   - jmespath==0.9.1
-#  - marginalign==1.1.9
+  - marginalign==1.1.9
   - myriad==0.1.4
-  - pyasn1==0.3.2
   - pyvcf==0.6.7
   - pyyaml==3.12
-  - rsa==3.4.2
   - s3transfer==0.1.10
   - sonlib==1.1.0
-  - google-compute-engine==2.4.1
 

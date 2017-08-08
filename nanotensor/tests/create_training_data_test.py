@@ -30,11 +30,16 @@ class CreateTrainingDataTest(unittest.TestCase):
         cls.TEST_DIR = os.path.join(cls.HOME, "test_files/create_training_files")
         cls.old_log_file = os.path.join(cls.HOME, "test_files/test_log_files/canonical.log.txt")
         new_log_path = os.path.join(cls.HOME, "test_files/test_log_files/real.canonical.log.txt")
+        cls.template_model = os.path.join(cls.HOME, "signalAlign/models/testModelR9p4_acegt_template.model")
+        cls.complement_model = os.path.join(cls.HOME, "signalAlign/models/testModelR9_complement_pop2.model")
+
         cls.log_file = create_log_file(cls.HOME, cls.old_log_file, new_log_path)
         cls.args = dict(nanonet=True, alphabet="ATGC", file_prefix="canonical", num_cpu=5, kmer_len=5,
                         output_dir=cls.HOME,
                         strand_name="template", prob=False, deepnano=False, log_file=cls.log_file, verbose=False,
-                        cutoff=0.4, debug=False, save2s3=False, tar=False, bucket="someBucket")
+                        cutoff=0.4, debug=False, save2s3=False, tar=False, bucket="someBucket",
+                        template_model=cls.template_model, complement_model=cls.complement_model)
+
         with open(cls.log_file, 'r') as log:
             line = log.readline()
             line = line.rstrip().split('\t')
@@ -159,7 +164,7 @@ class CreateTrainingDataTest(unittest.TestCase):
                     output_dir=self.TEST_DIR, forward=True, log_file=self.log_file,
                     output_name='file1', prob=False, fast5_file=self.fast5)
         self.assertRaises(AssertionError, create_training_data, args)
-        args = dict(cutoff=0.4, nanonet=False, verbose=True, strand_name='template', deepnano=True, debug=False,
+        args = dict(cutoff=0.4, nanonet=False, verbose=True, strand_name='template', deepnano=False, debug=False,
                     file='canonical', num_cpu=5, alphabet='ATGC', kmer_len=5, signalalign_file=self.tsv,
                     output_dir=self.TEST_DIR, forward=True, log_file=self.log_file,
                     output_name='file1', prob=False, fast5_file=self.fast5)
@@ -167,7 +172,8 @@ class CreateTrainingDataTest(unittest.TestCase):
         args = dict(cutoff=0.4, nanonet=False, verbose=True, strand_name='template', deepnano=True, debug=False,
                     file='canonical', num_cpu=5, alphabet='ATGC', kmer_len=4, signalalign_file=self.tsv,
                     output_dir=self.TEST_DIR, forward=True, log_file=self.log_file,
-                    output_name='file1', prob=True, fast5_file=self.fast5)
+                    output_name='file1', prob=True, fast5_file=self.fast5, template_model=self.template_model,
+                    complement_model=self.complement_model)
         self.assertRaises(AssertionError, create_training_data, args)
 
         # passes
@@ -175,7 +181,8 @@ class CreateTrainingDataTest(unittest.TestCase):
                     file='canonical', num_cpu=5, alphabet='ATGC', kmer_len=2, signalalign_file=self.tsv,
                     output_dir=self.TEST_DIR, forward=True, log_file=self.log_file,
                     output_name='deepnano1', prob=False, fast5_file=self.fast5, save2s3=False, tar=False,
-                    bucket="someBucket")
+                    bucket="someBucket", template_model=self.template_model,
+                    complement_model=self.complement_model)
         output_file_path = create_training_data(args)
         self.assertTrue(os.path.exists(output_file_path))
         os.remove(output_file_path)
@@ -184,7 +191,8 @@ class CreateTrainingDataTest(unittest.TestCase):
                     file='canonical', num_cpu=5, alphabet='ATGC', kmer_len=2, signalalign_file=self.tsv,
                     output_dir=self.TEST_DIR, forward=True, log_file=self.log_file,
                     output_name='prob1', prob=True, fast5_file=self.fast5, save2s3=False, tar=False,
-                    bucket="someBucket")
+                    bucket="someBucket", template_model=self.template_model,
+                    complement_model=self.complement_model)
         output_file_path = create_training_data(args)
         self.assertTrue(os.path.exists(output_file_path))
         os.remove(output_file_path)
@@ -193,7 +201,8 @@ class CreateTrainingDataTest(unittest.TestCase):
                     file='canonical', num_cpu=5, alphabet='ATGC', kmer_len=5, signalalign_file=self.tsv,
                     output_dir=self.TEST_DIR, forward=True, log_file=self.log_file,
                     output_name='nanonet1', prob=False, fast5_file=self.fast5, save2s3=False, tar=False,
-                    bucket="someBucket")
+                    bucket="someBucket", template_model=self.template_model,
+                    complement_model=self.complement_model)
         output_file_path = create_training_data(args)
         self.assertTrue(os.path.exists(output_file_path))
         os.remove(output_file_path)

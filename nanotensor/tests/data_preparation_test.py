@@ -55,9 +55,12 @@ class DataPreparationTest(unittest.TestCase):
                                      '-d0d5c48dd1c8_Basecall_2D_2d.sm.forward.short.tsv')
         # canonical_tsv = os.path.join(cls.HOME, \
         # "test_files/signalalignment_files/canonical/18a21abc-7827-4ed7-8919-c27c9bd06677_Basecall_2D_template.sm.forward.tsv")
+        template_model = os.path.join(cls.HOME, "signalAlign/models/testModelR9p4_acegt_template.model")
+        complement_model = os.path.join(cls.HOME, "signalAlign/models/testModelR9_complement_pop2.model")
 
         cls.DEEPNANO = TrainingData(canonical_fast5, canonical_tsv, strand_name="template", prob=False, kmer_len=2,
-                                    alphabet="ATGC", nanonet=False, deepnano=True)
+                                    alphabet="ATGC", nanonet=False, deepnano=True, template_model=template_model,
+                                    complement_model=complement_model)
 
         cls.CATEGORICAL = TrainingData(canonical_fast5, canonical_tsv, strand_name="template", prob=False, kmer_len=5,
                                        alphabet="ATGCE", nanonet=True, deepnano=False)
@@ -115,7 +118,7 @@ class DataPreparationTest(unittest.TestCase):
         self.assertNotEqual(features_deepnano, features_c)
         self.assertNotEqual(features_deepnano, features_categorical)
         self.assertTrue(np.isclose(features_t, features_categorical).all())
-        deepnano_test = [0.23282488, 0.05420742, 1.16217472, 0.0025]
+        deepnano_test = [0.30412248, 0.09249048, 0.86009045, 0.0025]
         t_test = [0.0, 0.0, 0.0, 0.0, 0.40229428, 0.18797024, 0.10281436, 0.0, 0.49232142, -0.25025325, -0.11723997,
                   0.0971415]
         c_test = [0.0, 0.0, 0.0, 0.0, 2.26279692, 1.12409658, 2.77720919, 0.0, 2.130275, 1.17222898, 1.01273878,
@@ -132,7 +135,7 @@ class DataPreparationTest(unittest.TestCase):
         self.assertTrue(np.isclose(features_t, self.T.features).all())
         self.assertTrue(np.isclose(features_c, self.C.features).all())
         self.assertTrue(np.isclose(features_categorical, self.CATEGORICAL.features).all())
-
+    #
     def test_match_label_with_feature(self):
         """test_match_label_with_feature"""
         final_deepnano = self.DEEPNANO.match_label_with_feature()
@@ -355,7 +358,8 @@ class DataPreparationTest(unittest.TestCase):
         """test_deepnano_features"""
         events = np.array([(1.0, 2.0, 3.0), (1.0, 2.0, 3.0)], dtype=[('mean', 'f4'), ('length', 'f4'), ('stdv', 'f4')])
         labels = self.DEEPNANO.deepnano_features(events)
-        self.assertTrue(([-0.65, 0.4225, 2.0, 2.0] == labels[0]).all)
+        test_answers = np.array([-0.57135018, 0.32644103, 1.58086051, 2.0])
+        np.testing.assert_array_almost_equal(test_answers, labels[0])
         events = np.array([(1.0, 2.0, 3.0), (1.0, 2.0, 3.0)],
                           dtype=[('something', 'f4'), ('length', 'f4'), ('stdv', 'f4')])
         self.assertRaises(DataPrepBug, self.DEEPNANO.deepnano_features, events)

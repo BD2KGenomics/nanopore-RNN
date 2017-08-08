@@ -178,7 +178,8 @@ def create_training_data(args):
     args = DotDict(args)
     data = TrainingData(args.fast5_file, args.signalalign_file, args.strand_name, prob=args.prob,
                         kmer_len=args.kmer_len, alphabet=args.alphabet, nanonet=args.nanonet, deepnano=args.deepnano,
-                        forward=args.forward, cutoff=args.cutoff)
+                        forward=args.forward, cutoff=args.cutoff, template_model=args.template_model,
+                        complement_model=args.complement_model)
     output_file_path = data.save_training_file(args.output_name, output_dir=args.output_dir)
     if args.verbose:
         print("FILE SAVED: {}".format(args.output_name + ".npy"), file=sys.stderr)
