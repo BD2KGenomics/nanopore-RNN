@@ -64,7 +64,7 @@ install:
 #- cd marginAlign
 #- make test
 #- export PYTHONPATH=$PYTHONPATH:$PWD/src
-- ./bin/testSignalAlign
+- make test
 - cd ..
 - python setup.py install
 - cd nanotensor
