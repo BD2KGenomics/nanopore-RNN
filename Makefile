@@ -23,7 +23,7 @@ clean:
 	cd signalAlign && make clean
 
 test:
-	cd signalAlign/bin && make test
+	cd signalAlign && make test
 	cd nanotensor && pytest
 
 .PHONY: nanonet nanotensor signalalign python-recs marginAlign
