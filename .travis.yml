@@ -57,12 +57,11 @@ install:
 #- python setup.py install
 #- cd ../signalAlign
 #- make
-#- export PATH=$PATH:$PWD/bin
 #- python setup.py install
 #- pip install marginAlign
 #- cd marginAlign
 #- make test
-#- export PYTHONPATH=$PYTHONPATH:$PWD/src
+- export PATH=$PATH:$PWD/signalAlign/bin
 - make test
 #- pip install -U numpy
 #- pip install -U h5py
