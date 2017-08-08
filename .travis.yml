@@ -67,6 +67,8 @@ install:
 - make test
 - cd ..
 - python setup.py install
+- pip install --update numpy
+- pip install --update h5py
 - cd nanotensor
 
 script:
