@@ -64,7 +64,6 @@ install:
 #- cd marginAlign
 #- make test
 #- export PYTHONPATH=$PYTHONPATH:$PWD/src
-- cd ..
 - ./bin/testSignalAlign
 - cd ..
 - python setup.py install
