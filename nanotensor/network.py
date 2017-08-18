@@ -44,7 +44,7 @@ class BuildGraph:
     """Build a tensorflow network graph."""
 
     def __init__(self, n_input, n_classes, learning_rate, n_steps=1,
-                 forget_bias=5.0, y=None, x=None, network=None, binary_cost=True, reuse=None):
+                 forget_bias=5.0, y=None, x=None, network=None, binary_cost=True, reuse=None, num_gpu=1):
         # self.x = x
         self.y = tf.placeholder_with_default(y, shape=[None, n_steps, n_classes])
         self.x = tf.placeholder_with_default(x, shape=[None, n_steps, n_input])

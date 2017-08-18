@@ -50,7 +50,7 @@ class DataQueue:
         self.file_list, self.bad_files = self.read_numpy_files(file_list)
         self.num_files = len(self.file_list)
         print("Creating Queue of with {} npy files".format(self.num_files), file=sys.stderr)
-        print("Throwing away {} files".format(len(self.bad_files)), file=sys.stderr)
+        print("Not using {} files".format(len(self.bad_files)), file=sys.stderr)
         assert self.num_files >= 1, "There are no passing npy files to read into queue"
         if self.verbose:
             print(self.bad_files, file=sys.stderr)

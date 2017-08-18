@@ -151,6 +151,7 @@ class TrainModel(object):
         reuse = None
         opt = tf.train.AdamOptimizer(learning_rate=self.args.learning_rate)
         if gpu_indexes:
+            print("Using GPU's {}".format(gpu_indexes), file=sys.stderr)
             with tf.variable_scope(tf.get_variable_scope()):
                 for i in gpu_indexes:
                     events, labels = self.training.get_inputs()
@@ -166,6 +167,7 @@ class TrainModel(object):
                         # print(len(gradients))
             grads = average_gradients(tower_grads)
         else:
+            print("No GPU's available, using CPU for computation", file=sys.stderr)
             events, labels = self.training.get_inputs()
             model = BuildGraph(self.n_input, self.n_classes, self.args.learning_rate, n_steps=self.args.n_steps,
                    network=self.args.network, x=events, y=labels, binary_cost=self.args.binary_cost,
@@ -210,7 +212,8 @@ class TrainModel(object):
         use `dmesg` to get error message if training is killed
         """
         config = tf.ConfigProto(log_device_placement=log_device_placement,
-                                intra_op_parallelism_threads=intra_op_parallelism_threads)
+                                intra_op_parallelism_threads=intra_op_parallelism_threads,
+                                allow_soft_placement=True)
         # shows gpu memory usage
         config.gpu_options.allow_growth = True
 
@@ -475,11 +478,10 @@ def test_for_nvidia_gpu(num_gpu):
                                  subprocess.check_output(["nvidia-smi", "-q"]),
                                  flags=re.MULTILINE | re.DOTALL)
         assert len(utilization) >= num_gpu, "Not enough GPUs are available"
-        indices = [i for i, x in enumerate(list) if x == ('0', '0')]
+        indices = [i for i, x in enumerate(utilization) if x == ('0', '0')]
         assert len(indices) >= num_gpu, "Only {0} GPU's are not being used,  change num_gpu parameter to {0}".format(len(indices))
         return indices
     except OSError:
-        print("No GPU's available, using CPU for computation")
         return False
 
 
