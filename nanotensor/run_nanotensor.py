@@ -12,6 +12,8 @@ then use's tensorflow to train a mulit layer BLSTM-RNN"""
 from __future__ import print_function
 import sys
 import os
+import re
+import subprocess
 from timeit import default_timer as timer
 import json
 import argparse
@@ -137,6 +139,7 @@ class TrainModel(object):
 
     def models(self):
         tower_grads = []
+        gpu_indexes = test_for_nvidia_gpu(self.args.num_gpu)
         self.training = DataQueue(self.training_files, self.args.batch_size,
                                   queue_size=self.args.queue_size, verbose=False, pad=0, trim=True,
                                   n_steps=self.args.n_steps)
@@ -147,21 +150,27 @@ class TrainModel(object):
             initializer=tf.constant_initializer(0), trainable=False)
         reuse = None
         opt = tf.train.AdamOptimizer(learning_rate=self.args.learning_rate)
-        with tf.variable_scope(tf.get_variable_scope()):
-            for i in range(self.args.num_gpu):
-                # with tf.device('/gpu:%d' % i):
-
-                events, labels = self.training.get_inputs()
-                model = BuildGraph(self.n_input, self.n_classes, self.args.learning_rate, n_steps=self.args.n_steps,
-                                   network=self.args.network, x=events, y=labels, binary_cost=self.args.binary_cost, reuse=reuse)
-                tf.get_variable_scope().reuse_variables()
-                reuse = True
-                gradients = opt.compute_gradients(model.cost)
-                tower_grads.append(gradients)
-                print(gradients)
-                print(len(gradients))
-        grads = average_gradients(tower_grads)
-
+        if gpu_indexes:
+            with tf.variable_scope(tf.get_variable_scope()):
+                for i in gpu_indexes:
+                    events, labels = self.training.get_inputs()
+                    with tf.device('/gpu:%d' % i):
+                        model = BuildGraph(self.n_input, self.n_classes, self.args.learning_rate, n_steps=self.args.n_steps,
+                                           network=self.args.network, x=events, y=labels, binary_cost=self.args.binary_cost,
+                                           reuse=reuse)
+                        tf.get_variable_scope().reuse_variables()
+                        reuse = True
+                        gradients = opt.compute_gradients(model.cost)
+                        tower_grads.append(gradients)
+                        # print(gradients)
+                        # print(len(gradients))
+            grads = average_gradients(tower_grads)
+        else:
+            events, labels = self.training.get_inputs()
+            model = BuildGraph(self.n_input, self.n_classes, self.args.learning_rate, n_steps=self.args.n_steps,
+                   network=self.args.network, x=events, y=labels, binary_cost=self.args.binary_cost,
+                   reuse=reuse)
+            grads = opt.compute_gradients(model.cost)
         self.apply_gradient_op = opt.apply_gradients(grads, global_step=global_step)
         # variable_averages = tf.train.ExponentialMovingAverage(
         # cifar10.MOVING_AVERAGE_DECAY, global_step)
@@ -228,7 +237,7 @@ class TrainModel(object):
             # start queue
             coord = tf.train.Coordinator()
             threads = tf.train.start_queue_runners(sess=sess, coord=coord)
-            self.training.start_threads(sess)
+            self.training.start_threads(sess, )
             # self.testing.start_threads(sess)
             run_metadata = tf.RunMetadata()
             # Keep training until reach max iterations
@@ -236,8 +245,8 @@ class TrainModel(object):
             while step < self.args.training_iters:
                 for _ in range(self.args.record_step):
                     # Run optimization training step
-                    _ = sess.run([self.apply_gradient_op])#,
-                                # feed_dict={self.testing_bool: False})
+                    _ = sess.run([self.apply_gradient_op])  # ,
+                    # feed_dict={self.testing_bool: False})
                     loss = sess.run([self.model.cost])
                     print(loss)
                     step += 1
@@ -459,6 +468,21 @@ def average_gradients(tower_grads):
     return average_grads
 
 
+def test_for_nvidia_gpu(num_gpu):
+    assert type(num_gpu) is int, "num_gpu option must be integer"
+    try:
+        utilization = re.findall(r"Utilization.*?Gpu.*?(\d+).*?Memory.*?(\d+)",
+                                 subprocess.check_output(["nvidia-smi", "-q"]),
+                                 flags=re.MULTILINE | re.DOTALL)
+        assert len(utilization) >= num_gpu, "Not enough GPUs are available"
+        indices = [i for i, x in enumerate(list) if x == ('0', '0')]
+        assert len(indices) >= num_gpu, "Only {0} GPU's are not being used,  change num_gpu parameter to {0}".format(len(indices))
+        return indices
+    except OSError:
+        print("No GPU's available, using CPU for computation")
+        return False
+
+
 def main():
     """Main docstring"""
     start = timer()
@@ -476,6 +500,7 @@ def main():
         args = command_line.check_args(args)
         # Parameters
         if args.train:
+
             train = TrainModel(args)
             train.run_training(log_device_placement=False)
             print("\n#  nanotensor - finished training \n", file=sys.stderr)
