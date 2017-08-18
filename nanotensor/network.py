@@ -62,10 +62,7 @@ class BuildGraph:
         self.forget_bias = forget_bias
         self.output_states = []
         self.layers = []
-        # list of operations to reset states of each blstm layer
-        # self.zero_states = []
-        # self.reset_fws = []
-        # self.reset_bws = []
+
         # Summary Information
         self.training_summaries = []
         self.testing_summaries = []
@@ -90,16 +87,19 @@ class BuildGraph:
         else:
             self.cost = self.cost_function_prob()
 
-        # self.optimizer = self.optimizer_function()
+        self.optimizer = self.optimizer_function()
         # # Evaluate model
         # tf.add_to_collection("optimizer", self.optimizer)
 
         self.correct_pred = self.prediction_function()
         self.accuracy = self.accuracy_function()
         # merge summary information
-
         self.test_summary = tf.summary.merge(self.testing_summaries)
         self.train_summary = tf.summary.merge(self.training_summaries)
+        # list of operations to reset states of each blstm layer
+        # self.zero_states = []
+        # self.reset_fws = []
+        # self.reset_bws = []
 
     def create_model(self, network_model=None):
         """Create a model from a list of dictionaries with "name", "type", and "size" keys"""

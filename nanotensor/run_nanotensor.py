@@ -173,7 +173,8 @@ class TrainModel(object):
                    network=self.args.network, x=events, y=labels, binary_cost=self.args.binary_cost,
                    reuse=reuse)
             grads = opt.compute_gradients(model.cost)
-        self.apply_gradient_op = opt.apply_gradients(grads, global_step=global_step)
+        with tf.variable_scope("apply_gradients"):
+            self.apply_gradient_op = opt.apply_gradients(grads, global_step=global_step)
         # variable_averages = tf.train.ExponentialMovingAverage(
         # cifar10.MOVING_AVERAGE_DECAY, global_step)
         # variables_averages_op = variable_averages.apply(tf.trainable_variables())
@@ -223,14 +224,14 @@ class TrainModel(object):
 
             step = 0
             if self.args.load_trained_model:
-                writer = tf.summary.FileWriter((self.args.trained_model), sess.graph)
+                writer = tf.summary.FileWriter(self.args.trained_model, sess.graph)
                 saver = tf.train.Saver(max_to_keep=4, keep_checkpoint_every_n_hours=2)
                 saver.restore(sess, self.trained_model_path)
                 # TODO could have a bug here if using wrong config file with wrong model name
                 save_model_path = os.path.join(self.args.trained_model, self.args.model_name)
             else:
                 # initialize
-                writer = tf.summary.FileWriter((self.args.output_dir), sess.graph)
+                writer = tf.summary.FileWriter(self.args.output_dir, sess.graph)
                 sess.run(tf.global_variables_initializer())
                 save_model_path = os.path.join(self.args.output_dir, self.args.model_name)
                 saver = tf.train.Saver()
@@ -240,7 +241,7 @@ class TrainModel(object):
             # start queue
             coord = tf.train.Coordinator()
             threads = tf.train.start_queue_runners(sess=sess, coord=coord)
-            self.training.start_threads(sess, )
+            self.training.start_threads(sess, n_threads=self.args.num_threads)
             # self.testing.start_threads(sess)
             run_metadata = tf.RunMetadata()
             # Keep training until reach max iterations
@@ -250,11 +251,11 @@ class TrainModel(object):
                     # Run optimization training step
                     _ = sess.run([self.apply_gradient_op])  # ,
                     # feed_dict={self.testing_bool: False})
-                    loss = sess.run([self.model.cost])
-                    print(loss)
+                    # loss = sess.run([self.model.cost])
+                    # print(loss)
                     step += 1
 
-                print("Trained for a bit")
+                # print("Trained for a bit")
                 # get testing accuracy stats
                 summary, global_step = sess.run([self.model.train_summary,
                                                  self.model.global_step],
@@ -271,7 +272,7 @@ class TrainModel(object):
                 # if it has been enough time save model and print training stats
                 if self.test_time():
                     # Calculate batch loss and accuracy for training
-                    _, acc, summary, cost, global_step = sess.run([self.model.optimizer,
+                    _, acc, summary, cost, global_step = sess.run([self.apply_gradient_op,
                                                                    self.model.accuracy, self.model.train_summary,
                                                                    self.model.cost, self.model.global_step],
                                                                   feed_dict={self.testing_bool: False})
