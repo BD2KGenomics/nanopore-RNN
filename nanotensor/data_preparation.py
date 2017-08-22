@@ -33,7 +33,7 @@ class TrainingData(object):
     """docstring for TrainingData."""
 
     def __init__(self, fast5_file, alignment_file, strand_name="template", prob=False, kmer_len=5, alphabet="ATGC",
-                 nanonet=True, deepnano=False, forward=True, cutoff=0.4,
+                 nanonet=True, deepnano=False, forward=True, cutoff=0.4, normalized_posterioir_prob = False, nanoraw = False,
                  template_model="../signalAlign/models/testModelR9p4_acegt_template.model",
                  complement_model="../signalAlign/models/testModelR9_complement_pop2.model"):
 
@@ -66,14 +66,17 @@ class TrainingData(object):
         self.forward = forward
         self.cutoff = cutoff
         self.debug = False
+
         # when data gets created it is stored in the class
         self.events = []
         self.kmers = []
         self.labels = []
+        self.k = []
         self.features = []
         self.training_file = []
         ## QC metrics for Deepnano labels
         self.missed = []
+
 
     def run_complete_analysis(self):
         """Run complete flow of analysis"""
@@ -82,6 +85,7 @@ class TrainingData(object):
         self.create_labels()
         self.create_features()
         self.match_label_with_feature()
+        self.event_or_rawSignal()
         return True
 
     def scrape_fast5_events(self, fields=None):
@@ -131,8 +135,9 @@ class TrainingData(object):
                         kmers[event_index].append(kmer_list)
         self.kmers = kmers
         return kmers
-        
+
     def normalize_scrape_signalalign(self):
+        '''normalizing signalAlign posterioir probabilities for each event'''
         kmers = self.scrape_signalalign()
         normalized_signalalign = defaultdict(list)
         for key, value in kmers.iteritems():
@@ -156,6 +161,29 @@ class TrainingData(object):
                 normalized_signalalign[key] = list(set(m))
         self.normalized_signalalign = normalized_signalalign
         return normalized_signalalign
+
+    def norm_or_unnorm_scrape_signalalign(self):
+        '''normalized or unnormalized signalAlign'''
+        if self.normalize_posterioir_prob:
+            signalAlign = self.normalize_scrape_signalalign()
+        else:
+            signalAlign = self.scrape_signalalign()
+        self.signalAlign  = signalAlign
+        return  signalAlign
+        
+    def event_or_rawSignal(self):
+        '''choosing the features : event or raw signal
+        NOTE: in order to use raw signal, we need to run nanoraw on our fast5 fils beforehand.
+        The output will give us read start with respect to raw signal'''
+        if self.nanoraw:
+            raw_signal_trimmed = self.scrape_fast5signal()[3]
+            raw_signal_normalized = raw_signal_trimmed - np.mean(raw_signal_trimmed)/np.std(raw_signal_trimmed)
+            k = raw_signal_normalized
+        else:
+            fast5_event = self.scrape_fast5_events()
+            k = fast5_event
+        self.k = k
+        return  k
 
     def scrape_eventalign(self):
         """Grab all the event kmers from the eventalign output and record probability"""
