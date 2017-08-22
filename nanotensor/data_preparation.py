@@ -131,6 +131,31 @@ class TrainingData(object):
                         kmers[event_index].append(kmer_list)
         self.kmers = kmers
         return kmers
+        
+    def normalize_scrape_signalalign(self):
+        kmers = self.scrape_signalalign()
+        normalized_signalalign = defaultdict(list)
+        for key, value in kmers.iteritems():
+            maxTuple=[]
+            for i in value:
+                if i[1] != 0:
+                    maxTuple.append(i)
+                    normalized_signalalign[key] = list(set(maxTuple))
+        new_dic = {}
+        for key,value in normalized_signalalign.iteritems():
+            second = []
+            for i in value:
+                second.append(i[1])
+                new_dic[key] = sum(second)
+        for key,value in normalized_signalalign.iteritems():
+            m = []
+            for i in value:
+                devided = i[1]/new_dic[key]
+                new_tuple = (i[0], devided)
+                m.append(new_tuple)
+                normalized_signalalign[key] = list(set(m))
+        self.normalized_signalalign = normalized_signalalign
+        return normalized_signalalign
 
     def scrape_eventalign(self):
         """Grab all the event kmers from the eventalign output and record probability"""
