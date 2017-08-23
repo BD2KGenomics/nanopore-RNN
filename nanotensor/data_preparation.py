@@ -62,6 +62,8 @@ class TrainingData(object):
         self.prob = prob
         self.nanonet = nanonet
         self.deepnano = deepnano
+        self.nanoraw = nanoraw
+        self.normalized_posterioir_prob = normalized_posterioir_prob
         self.strand_name = strand_name
         self.forward = forward
         self.cutoff = cutoff
@@ -170,7 +172,7 @@ class TrainingData(object):
             signalAlign = self.scrape_signalalign()
         self.signalAlign  = signalAlign
         return  signalAlign
-        
+
     def event_or_rawSignal(self):
         '''choosing the features : event or raw signal
         NOTE: in order to use raw signal, we need to run nanoraw on our fast5 fils beforehand.
