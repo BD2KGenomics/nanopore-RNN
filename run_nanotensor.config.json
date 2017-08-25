@@ -49,8 +49,9 @@
     "trained_model": "/Users/andrewbailey/CLionProjects/nanopore-RNN/logs/08Aug-23-10h-52m",
     "trained_model_path": "/Users/andrewbailey/nanopore-RNN/logs/06Jun-29-11h-11m/my_test_model-5233",
     "use_checkpoint": true,
-    "save_s3": true,
     "trace_name": "timeline.json",
     "save_trace": true,
-    "profile": true
+    "profile": true,
+    "save_s3": true,
+    "s3bucket": "neuralnet-accuracy"
 }

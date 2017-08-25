@@ -20,7 +20,7 @@ import argparse
 from datetime import datetime
 import numpy as np
 import time
-from nanotensor.utils import project_folder, list_dir, DotDict, upload_model, load_json
+from nanotensor.utils import project_folder, list_dir, DotDict, upload_model, load_json, save_config_file, test_aws_connection
 from nanotensor.error import Usage
 from nanotensor.queue import DataQueue
 from nanotensor.network import BuildGraph
@@ -69,8 +69,10 @@ class CommandLine(object):
         # allow optional arguments not passed by the command line
         if in_opts is None:
             self.args = vars(self.parser.parse_args())
-        else:
+        elif type(in_opts) is list:
             self.args = vars(self.parser.parse_args(in_opts))
+        else:
+            self.args = in_opts
 
     def do_usage_and_die(self, message):
         """ Print string and usage then return 2
@@ -98,17 +100,13 @@ class CommandLine(object):
         """Check arguments, save config file in new folder if correct"""
         # make sure output dir exists
         assert os.path.isdir(args["training_dir"])
-        assert os.path.isdir(args["training_dir"])
-        # assert isinstance(args["blstm_layer_sizes"], list)
+        assert os.path.isdir(args["testing_dir"])
         # create new output dir
         if args["train"] and not args["load_trained_model"]:
             logfolder_path = os.path.join(args["output_dir"],
                                           datetime.now().strftime("%m%b-%d-%Hh-%Mm"))
             os.makedirs(logfolder_path)
-            config_path = os.path.join(logfolder_path, 'config.json')
-            # save config file for training data
-            with open(config_path, 'w') as outfile:
-                json.dump(args, outfile, indent=4)
+            config_path = save_config_file(args, logfolder_path, name="run_nanotensor.config.json")
             # define log file dir
             args["output_dir"] = logfolder_path
             args["config_path"] = config_path
@@ -330,6 +328,9 @@ class TrainModel(object):
 
     def testing_accuracy(self, config_path, save=True, intra_op_parallelism_threads=8, log_device_placement=False):
         """Get testing accuracy and save model along with configuration file on s3"""
+        if save:
+            aws_test = test_aws_connection(self.args.s3bucket)
+            assert aws_test is True, "Selected save to s3 option but cannot connect to specified bucket"
         with tf.Session(config=tf.ConfigProto(log_device_placement=log_device_placement,
                                               intra_op_parallelism_threads=intra_op_parallelism_threads)) as sess:
             # restore model
@@ -360,10 +361,10 @@ class TrainModel(object):
             final_acc = str(acc_sum / step * 100)[:5] + "%" + datetime.now().strftime("%m%b-%d-%Hh-%Mm")
             print("Average Accuracy = {:.3f}".format(acc_sum / step * 100))
 
-        if save:
+        if save and aws_test:
             file_list = self.get_model_files(config_path)
-            print(file_list)
-            print("Uploading Model to neuralnet-accuracy s3 Bucket")
+            # print(file_list)
+            print("Uploading Model to neuralnet-accuracy s3 Bucket", file=sys.stderr)
             upload_model("neuralnet-accuracy", file_list, final_acc)
 
     def get_model_files(self, *files):
@@ -417,34 +418,45 @@ def average_gradients(tower_grads):
 
 def test_for_nvidia_gpu(num_gpu):
     assert type(num_gpu) is int, "num_gpu option must be integer"
-    try:
-        utilization = re.findall(r"Utilization.*?Gpu.*?(\d+).*?Memory.*?(\d+)",
-                                 subprocess.check_output(["nvidia-smi", "-q"]),
-                                 flags=re.MULTILINE | re.DOTALL)
-        assert len(utilization) >= num_gpu, "Not enough GPUs are available"
-        indices = [i for i, x in enumerate(utilization) if x == ('0', '0')]
-        assert len(indices) >= num_gpu, "Only {0} GPU's are not being used,  change num_gpu parameter to {0}".format(
-            len(indices))
-        return indices
-    except OSError:
+    if num_gpu == 0:
         return False
+    else:
+        try:
+            utilization = re.findall(r"Utilization.*?Gpu.*?(\d+).*?Memory.*?(\d+)",
+                                     subprocess.check_output(["nvidia-smi", "-q"]),
+                                     flags=re.MULTILINE | re.DOTALL)
+            assert len(utilization) >= num_gpu, "Not enough GPUs are available"
+            indices = [i for i, x in enumerate(utilization) if x == ('0', '0')]
+            assert len(indices) >= num_gpu, "Only {0} GPU's are not being used,  change num_gpu parameter to {0}".format(
+                len(indices))
+            return indices
+        except OSError:
+            return False
 
 
-def main():
+def main(in_opts=None):
     """Main docstring"""
     start = timer()
 
-    command_line = CommandLine()
-    debug = command_line.debug
-
-    try:
+    if in_opts is None:
+        # get arguments from command line or config file
+        command_line = CommandLine()
         # get config and log files
         config = command_line.args["config"]
         print("Using config file {}".format(config), file=sys.stderr)
         # define arguments with config or arguments
         args = load_json(config)
+    else:
+        # if feeding arguments from main function
+        command_line = CommandLine(in_opts=in_opts)
+        args = command_line.args
+
+    # debug = command_line.debug
+
+    try:
         # check arguments and define
         args = command_line.check_args(args)
+        config = args.config_path
         # Parameters
         if args.train:
 
