@@ -251,8 +251,8 @@ class QueueTest(unittest.TestCase):
         threads = data_queue.start_threads(sess, n_threads=3)
         # three threads on three different files have started and stopped
         self.assertEqual(len(threads), 3)
-        self.assertEqual(data_queue.file_list[3], data_queue.file_list_queue.get())
-        self.assertEqual(data_queue.file_list[4], data_queue.file_list_queue.get())
+        self.assertTrue(data_queue.file_list_queue.get() in data_queue.file_list)
+        self.assertTrue(data_queue.file_list_queue.get() in data_queue.file_list)
         self.assertTrue(data_queue.file_list_queue.empty())
 
         sess.close()
@@ -264,19 +264,3 @@ class QueueTest(unittest.TestCase):
 if __name__ == '__main__':
     unittest.main()
 
-# start = 0
-# end = 10
-
-# for x in range(100):
-#     if np.isclose(same_data_x[0], data_x_1[start:end]).all():
-#         print("DING DING DING X")
-#         print(start, end)
-#     # if np.isclose(same_data_x2[0], data_x_1[start:end]).all():
-#     #     print("DING DING DING X2")
-#     #     print(start, end)
-#     # if np.isclose(same_data_x3[0], data_x_1[start:end]).all():
-#     #     print("DING DING DING X3")
-#     #     print(start, end)
-#
-#     start += 10
-#     end += 10

@@ -13,9 +13,9 @@ from __future__ import print_function
 import os
 import types
 import unittest
-
+import shutil
 from nanotensor.create_training_data import CommandLine, get_arguments, create_training_data_args, \
-    create_training_data, get_tar_name
+    create_training_data, get_tar_name, main
 from nanotensor.utils import create_log_file
 
 
@@ -218,10 +218,11 @@ class CreateTrainingDataTest(unittest.TestCase):
         deepnano_bool = False
         self.assertRaises(AssertionError, get_tar_name, name, time_dir, nanonet_bool, deepnano_bool)
 
-
-        # def test_main(self):
-        #     """Test main function of create_training_data"""
-        #     main(in_opts=self.args)
+    def test_main(self):
+        """Test main function of create_training_data"""
+        log_dir_path = main(in_opts=self.args)
+        print(log_dir_path)
+        shutil.rmtree(log_dir_path)
 
 
 if __name__ == '__main__':

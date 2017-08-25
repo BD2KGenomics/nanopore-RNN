@@ -439,7 +439,7 @@ class TrainingData(object):
 
     @staticmethod
     def preproc_event(mean, std, length):
-        "Normalizing event information for deepnano feature generation"
+        """Normalizing event information for deepnano feature generation"""
         mean = mean / 100.0 - 0.66
         std = std - 1
         return [mean, mean * mean, std, length]

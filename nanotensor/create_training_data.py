@@ -132,8 +132,10 @@ class CommandLine(object):
         # allow optional arguments not passed by the command line
         if in_opts is None:
             self.args = vars(self.parser.parse_args())
-        else:
+        elif type(in_opts) is list:
             self.args = vars(self.parser.parse_args(in_opts))
+        else:
+            self.args = in_opts
 
     def do_usage_and_die(self, message):
         """ Print string and usage then return 2
@@ -247,16 +249,18 @@ def main(in_opts=None):
     start = timer()
 
     # allow for a command line to be input into main
+
     if in_opts is None:
+        # get arguments from command line or config file
         command_line = CommandLine()
+        args = get_arguments(command_line)
     else:
         command_line = CommandLine(in_opts=in_opts)
-
+        args = command_line.args
     try:
-        # get arguments from command line or config file
-        args = get_arguments(command_line)
+        # args = get_arguments(command_line)
         # make sure they are right format
-        args = command_line.check_args(args)
+        args = CommandLine.check_args(args)
         # create directory in the output directory
         log_dir_path = create_time_directory(args.output_dir)
         # save config file in log directory
@@ -297,6 +301,7 @@ def main(in_opts=None):
     except Usage as err:
         command_line.do_usage_and_die(err.msg)
 
+    return log_dir_path
 
 if __name__ == "__main__":
     main()

@@ -51,8 +51,8 @@ class CommandLine(object):
         """
         # define program description, usage and epilog
         self.parser = argparse.ArgumentParser(description='This program \ takes a config file with network '
-                                                          'configurations and paths to data directories.'
-                                              , epilog="Dont forget to tar the files",
+                                                          'configurations and paths to data directories.',
+                                              epilog="Dont forget to tar the files",
                                               usage='%(prog)s use "-h" for help')
 
         # create mutually exclusive argument for log file and json file
@@ -134,6 +134,7 @@ class TrainModel(object):
             'global_step', [],
             initializer=tf.constant_initializer(0), trainable=False)
         # self.save_model_path = os.path.join(self.args.output_dir, self.args.model_name)
+        self.train_op = "train_op"
         self.model = self.initialize_model()
 
         if self.args.use_checkpoint:
@@ -142,6 +143,7 @@ class TrainModel(object):
             self.trained_model_path = self.args.trained_model_path
 
     def initialize_model(self):
+        """Initialize the model with multi-gpu options"""
         tower_grads = []
         self.load_data()
         gpu_indexes = test_for_nvidia_gpu(self.args.num_gpu)
@@ -200,13 +202,13 @@ class TrainModel(object):
         return 0
 
     # @profile
-    def run_training(self, intra_op_parallelism_threads=8, log_device_placement=True):
+    def run_training(self, intra_op_parallelism_threads=8, log_device_placement=True, allow_soft_placement=True):
         """Run training steps
         use `dmesg` to get error message if training is killed
         """
         config = tf.ConfigProto(log_device_placement=log_device_placement,
                                 intra_op_parallelism_threads=intra_op_parallelism_threads,
-                                allow_soft_placement=True)
+                                allow_soft_placement=allow_soft_placement)
         # shows gpu memory usage
         config.gpu_options.allow_growth = True
 
@@ -233,96 +235,20 @@ class TrainModel(object):
             coord = tf.train.Coordinator()
             threads = tf.train.start_queue_runners(sess=sess, coord=coord)
             self.training.start_threads(sess, n_threads=self.args.num_threads)
-            # self.testing.start_threads(sess)
             run_metadata = tf.RunMetadata()
             # Keep training until reach max iterations
             # print("Training Has Started!")
             while step < self.args.training_iters:
                 for _ in range(self.args.record_step):
                     # Run optimization training step
-                    _ = sess.run([self.train_op])  # ,
-                    # feed_dict={self.testing_bool: False})
-                    # loss = sess.run([self.model.cost])
-                    # print(loss)
+                    _ = sess.run([self.train_op])
                     step += 1
-
-                # print("Trained for a bit")
-                # get testing accuracy stats
-                summary, global_step = sess.run([self.model.train_summary,
-                                                 self.global_step],
-                                                feed_dict={self.testing_bool: True})
-                # add summary statistics
-                writer.add_summary(summary, global_step)
                 # get training accuracy stats
-                summary, global_step = sess.run([self.model.test_summary,
-                                                 self.global_step],
-                                                feed_dict={self.testing_bool: False})
-                # add summary statistics
-                writer.add_summary(summary, global_step)
-
+                self.report_summary_stats(sess, writer, run_metadata, run_options)
                 # if it has been enough time save model and print training stats
-                if self.test_time():
-                    # Calculate batch loss and accuracy for training
-                    _, acc, summary, cost, global_step = sess.run([self.train_op,
-                                                                   self.model.accuracy, self.model.train_summary,
-                                                                   self.model.cost, self.global_step],
-                                                                  feed_dict={self.testing_bool: False})
-                    # add summary statistics
-                    writer.add_summary(summary, global_step)
-                    # Calculate batch loss and accuracy for testing
-                    summary, global_step, test_acc, test_cost = sess.run([self.model.test_summary,
-                                                                          self.global_step, self.model.accuracy,
-                                                                          self.model.cost],
-                                                                         feed_dict={self.testing_bool: True})
-                    # add summary statistics
-                    writer.add_summary(summary, global_step)
-
-                    print("Iter " + str(step) + ", Training Cost= " +
-                          "{:.6f}".format(cost) + ", Training Accuracy= " +
-                          "{:.5f}".format(acc) + ", Testing Cost= " +
-                          "{:.6f}".format(test_cost) + ", Testing Accuracy= " +
-                          "{:.5f}".format(test_acc))
-                    # sys.stdout.flush()
-
-                    # save session
-                    saver.save(sess, save_model_path,
-                               global_step=self.global_step, write_meta_graph=False)
-                    step += 1
-
+                if self.test_time() and self.args.profile:
                     # very expensive profiling steps to add time statistics
-                    if self.args.profile:
-                        _, acc, summary, cost, global_step = sess.run(
-                            [self.train_op, self.model.accuracy, self.model.train_summary,
-                             self.model.cost, self.global_step],
-                            run_metadata=run_metadata, options=run_options,
-                            feed_dict={self.testing_bool: False})
-                        # add summary statistics
-                        writer.add_summary(summary, global_step)
-                        writer.add_run_metadata(run_metadata, "step{}_train".format(global_step))
-                        if self.args.save_trace:
-                            self.chrome_trace(run_metadata, self.args.trace_name)
-
-                        # Calculate batch loss and accuracy for testing
-                        summary, global_step, test_acc, test_cost = sess.run([self.model.test_summary,
-                                                                              self.global_step,
-                                                                              self.model.accuracy, self.model.cost],
-                                                                             run_metadata=run_metadata,
-                                                                             options=run_options,
-                                                                             feed_dict={self.testing_bool: True})
-                        # add summary statistics
-                        writer.add_summary(summary, global_step)
-                        writer.add_run_metadata(run_metadata, "step{}_test".format(global_step))
-
-                        print("Iter " + str(step) + ", Training Cost= " +
-                              "{:.6f}".format(cost) + ", Training Accuracy= " +
-                              "{:.5f}".format(acc) + ", Testing Cost= " +
-                              "{:.6f}".format(test_cost) + ", Testing Accuracy= " +
-                              "{:.5f}".format(test_acc))
-
-                        # save session
-                        saver.save(sess, save_model_path,
-                                   global_step=self.global_step, write_meta_graph=False)
-                        step += 1
+                    self.profile_training(sess, writer, run_metadata, run_options)
 
             saver.save(sess, save_model_path,
                        global_step=self.global_step, write_meta_graph=False)
@@ -333,6 +259,32 @@ class TrainModel(object):
             writer.close()
 
             print("Training Finished!")
+
+    def profile_training(self, sess, writer, run_metadata, run_options):
+        """Expensive profile step so we can track speed of operations of the model"""
+        _, acc, summary, cost, global_step = sess.run(
+            [self.train_op, self.model.accuracy, self.model.train_summary,
+             self.model.cost, self.global_step],
+            run_metadata=run_metadata, options=run_options)
+        # add summary statistics
+        writer.add_summary(summary, global_step)
+        writer.add_run_metadata(run_metadata, "step{}_train".format(global_step))
+        if self.args.save_trace:
+            self.chrome_trace(run_metadata, self.args.trace_name)
+
+    def report_summary_stats(self, sess, writer, run_metadata, run_options):
+        # Calculate batch loss and accuracy for training
+        summary, global_step, train_acc, train_cost = sess.run([self.model.train_summary,
+                                                                self.global_step,
+                                                                self.model.accuracy, self.model.cost],
+                                                               run_metadata=run_metadata,
+                                                               options=run_options)
+        # add summary statistics
+        writer.add_summary(summary, global_step)
+        # print summary stats
+        print("Iter " + str(global_step) + ", Training Cost= " +
+              "{:.6f}".format(train_cost) + ", Training Accuracy= " +
+              "{:.5f}".format(train_acc), file=sys.stderr)
 
     def chrome_trace(self, metadata_proto, f_name):
         """Save a chrome trace json file.
@@ -410,7 +362,7 @@ class TrainModel(object):
 
         if save:
             file_list = self.get_model_files(config_path)
-            # print(file_list)
+            print(file_list)
             print("Uploading Model to neuralnet-accuracy s3 Bucket")
             upload_model("neuralnet-accuracy", file_list, final_acc)
 
@@ -497,7 +449,7 @@ def main():
         if args.train:
 
             train = TrainModel(args)
-            train.run_training(log_device_placement=False)
+            train.run_training(intra_op_parallelism_threads=8, log_device_placement=False, allow_soft_placement=True)
             print("\n#  nanotensor - finished training \n", file=sys.stderr)
             print("\n#  nanotensor - finished training \n", file=sys.stderr)
 

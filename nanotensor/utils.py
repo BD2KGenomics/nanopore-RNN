@@ -121,6 +121,7 @@ def get_project_file(local_path):
 def sum_to_one(vector, prob=False):
     """Make sure a vector sums to one, if not, create diffuse vector"""
     sum1 = sum(vector)
+    assert sum != 0.0, "Vector of probabilities sum's to zero"
     if prob:
         vector = [n / sum1 for n in vector]
         sum1 = sum(vector)

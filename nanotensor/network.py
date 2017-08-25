@@ -23,22 +23,6 @@ from nanotensor.queue import DataQueue
 import tensorflow as tf
 from tensorflow.contrib import rnn
 
-# if "CUDA_HOME" in os.environ:
-#     utilization = re.findall(r"Utilization.*?Gpu.*?(\d+).*?Memory.*?(\d+)",
-#                              subprocess.check_output(["nvidia-smi", "-q"]),
-#                              flags=re.MULTILINE | re.DOTALL)
-#     print("GPU Utilization", utilization)
-#
-#     if ('0', '0') in utilization:
-#         print("Using GPU Device:", utilization.index(('0', '0')))
-#         os.environ["CUDA_VISIBLE_DEVICES"] = str(utilization.index(('0', '0')))
-#         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # To ensure the index matches
-#     else:
-#         print("All GPUs in Use")
-#         exit
-# os.environ["CUDA_VISIBLE_DEVICES"]=','.join([str(i) for i in gpus])
-# num_gpus = len(gpus) # number of GPUs to use
-
 
 class BuildGraph:
     """Build a tensorflow network graph."""
@@ -130,7 +114,7 @@ class BuildGraph:
         """Create a prediction layer from output of blstm layers"""
         with tf.name_scope("prediction"):
             pred = self.fulconn_layer(self.rnn_outputs_flat, self.n_classes)[0]
-            print("pred shape = ", pred.get_shape())
+            # print("pred shape = ", pred.get_shape())
         return pred
 
     def prediction_function(self):
@@ -162,16 +146,16 @@ class BuildGraph:
             self.variable_summaries(cost)
         return cost
 
-    def cost_function_with_mask(self):
-        """Create a cost function for optimizer"""
-        # TODO create a cost function with a defined mask for padded input sequences
-        with tf.name_scope("cost"):
-            cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.pred,
-                                                                                 labels=self.y_flat))
-            # mask = tf.sign(tf.to_float(self.y_flat))
-            # masked_losses = mask * losses
-            self.variable_summaries(cost)
-        return cost
+    # TODO create a cost function with a defined mask for padded input sequences
+    # def cost_function_with_mask(self):
+    #     """Create a cost function for optimizer"""
+    #     with tf.name_scope("cost"):
+    #         cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.pred,
+    #                                                                              labels=self.y_flat))
+    #         # mask = tf.sign(tf.to_float(self.y_flat))
+    #         # masked_losses = mask * losses
+    #         self.variable_summaries(cost)
+    #     return cost
 
     def optimizer_function(self):
         """Create optimizer function"""
