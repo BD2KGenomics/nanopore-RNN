@@ -5,7 +5,7 @@
 #  executable: data_preparation.py
 # Purpose: Give multiple options to create features from event information
 #           and create multiple ways to create labels
-# TODO Implement scraping into signalAlign C code so we can just ouptut what
+# TODO Implement scraping into signalAlign C code so we can just output what
 #      we need directly from signalAlign
 # TODO Create updates on when things are being completed
 # Authors: Andrew Bailey

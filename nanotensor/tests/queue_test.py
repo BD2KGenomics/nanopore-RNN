@@ -17,7 +17,7 @@ import os
 import numpy as np
 import threading
 import time
-from nanotensor.queue import DataQueue, main
+from nanotensor.queue import DataQueue
 from nanotensor.utils import list_dir
 import tensorflow as tf
 
@@ -198,7 +198,9 @@ class QueueTest(unittest.TestCase):
         sess.run(init)
         tf.train.start_queue_runners(sess=sess, coord=coord)
         # send process to background so we can continue
-        t = threading.Thread(target=data_queue.load_data, args=(sess,))
+        stop_event = threading.Event()
+
+        t = threading.Thread(target=data_queue.load_data, args=(sess, stop_event))
         t.daemon = True  # thread will close when parent quits
         t.start()
 
@@ -230,6 +232,7 @@ class QueueTest(unittest.TestCase):
         _, _ = sess.run([dequeue_x_op, dequeue_y_op])
         _, _ = sess.run([dequeue_x_op, dequeue_y_op])
         time.sleep(1)
+        stop_event.set()
         self.assertFalse(data_queue.files_left)
         sess.close()
 
@@ -253,13 +256,15 @@ class QueueTest(unittest.TestCase):
         self.assertEqual(len(threads), 3)
         self.assertTrue(data_queue.file_list_queue.get() in data_queue.file_list)
         self.assertTrue(data_queue.file_list_queue.get() in data_queue.file_list)
-        self.assertTrue(data_queue.file_list_queue.empty())
-
+        # self.assertTrue(data_queue.file_list_queue.get() in data_queue.file_list)
+        # self.assertFalse(data_queue.file_list_queue.empty())
+        coord.request_stop()
+        data_queue.join()
         sess.close()
 
-    def test_main(self):
-        """Test that main does not error"""
-        self.assertIsNone(main())
+    # def test_main(self):
+    #     """Test that main does not error"""
+    #     self.assertIsNone(main())
 
 if __name__ == '__main__':
     unittest.main()

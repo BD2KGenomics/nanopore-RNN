@@ -16,7 +16,7 @@ import os
 import numpy as np
 import threading
 import time
-from nanotensor.queue import DataQueue, main
+from nanotensor.queue import DataQueue
 from nanotensor.utils import list_dir
 import tensorflow as tf
 from nanotensor.network import BuildGraph

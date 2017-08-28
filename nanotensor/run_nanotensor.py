@@ -251,12 +251,13 @@ class TrainModel(object):
             saver.save(sess, save_model_path,
                        global_step=self.global_step, write_meta_graph=False)
 
-            coord.request_stop()
-            coord.join(threads)
-            sess.close()
-            writer.close()
+        coord.request_stop()
+        # coord.join(threads)
+        self.training.join()
+        sess.close()
+        writer.close()
 
-            print("Training Finished!")
+        print("Training Finished!")
 
     def profile_training(self, sess, writer, run_metadata, run_options):
         """Expensive profile step so we can track speed of operations of the model"""
@@ -361,7 +362,7 @@ class TrainModel(object):
             final_acc = str(acc_sum / step * 100)[:5] + "%" + datetime.now().strftime("%m%b-%d-%Hh-%Mm")
             print("Average Accuracy = {:.3f}".format(acc_sum / step * 100))
 
-        if save and aws_test:
+        if save:
             file_list = self.get_model_files(config_path)
             # print(file_list)
             print("Uploading Model to neuralnet-accuracy s3 Bucket", file=sys.stderr)
@@ -484,8 +485,11 @@ def main(in_opts=None):
         stop = timer()
         print("Running Time = {} seconds".format(stop - start), file=sys.stderr)
 
+        return args.output_dir
+
     except Usage as err:
         command_line.do_usage_and_die(err.msg)
+
 
 
 if __name__ == "__main__":

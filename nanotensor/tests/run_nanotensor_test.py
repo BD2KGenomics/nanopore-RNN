@@ -15,6 +15,7 @@ import unittest
 import os
 import numpy as np
 import threading
+import shutil
 import time
 import tensorflow as tf
 from nanotensor.run_nanotensor import main
@@ -38,11 +39,11 @@ class RunNanotensorTest(unittest.TestCase):
             output_dir=cls.output_dir, model_name="test_model", num_gpu=0,
             num_threads=2, queue_size=10, training_iters=30, save_model=60, record_step=10, n_steps=30, batch_size=1,
             learning_rate=0.001, binary_cost=True, network=
-            [dict(bias=5.0, type="blstm", name="blstm_layer1", size=5)],
+            [dict(bias=5.0, type="blstm", name="blstm_layer_1", size=5)],
             train=True, inference=False, testing_accuracy=False, load_trained_model=False, alphabet="ATGC",
             kmer_len=5, inference_output=cls.inference_output, trained_model=cls.trained_model,
             trained_model_path=cls.trained_model_path,
-            use_checkpoint=False, save_s3=True, trace_name="timeline.json", save_trace=True, profile=True,
+            use_checkpoint=False, save_s3=False, trace_name="timeline.json", save_trace=False, profile=False,
             s3bucket="neuralnet-accuracy")
 
         cls.args_test = dict(
@@ -59,7 +60,9 @@ class RunNanotensorTest(unittest.TestCase):
             s3bucket="neuralnet-accuracy")
 
     def test_main(self):
-        main(in_opts=self.args_train)
+        with tf.variable_scope("tests"):
+            output_dir = main(in_opts=self.args_train)
+        shutil.rmtree(output_dir)
         # main(in_opts=self.args_test)
 
 

@@ -76,10 +76,15 @@ class DataQueue:
         # True if there are files that have not been read into the queue
         self.files_left = True
         self.files_read = 0
+        self.stop_event = threading.Event()
         # create threading queue for file list so there can be asynchronous data batching
         self.file_list_queue = queue.Queue()
         for file1 in self.file_list:
             self.file_list_queue.put(file1)
+
+    def join(self):
+        """Kill daemon threads if needed"""
+        self.stop_event.set()
 
     def add_to_queue(self, batch, sess):
         """Add a batch to the queue"""
@@ -125,9 +130,9 @@ class DataQueue:
         self.file_list_queue.put(file_path)
         return True
 
-    def load_data(self, sess):
+    def load_data(self, sess, stop_event):
         """Create infinite loop of adding to queue and shuffling files"""
-        while True:
+        while not stop_event.is_set():
             self.read_in_file(sess)
             self.files_read += 1
             if self.files_read == self.num_files:
@@ -146,7 +151,7 @@ class DataQueue:
         """ Start background threads to feed queue """
         threads = []
         for n in range(n_threads):
-            t = threading.Thread(target=self.load_data, args=(sess,))
+            t = threading.Thread(target=self.load_data, args=(sess, self.stop_event))
             t.daemon = True  # thread will close when parent quits
             t.start()
             threads.append(t)
@@ -179,52 +184,53 @@ class DataQueue:
         #     return np.append(matrix, new_rows, axis=0)
 
 
-def main():
-    """Main docstring"""
-    start = timer()
-
-    # tf.set_random_seed(1234)
-    #
-    # training_files = list_dir(training_dir, ext="npy")
-    # training_dir = "/Users/andrewbailey/nanopore-RNN/test_files/create_training_files/07Jul-20-11h-28m"
-    #
-    # # Doing anything with data on the CPU is generally a good idea.
-    # data = DataQueue(training_files, batch_size=2, queue_size=10, verbose=False, pad=0, trim=True, n_steps=10)
-    # images_batch, labels_batch = data.get_inputs()
-    # images_batch1 = tf.reshape(images_batch, [-1, data.n_input])
-    # labels_batch1 = tf.reshape(labels_batch, [-1, data.n_classes])
-    #
-    # # simple model
-    # input_dim = int(images_batch1.get_shape()[1])
-    # weight = tf.Variable(tf.random_normal([input_dim, data.n_classes]))
-    # bias = tf.Variable(tf.random_normal([data.n_classes]))
-    # prediction = tf.matmul(images_batch1, weight) + bias
-    #
-    # print(tf.shape(prediction))
-    # print(tf.shape(labels_batch))
-    # print(tf.shape(labels_batch1))
-    # loss = tf.nn.softmax_cross_entropy_with_logits(logits=prediction, labels=labels_batch1)
-    #
-    # train_op = tf.train.AdamOptimizer().minimize(loss)
-    #
-    # sess = tf.Session()
-    # init = tf.global_variables_initializer()
-    # sess.run(init)
-    #
-    # # start the tensorflow QueueRunner's
-    # tf.train.start_queue_runners(sess=sess)
-    # # start our custom queue runner's threads
-    # data.start_threads(sess)
-    #
-    # _, loss_val = sess.run([train_op, loss])
-    # print(loss_val)
-    #
-    # sess.close()
-
-    stop = timer()
-    print("Running Time = {} seconds".format(stop - start), file=sys.stderr)
+# def main():
+#     """Main docstring"""
+#     start = timer()
+#
+#     # tf.set_random_seed(1234)
+#     #
+#     # training_files = list_dir(training_dir, ext="npy")
+#     # training_dir = "/Users/andrewbailey/nanopore-RNN/test_files/create_training_files/07Jul-20-11h-28m"
+#     #
+#     # # Doing anything with data on the CPU is generally a good idea.
+#     # data = DataQueue(training_files, batch_size=2, queue_size=10, verbose=False, pad=0, trim=True, n_steps=10)
+#     # images_batch, labels_batch = data.get_inputs()
+#     # images_batch1 = tf.reshape(images_batch, [-1, data.n_input])
+#     # labels_batch1 = tf.reshape(labels_batch, [-1, data.n_classes])
+#     #
+#     # # simple model
+#     # input_dim = int(images_batch1.get_shape()[1])
+#     # weight = tf.Variable(tf.random_normal([input_dim, data.n_classes]))
+#     # bias = tf.Variable(tf.random_normal([data.n_classes]))
+#     # prediction = tf.matmul(images_batch1, weight) + bias
+#     #
+#     # print(tf.shape(prediction))
+#     # print(tf.shape(labels_batch))
+#     # print(tf.shape(labels_batch1))
+#     # loss = tf.nn.softmax_cross_entropy_with_logits(logits=prediction, labels=labels_batch1)
+#     #
+#     # train_op = tf.train.AdamOptimizer().minimize(loss)
+#     #
+#     # sess = tf.Session()
+#     # init = tf.global_variables_initializer()
+#     # sess.run(init)
+#     #
+#     # # start the tensorflow QueueRunner's
+#     # tf.train.start_queue_runners(sess=sess)
+#     # # start our custom queue runner's threads
+#     # data.start_threads(sess)
+#     #
+#     # _, loss_val = sess.run([train_op, loss])
+#     # print(loss_val)
+#     #
+#     # sess.close()
+#
+#     stop = timer()
+#     print("Running Time = {} seconds".format(stop - start), file=sys.stderr)
 
 
 if __name__ == "__main__":
-    main()
+    # main()
+    print("This file is just a library", file=sys.stderr)
     raise SystemExit
