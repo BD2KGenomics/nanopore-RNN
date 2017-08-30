@@ -121,6 +121,7 @@ def get_project_file(local_path):
 def sum_to_one(vector, prob=False):
     """Make sure a vector sums to one, if not, create diffuse vector"""
     sum1 = sum(vector)
+    assert sum != 0.0, "Vector of probabilities sum's to zero"
     if prob:
         vector = [n / sum1 for n in vector]
         sum1 = sum(vector)
@@ -168,7 +169,7 @@ def upload_file_to_s3(bucket_path, file_path, name):
     test = conn.lookup(bucket_path)
     if test is None:
         print("There is no bucket with this name!", file=sys.stderr)
-        return 1
+        return 0
     else:
         bucket = conn.get_bucket(bucket_path)
 
@@ -190,6 +191,18 @@ def upload_model(bucket, files, dir_name):
         key = os.path.join(dir_name, name)
         upload_file_to_s3(bucket, file1, key)
 
+
+def test_aws_connection(bucket_path):
+    """Test to see if there is a configured aws connection"""
+    try:
+        conn = S3Connection(host='s3-us-west-2.amazonaws.com')
+        test = conn.lookup(bucket_path)
+        if test is None:
+            print("There is no bucket with this name!", file=sys.stderr)
+            return False
+    except:
+        return False
+    return True
 
 def check_duplicate_characters(string):
     """make sure there are no duplicates in the alphabet"""
@@ -231,7 +244,7 @@ def multiprocess_data(num_workers, target, arg_generator):
 
         work_queue.put(args)
 
-    for _ in xrange(num_workers):
+    for _ in range(num_workers):
         process = Process(target=worker, args=(work_queue, done_queue, target))
         process.start()
         jobs.append(process)
@@ -313,22 +326,24 @@ def tarball_files(tar_name, file_paths, output_dir='.', prefix=''):
     return tar_path
 
 
-def main():
-    """Test the methods"""
-    start = timer()
-    # file_path = "/Users/andrewbailey/nanopore-RNN/test_files/create_training_files/07Jul-19-16h-48m"
-    # files = list_dir(file_path)
-    # tarball_files("test_tar", files)
-    # file_list = ["/Users/andrewbailey/nanopore-RNN/kmers.txt",
-    #              "/Users/andrewbailey/nanopore-RNN/logs/06Jun-29-11h-11m/checkpoint",
-    #              "/Users/andrewbailey/nanopore-RNN/logs/06Jun-29-11h-11m/my_test_model-3215.data-00000-of-00001"]
-    # bucket = "neuralnet-accuracy"
-    # dir_name = "06Jun-29-11h-30m-11.0%"
-    # upload_file_to_s3("nanotensor-data", "/Users/andrewbailey/nanopore-RNN/test_files/create_training_files/07Jul-19-16h-48m/create_training_data.config.json", "create_training_data.config.json")
-    # upload_model(bucket, file_list, dir_name)
-
-    stop = timer()
-    print("Running Time = {} seconds".format(stop - start), file=sys.stderr)
+# def main():
+#     """Test the methods"""
+#     start = timer()
+#     if test_aws_connection("neuralnet-accuracy"):
+#         print("True")
+#     # file_path = "/Users/andrewbailey/nanopore-RNN/test_files/create_training_files/07Jul-19-16h-48m"
+#     # files = list_dir(file_path)
+#     # tarball_files("test_tar", files)
+#     # file_list = ["/Users/andrewbailey/nanopore-RNN/kmers.txt",
+#     #              "/Users/andrewbailey/nanopore-RNN/logs/06Jun-29-11h-11m/checkpoint",
+#     #              "/Users/andrewbailey/nanopore-RNN/logs/06Jun-29-11h-11m/my_test_model-3215.data-00000-of-00001"]
+#     # bucket = "neuralnet-accuracy"
+#     # dir_name = "06Jun-29-11h-30m-11.0%"
+#     # upload_file_to_s3("nanotensor-data", "/Users/andrewbailey/nanopore-RNN/test_files/create_training_files/07Jul-19-16h-48m/create_training_data.config.json", "create_training_data.config.json")
+#     # upload_model(bucket, file_list, dir_name)
+#
+#     stop = timer()
+#     print("Running Time = {} seconds".format(stop - start), file=sys.stderr)
 
 
 if __name__ == "__main__":

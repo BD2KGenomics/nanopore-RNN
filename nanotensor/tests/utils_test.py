@@ -60,7 +60,7 @@ class UtilsTest(unittest.TestCase):
         self.assertRaises(AssertionError, save_config_file, "test", self.HOME)
         self.assertRaises(AssertionError, save_config_file, ["test", 1], "test")
 
-        config_path = save_config_file({"test": 1}, self.HOME)
+        config_path = save_config_file({"test": 1}, self.HOME, name="test.config.json")
         self.assertTrue(os.path.exists(config_path))
         os.remove(config_path)
 
@@ -83,6 +83,7 @@ class UtilsTest(unittest.TestCase):
         self.assertRaises(AssertionError, create_log_file, self.HOME, bad_log_file, new_log_path)
         log_path = create_log_file(self.HOME, old_log_file, new_log_path)
         self.assertTrue(os.path.exists(log_path))
+        print(log_path)
         os.remove(log_path)
 
 if __name__ == '__main__':

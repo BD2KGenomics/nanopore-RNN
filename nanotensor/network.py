@@ -24,16 +24,16 @@ import tensorflow as tf
 from tensorflow.contrib import rnn
 
 
-class BuildGraph():
+class BuildGraph:
     """Build a tensorflow network graph."""
-    def __init__(self, n_input, n_classes, learning_rate, n_steps=1,\
-                forget_bias=5.0, y=None, x=None, network=None, binary_cost=True):
+
+    def __init__(self, n_input, n_classes, learning_rate, n_steps=1,
+                 forget_bias=5.0, y=None, x=None, network=None, binary_cost=True, reuse=None, num_gpu=1):
         # self.x = x
         self.y = tf.placeholder_with_default(y, shape=[None, n_steps, n_classes])
         self.x = tf.placeholder_with_default(x, shape=[None, n_steps, n_input])
-
         self.batch_size = tf.shape(self.x)[0]
-
+        self.reuse = reuse
         # self.batch_size = tf.shape(self.y)[0]
 
         # self.batch_size = batch_size
@@ -46,14 +46,12 @@ class BuildGraph():
         self.forget_bias = forget_bias
         self.output_states = []
         self.layers = []
-        # list of operations to reset states of each blstm layer
-        # self.zero_states = []
-        # self.reset_fws = []
-        # self.reset_bws = []
-        # Summay Information
+
+        # Summary Information
         self.training_summaries = []
         self.testing_summaries = []
-        assert network != None, "Must specify network structure. [{'type': 'blstm', 'name': 'blstm_layer1', 'size': 128}, ...]"
+        assert network is not None, "Must specify network structure. [{'type': 'blstm', 'name': 'blstm_layer1', " \
+                                    "'size': 128}, ...] "
         self.network = network
         outputs, final_layer_size = self.create_model(self.network)
         self.rnn_outputs_flat = tf.reshape(outputs, [-1, final_layer_size])
@@ -62,7 +60,6 @@ class BuildGraph():
         # self.zero_state = self.combine_arguments(self.zero_states, "zero_states")
         # self.fw_reset = self.combine_arguments(self.reset_fws, "reset_fws")
         # self.bw_reset = self.combine_arguments(self.reset_bws, "reset_bws")
-
 
         # Linear activation, using rnn inner loop last output
         self.pred = self.create_prediction_layer()
@@ -75,49 +72,50 @@ class BuildGraph():
             self.cost = self.cost_function_prob()
 
         self.optimizer = self.optimizer_function()
-        # Evaluate model
-        tf.add_to_collection("optimizer", self.optimizer)
+        # # Evaluate model
+        # tf.add_to_collection("optimizer", self.optimizer)
 
         self.correct_pred = self.prediction_function()
         self.accuracy = self.accuracy_function()
         # merge summary information
-
         self.test_summary = tf.summary.merge(self.testing_summaries)
         self.train_summary = tf.summary.merge(self.training_summaries)
-
-
+        # list of operations to reset states of each blstm layer
+        # self.zero_states = []
+        # self.reset_fws = []
+        # self.reset_bws = []
 
     def create_model(self, network_model=None):
-        """Create a model from a list of dictironaries with "name", "type", and "size" keys"""
-        assert network_model != None, "Must specify network structure. [{'type': 'blstm', 'name': 'blstm_layer1', 'size': 128}, ...]"
-        ref_types = {"tanh": tf.tanh, "relu":tf.nn.relu, "sigmoid":tf.sigmoid,\
-                    "softplus":tf.nn.softplus, "none": None}
+        """Create a model from a list of dictionaries with "name", "type", and "size" keys"""
+        assert network_model is not None, "Must specify network structure. [{'type': 'blstm', 'name': 'blstm_layer1', "\
+                                          "'size': 128}, ...] "
+        ref_types = {"tanh": tf.tanh, "relu": tf.nn.relu, "sigmoid": tf.sigmoid,
+                     "softplus": tf.nn.softplus, "none": None}
         input_vector = self.x
         prevlayer_size = 0
         for layer in network_model:
             if layer["type"] == "blstm":
-                input_vector = self.blstm(input_vector=input_vector, n_hidden=layer["size"], \
-                                layer_name=layer["name"], forget_bias=layer["bias"])
-                prevlayer_size = layer["size"]*2
+                input_vector = self.blstm(input_vector=input_vector, n_hidden=layer["size"],
+                                          layer_name=layer["name"], forget_bias=layer["bias"], reuse=self.reuse)
+                prevlayer_size = layer["size"] * 2
             else:
-                # reshape matrix to fit into a single activation function
-                input_vector = tf.reshape(input_vector, [-1, prevlayer_size*self.n_steps])
-                input_vector = self.fulconn_layer(input_data=input_vector, output_dim=layer["size"],\
-                                seq_len=self.n_steps, activation_func=ref_types[layer["type"]])[0]
-                # reshape matrix to correct shape from output of
-                input_vector = tf.reshape(input_vector, [-1, self.n_steps, layer["size"]])
-                prevlayer_size = layer["size"]
+                with tf.variable_scope(layer["name"]):
+                    # reshape matrix to fit into a single activation function
+                    input_vector = tf.reshape(input_vector, [-1, prevlayer_size * self.n_steps])
+                    input_vector = self.fulconn_layer(input_data=input_vector, output_dim=layer["size"],
+                                                      seq_len=self.n_steps, activation_func=ref_types[layer["type"]])[0]
+                    # reshape matrix to correct shape from output of
+                    input_vector = tf.reshape(input_vector, [-1, self.n_steps, layer["size"]])
+                    prevlayer_size = layer["size"]
 
         return input_vector, prevlayer_size
-
 
     def create_prediction_layer(self):
         """Create a prediction layer from output of blstm layers"""
         with tf.name_scope("prediction"):
             pred = self.fulconn_layer(self.rnn_outputs_flat, self.n_classes)[0]
-            print("pred shape = ", pred.get_shape())
+            # print("pred shape = ", pred.get_shape())
         return pred
-
 
     def prediction_function(self):
         """Compare predicions with label to calculate number correct"""
@@ -128,8 +126,8 @@ class BuildGraph():
     def cost_function_prob(self):
         """Create a cost function for optimizer"""
         with tf.name_scope("cost"):
-            loss1 = tf.nn.softmax_cross_entropy_with_logits(logits=self.pred,\
-                labels=self.y_flat)
+            loss1 = tf.nn.softmax_cross_entropy_with_logits(logits=self.pred,
+                                                            labels=self.y_flat)
             loss = tf.reshape(loss1, [self.batch_size, self.n_steps])
 
             cost = tf.reduce_mean(loss)
@@ -140,29 +138,31 @@ class BuildGraph():
         """Create a cost function for optimizer"""
         with tf.name_scope("cost"):
             y_label_indices = tf.argmax(self.y_flat, 1, name="y_label_indices")
-            loss1 = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.pred,\
-                labels=y_label_indices)
+            loss1 = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.pred,
+                                                                   labels=y_label_indices)
             loss = tf.reshape(loss1, [self.batch_size, self.n_steps])
 
             cost = tf.reduce_mean(loss)
             self.variable_summaries(cost)
         return cost
 
-    def cost_function_with_mask(self):
-        """Create a cost function for optimizer"""
-        # TODO create a cost function with a defined mask for padded input sequences
-        with tf.name_scope("cost"):
-            cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.pred,\
-                labels=self.y_flat))
-            # mask = tf.sign(tf.to_float(self.y_flat))
-            # masked_losses = mask * losses
-            self.variable_summaries(cost)
-        return cost
+    # TODO create a cost function with a defined mask for padded input sequences
+    # def cost_function_with_mask(self):
+    #     """Create a cost function for optimizer"""
+    #     with tf.name_scope("cost"):
+    #         cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.pred,
+    #                                                                              labels=self.y_flat))
+    #         # mask = tf.sign(tf.to_float(self.y_flat))
+    #         # masked_losses = mask * losses
+    #         self.variable_summaries(cost)
+    #     return cost
 
     def optimizer_function(self):
         """Create optimizer function"""
-        return tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.cost, \
-         global_step=self.global_step)
+        # opt = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
+        # self.gradients = opt.compute_gradients(self.cost)
+        return tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.cost,
+                                                                                 global_step=self.global_step)
 
     def accuracy_function(self):
         """Create accuracy function to calculate accuracy of the prediction"""
@@ -190,15 +190,16 @@ class BuildGraph():
         return update_ops
 
     @staticmethod
-    def blstm(input_vector, layer_name="blstm_layer1", n_hidden=128, forget_bias=5.0):
+    def blstm(input_vector, layer_name="blstm_layer1", n_hidden=128, forget_bias=5.0, reuse=None):
         """Create a bidirectional LSTM using code from the example at
-         https://github.com/aymericdamien/TensorFlow-Examples/blob/master/examples/3_NeuralNetworks/bidirectional_rnn.py"""
+        https://github.com/aymericdamien/TensorFlow-Examples/blob/master/examples/3_NeuralNetworks/bidirectional_rnn.py
+        """
         with tf.variable_scope(layer_name):
             # Define lstm cells with tensorflow
             # Forward direction cell
-            lstm_fw_cell = rnn.LSTMCell(n_hidden, forget_bias=forget_bias, state_is_tuple=True)
+            lstm_fw_cell = rnn.LSTMCell(n_hidden, forget_bias=forget_bias, state_is_tuple=True, reuse=reuse)
             # Backward direction cell
-            lstm_bw_cell = rnn.LSTMCell(n_hidden, forget_bias=forget_bias, state_is_tuple=True)
+            lstm_bw_cell = rnn.LSTMCell(n_hidden, forget_bias=forget_bias, state_is_tuple=True, reuse=reuse)
 
             # forward states
             # fw_state_c, fw_state_h = lstm_fw_cell.zero_state(self.batch_size, tf.float32)
@@ -212,9 +213,11 @@ class BuildGraph():
             #     tf.Variable(bw_state_c, trainable=False, name="backward_c"),
             #     tf.Variable(bw_state_h, trainable=False, name="backward_h"))
 
-            outputs, output_states = tf.nn.bidirectional_dynamic_rnn(lstm_fw_cell, \
-            lstm_bw_cell, input_vector, dtype=tf.float32)#, initial_state_fw=lstm_fw_cell_states, \
-            #initial_state_bw=lstm_bw_cell_states)
+            outputs, output_states = tf.nn.bidirectional_dynamic_rnn(lstm_fw_cell,
+                                                                     lstm_bw_cell, input_vector,
+                                                                     dtype=tf.float32)
+            # , initial_state_fw=lstm_fw_cell_states,
+            # initial_state_bw=lstm_bw_cell_states)
 
             # create operations for resetting both states and only the forward or backward states
             # self.zero_states.extend(self.get_state_update_op((lstm_fw_cell_states, \
@@ -227,7 +230,6 @@ class BuildGraph():
         return output
 
     def variable_summaries(self, var):
-        # pylint: disable=C0301
         """Attach a lot of summaries to a Tensor (for TensorBoard visualization).
         source: https://github.com/tensorflow/tensorflow/blob/r1.1/tensorflow/examples/tutorials/mnist/mnist_with_summaries.py
         """
@@ -241,28 +243,30 @@ class BuildGraph():
                 mean = tf.reduce_mean(var)
                 summary = tf.summary.scalar('mean', mean)
                 self.training_summaries.append(summary)
-        # with tf.name_scope('stddev'):
-        #     stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
-        # tf.summary.scalar('stddev', stddev)
-        # tf.summary.scalar('max', tf.reduce_max(var))
-        # tf.summary.scalar('min', tf.reduce_min(var))
+                # with tf.name_scope('stddev'):
+                #     stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
+                # tf.summary.scalar('stddev', stddev)
+                # tf.summary.scalar('max', tf.reduce_max(var))
+                # tf.summary.scalar('min', tf.reduce_min(var))
 
     @staticmethod
     def fulconn_layer(input_data, output_dim, seq_len=1, activation_func=None):
-        # pylint: disable=C0301
         """Create a fully connected layer.
-        source: https://stackoverflow.com/questions/39808336/tensorflow-bidirectional-dynamic-rnn-none-values-error/40305673
+        source:
+        https://stackoverflow.com/questions/39808336/tensorflow-bidirectional-dynamic-rnn-none-values-error/40305673
         """
-        # get input dimentions
+        # get input dimensions
         input_dim = int(input_data.get_shape()[1])
-        weight = tf.Variable(tf.random_normal([input_dim, output_dim*seq_len]))
-        bais = tf.Variable(tf.random_normal([output_dim*seq_len]))
-        if activation_func:
-            output = activation_func(tf.matmul(input_data, weight) + bais)
-        else:
-            output = tf.matmul(input_data, weight) + bais
-        return output, weight, bais
+        weight = tf.get_variable(name="weights", shape=[input_dim, output_dim * seq_len], initializer=tf.random_normal_initializer)
+        bias = tf.get_variable(name="bias", shape=[output_dim * seq_len], initializer=tf.random_normal_initializer)
 
+        # weight = tf.Variable(tf.random_normal([input_dim, output_dim * seq_len]), name="weights")
+        # bias = tf.Variable(tf.random_normal([output_dim * seq_len]), name="bias")
+        if activation_func:
+            output = activation_func(tf.matmul(input_data, weight) + bias)
+        else:
+            output = tf.matmul(input_data, weight) + bias
+        return output, weight, bias
 
 
 def main():
@@ -276,7 +280,6 @@ def main():
     # #     n_hidden=self.layer_sizes[layer_size], forget_bias=self.forget_bias)
     # # return input1
     #
-    # # TODO make hyperparameters a json file
     # # Parameters
     # learning_rate = 0.001
     # training_iters = 100

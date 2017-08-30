@@ -1,14 +1,16 @@
 {
     "testing_dir": "/Users/andrewbailey/nanopore-RNN/test_files/create_training_files/07Jul-20-11h-28m",
     "training_dir": "/Users/andrewbailey/nanopore-RNN/test_files/create_training_files/07Jul-20-11h-28m",
-    "output_dir": "/Users/andrewbailey/nanopore-RNN/logs",
+    "output_dir": "/Users/andrewbailey/CLionProjects/nanopore-RNN/logs",
     "model_name": "my_test_model",
+    "num_gpu": 2,
+    "num_threads": 2,
     "queue_size": 10,
     "training_iters": 30,
     "save_model": 1,
-    "record_step": 30,
+    "record_step": 10,
     "n_steps": 30,
-    "batch_size": 5,
+    "batch_size": 1,
     "learning_rate": 0.001,
     "binary_cost": true,
     "network": [
@@ -37,18 +39,19 @@
           "size": 64
       }
     ],
-    "train": true,
+    "train": false,
     "inference": false,
-    "testing_accuracy": false,
+    "testing_accuracy": true,
     "load_trained_model": false,
     "alphabet": "ATGC",
     "kmer_len": 5,
     "inference_output": "/Users/andrewbailey/nanopore-RNN/kmers.txt",
-    "trained_model": "/Users/andrewbailey/nanopore-RNN/logs/06Jun-29-11h-11m",
+    "trained_model": "/Users/andrewbailey/CLionProjects/nanopore-RNN/logs/08Aug-23-10h-52m",
     "trained_model_path": "/Users/andrewbailey/nanopore-RNN/logs/06Jun-29-11h-11m/my_test_model-5233",
     "use_checkpoint": true,
-    "save_s3": true,
     "trace_name": "timeline.json",
     "save_trace": true,
-    "profile": false
+    "profile": true,
+    "save_s3": true,
+    "s3bucket": "neuralnet-accuracy"
 }

@@ -8,6 +8,11 @@ We propose a series of scripts, which are still in development, to label and tra
 
 
 ## INSTALLATION
+Install BWA and make sure executable is in the PATH:
+* `git clone https://github.com/lh3/bwa.git`
+* `cd bwa`
+* `make`
+* `export PATH=$PATH:$PWD`
 
 The easiest way to deal with the dependencies is to download Anaconda
 * Download and Install Anaconda https://docs.continuum.io/anaconda/install
@@ -15,11 +20,11 @@ The easiest way to deal with the dependencies is to download Anaconda
 * `cd nanopore-RNN`
 * `conda env create --file requirements.yml`
 * `source activate nanotensor`
-* `cd nanopore-RNN/nanonet`
-* `python setup.py install`
-* `cd ..`
-* `python setup.py install`
-
+* `make`  
+* C executables created by signalAlign need to be in the PATH
+* `export PATH=$PATH:$PWD/signalAlign/bin`
+* Test installation
+* `make test`
 
 ## USAGE
 
