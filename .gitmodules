@@ -6,8 +6,7 @@
 	path = chiron
 	url = https://github.com/adbailey4/chiron.git
     branch = debug-dev
-
 [submodule "nanonet"]
 	path = nanonet
 	url = https://github.com/adbailey4/nanonet.git
-	branch = bailey-dev
+	branch = bailey_dev
