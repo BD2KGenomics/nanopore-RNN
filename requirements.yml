@@ -80,4 +80,4 @@ dependencies:
   - s3transfer==0.1.10
   - sonlib==1.1.0
   - google-compute-engine==2.4.1
-
+  - nanoraw==0.5
