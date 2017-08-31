@@ -213,10 +213,11 @@ class CreateTrainingDataTest(unittest.TestCase):
         time_dir = "/some/path/time"
         nanonet_bool = False
         deepnano_bool = True
-        tar_name = get_tar_name(name, time_dir, nanonet_bool, deepnano_bool)
+        chiron_bool = False
+        tar_name = get_tar_name(name, time_dir, nanonet_bool, deepnano_bool, chiron_bool)
         self.assertEqual("test.time.deepnano", tar_name)
         deepnano_bool = False
-        self.assertRaises(AssertionError, get_tar_name, name, time_dir, nanonet_bool, deepnano_bool)
+        self.assertRaises(AssertionError, get_tar_name, name, time_dir, nanonet_bool, deepnano_bool, chiron_bool)
 
     def test_main(self):
         """Test main function of create_training_data"""

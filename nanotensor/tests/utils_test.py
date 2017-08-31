@@ -28,11 +28,18 @@ class UtilsTest(unittest.TestCase):
     def test_list_dir(self):
         """Test if list_dir is working"""
         canonical = '/'.join(os.path.abspath(__file__).split("/")[:-3])
-        canonical = os.path.join(canonical, "test_files/reference-sequences/")
-        expected = ["CCAGG_modified.bed", "ecoli_k12_mg1655.fa", "ecoli_k12_mg1655_modified.fa"]
+        canonical = os.path.join(canonical, "test_files/minion-reads/canonical")
+        # expected = ["CCAGG_modified.bed", "ecoli_k12_mg1655.fa", "ecoli_k12_mg1655_modified.fa"]
+        expected = \
+            ["miten_PC_20160820_FNFAD20259_MN17223_mux_scan_AMS_158_R9_WGA_Ecoli_08_20_16_83098_ch467_read35_strand.fast5",
+            "miten_PC_20160820_FNFAD20259_MN17223_sequencing_run_AMS_158_R9_WGA_Ecoli_08_20_16_43623_ch100_read104_strand.fast5",
+            "miten_PC_20160820_FNFAD20259_MN17223_sequencing_run_AMS_158_R9_WGA_Ecoli_08_20_16_43623_ch100_read207_strand.fast5",
+            "miten_PC_20160820_FNFAD20259_MN17223_sequencing_run_AMS_158_R9_WGA_Ecoli_08_20_16_43623_ch100_read214_strand.fast5",
+            "miten_PC_20160820_FNFAD20259_MN17223_sequencing_run_AMS_158_R9_WGA_Ecoli_08_20_16_43623_ch100_read280_strand.fast5"]
+
         expected_files = sorted([os.path.join(canonical, x) for x in expected])
         self.assertEqual(sorted(list_dir(canonical)), expected_files)
-        self.assertEqual(list_dir(canonical, ext="bed"), expected_files[0:1])
+        self.assertEqual(sorted(list_dir(canonical, ext="fast5")), expected_files)
 
     def test_dot_dict(self):
         """Test DotDict class"""
