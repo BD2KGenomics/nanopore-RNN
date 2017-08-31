@@ -35,15 +35,13 @@ def call_bwa():
 def bwa_index_genome(reference_fasta):
     """Index genome of a given reference fasta file"""
     assert os.path.isfile(reference_fasta), "Reference genome does not exist: {}".format(reference_fasta)
-    indexed = check_indexed_reference(ecoli_genome)
-
+    indexed = check_indexed_reference(reference_fasta)
     if not indexed:
         command = ["bwa", "index", reference_fasta]
         subprocess.call(command)
-        indexed = check_indexed_reference(ecoli_genome)
+        indexed = check_indexed_reference(reference_fasta)
     assert indexed is True, "Subprocess call didn't work. Check bwa version and make sure it is the path"
     return indexed
-
 
 
 # samtools view -S -b sample.sam > sample.bam
@@ -127,9 +125,10 @@ def check_indexed_reference(reference_fasta):
     exts = ["amb", "bwt", "pac", "sa", "ann"]
     indexed = True
     for ext in exts:
-        if not os.path.isfile(reference_fasta+'.'+ext):
+        if not os.path.isfile(reference_fasta + '.' + ext):
             indexed = False
     return indexed
+
 
 def main():
     """Main docstring"""
