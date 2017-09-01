@@ -49,21 +49,23 @@ def bwa_index_genome(reference_fasta):
 # bwa index ecoli_k12_mg1655.fa
 # bwa mem -x ont2d reference-sequences/ecoli_k12_mg1655.fa test_minion.fa | samtools view -bS - > out.bam
 
-def create_signal_file(fast5_object, output_dir, name):
+def create_label_file(fast5_object, output_dir, name):
     """Create .signal files from fast5 files for chiron"""
     assert os.path.isdir(output_dir) is True, "output directory does not exist"
     output = os.path.join(output_dir, name + ".label")
-    nanoraw_events = fast5_object.get_corrected_events()
-    events = nanoraw_events["start", 'length', 'base']
-    with open(output, 'w+') as fh:
-        for event in events:
-            line = str(event['start']) + ' ' + str(event['start'] + event['length']) + ' ' + str(event['base'] + '\n')
-            fh.write(line)
-
+    try:
+        nanoraw_events = fast5_object.get_corrected_events()
+        events = nanoraw_events["start", 'length', 'base']
+        with open(output, 'w+') as fh:
+            for event in events:
+                line = str(event['start']) + ' ' + str(event['start'] + event['length']) + ' ' + str(event['base'] + '\n')
+                fh.write(line)
+    except KeyError:
+        output = False
     return output
 
 
-def create_label_file(fast5_object, output_dir, name):
+def create_signal_file(fast5_object, output_dir, name):
     """Create .label files from fast5 files for chiron"""
     assert os.path.isdir(output_dir) is True, "output directory does not exist"
     output = os.path.join(output_dir, name + ".signal")
@@ -88,8 +90,11 @@ def label_chiron_data_multiprocess_wrapper(args):
 def label_chiron_data(fast5_path, output_dir, name):
     """Create signal and label data for chiron"""
     fast5_handle = Fast5(fast5_path)
-    signal_path = create_signal_file(fast5_handle, output_dir, name)
     label_path = create_label_file(fast5_handle, output_dir, name)
+    if label_path:
+        signal_path = create_signal_file(fast5_handle, output_dir, name)
+    else:
+        signal_path = False
     return signal_path, label_path
 
 
@@ -139,15 +144,18 @@ def main():
 
     chiron_fast5_dir = "/Users/andrewbailey/CLionProjects/nanopore-RNN/methylated_test"
     ecoli_genome = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/reference-sequences/ecoli_k12_mg1655.fa"
+
+    fast5 = Fast5(test_fast5)
+    create_label_file(fast5, "/Users/andrewbailey/CLionProjects/nanopore-RNN/", "test1")
     # call_nanoraw(chiron_fast5_dir, ecoli_genome, 2, overwrite=True)
-    indexed = check_indexed_reference(ecoli_genome)
-    print(indexed)
-
-    if not indexed:
-        bwa_index_genome(ecoli_genome)
-        indexed = check_indexed_reference(ecoli_genome)
-
-    print(indexed)
+    # indexed = check_indexed_reference(ecoli_genome)
+    # print(indexed)
+    #
+    # if not indexed:
+    #     bwa_index_genome(ecoli_genome)
+    #     indexed = check_indexed_reference(ecoli_genome)
+    #
+    # print(indexed)
     # fast5 = Fast5(test_fast5)
     # # data = fast5.get_reads(raw=True, scale=False)
     # # data1 = (next(data))

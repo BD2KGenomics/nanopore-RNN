@@ -19,5 +19,6 @@
   "complement_model": "/Users/andrewbailey/nanopore-RNN/",
   "chiron": true,
   "fast5_dir": "/Users/andrewbailey/CLionProjects/nanopore-RNN/methylated_test",
-  "reference": "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/reference-sequences/ecoli_k12_mg1655.fa"
+  "reference": "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/reference-sequences/ecoli_k12_mg1655.fa",
+  "overwrite": false
 }

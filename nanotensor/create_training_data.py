@@ -19,7 +19,9 @@ from nanotensor.data_preparation import TrainingData
 from nanotensor.error import Usage
 from nanotensor.utils import merge_two_dicts, load_json, DotDict, multiprocess_data, create_time_directory, \
     save_config_file, tarball_files, list_dir, upload_file_to_s3
-from nanotensor.chiron_data_prep import create_label_chiron_data_args, label_chiron_data_multiprocess_wrapper, call_nanoraw
+from nanotensor.chiron_data_prep import create_label_chiron_data_args, label_chiron_data_multiprocess_wrapper, \
+    call_nanoraw
+
 
 class CommandLine(object):
     """
@@ -133,8 +135,7 @@ class CommandLine(object):
                                         help='Create data for chiron', action="store_true",
                                         dest='chiron')
 
-
-    # allow optional arguments not passed by the command line
+        # allow optional arguments not passed by the command line
         if in_opts is None:
             self.args = vars(self.parser.parse_args())
         elif type(in_opts) is list:
@@ -275,7 +276,7 @@ def main(in_opts=None):
         # reset output directory to new log directory so files are written to correct location
         args.output_dir = log_dir_path
         if args.chiron:
-            call_nanoraw(args.fast5_dir, args.reference, args.num_cpu, overwrite=True)
+            call_nanoraw(args.fast5_dir, args.reference, args.num_cpu, overwrite=args.overwrite)
             arg_generator = create_label_chiron_data_args(args.fast5_dir, args.output_dir, output_name=args.file_prefix,
                                                           verbose=args.verbose)
             target = label_chiron_data_multiprocess_wrapper
@@ -316,6 +317,7 @@ def main(in_opts=None):
         command_line.do_usage_and_die(err.msg)
 
     return log_dir_path
+
 
 if __name__ == "__main__":
     main()
