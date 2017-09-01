@@ -296,7 +296,7 @@ def main(in_opts=None):
             multiprocess_data(num_workers, target, arg_generator)
 
         # if tar or save files create tar archive
-        if args.save2s3 or args.tar:
+        if args.tar:
             tar_name = get_tar_name("training_data", args.output_dir, args.nanonet, args.deepnano, args.chiron)
             file_paths = list_dir(args.output_dir)
             print("Creating tarball file\n", file=sys.stderr)

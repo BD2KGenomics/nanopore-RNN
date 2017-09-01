@@ -12,24 +12,58 @@ from __future__ import print_function
 import sys
 import os
 import subprocess
+import collections
+import re
 from timeit import default_timer as timer
 from nanonet.fast5 import Fast5
 from nanotensor.utils import list_dir, DotDict
 
-
-def align_to_reference():
-    pass
-
-
-def get_signal(fast5_path):
-    with h5py.File(fast5_path, 'r+') as fast5:
-        if self.strand_name == "template":
-            template = fast5.get("Analyses/Basecall_1D_000/BaseCalled_template/Events").value
-            Strand = np.array(template)
+alignment_stats = collections.namedtuple('alignment_stats', ['total_reads', 'unaligned_reads', 'deletion_rate',
+                                                             'insertion_rate', 'mismatch_rate', 'identity_rate'])
 
 
-def call_bwa():
-    pass
+def align_to_reference(sequence, reference, out_bam, threads=1):
+    """Align sequence (fasta or fastq) to reference using bwa and samtools"""
+    assert os.path.isfile(reference) is True, "reference sequence does not exist"
+    # assert os.path.isfile(sequence) is True, "sequence file does not exist"
+    bwa_index_genome(reference)
+    bwa_command = ["bwa", "mem", "-x", "ont2d", '-t', str(threads), reference, sequence]
+    samtools_command = ['samtools', 'view', '-bS']
+    # subprocess.call(command)
+    p1 = subprocess.Popen(bwa_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    p2 = subprocess.Popen(samtools_command, stdin=p1.stdout, stdout=open(out_bam, "wb"))
+    p1.stdout.close()  # Allow p1 to receive a SIGPIPE if p2 exits.
+    # output = p2.communicate()[0]
+    # print(output)
+    assert os.path.isfile(out_bam) is True, "Bam file was not created"
+    return out_bam
+
+
+def cat_files(files, out_path):
+    """Cat files together into a single file"""
+    assert type(files) is list, "Files have to be in a list"
+    cat_command = ["cat"]
+    cat_command.extend(files)
+    subprocess.Popen(cat_command, stdout=open(out_path, "w+"), stderr=subprocess.PIPE)
+    assert os.path.isfile(out_path) is True, "Subprocess call didn't work. Make sure regex gives full path"
+    return out_path
+
+
+def get_summary_alignment_stats(bam, reference, report_all=False):
+    """Get summary alignment statistics from alignment info using jsa.hts.errorAnalysis"""
+    assert os.path.isfile(reference) is True, "reference sequence does not exist"
+    assert os.path.isfile(bam) is True, "bam file does not exist"
+    command = ["jsa.hts.errorAnalysis", "--bamFile", bam, '--reference', reference]
+    p1 = subprocess.Popen(command, stdin=None, stdout=subprocess.PIPE)
+    out, err = p1.communicate()
+    if report_all:
+        alignment_data = out
+    else:
+        data = re.split('[:\n]', out)
+        alignment_data = alignment_stats(total_reads=float(data[11]), unaligned_reads=float(data[13]), deletion_rate=float(data[15]),
+                                     insertion_rate=float(data[17]),
+                                     mismatch_rate=float(data[19]), identity_rate=float(data[21]))
+    return alignment_data
 
 
 def bwa_index_genome(reference_fasta):
@@ -40,10 +74,11 @@ def bwa_index_genome(reference_fasta):
         command = ["bwa", "index", reference_fasta]
         subprocess.call(command)
         indexed = check_indexed_reference(reference_fasta)
-    assert indexed is True, "Subprocess call didn't work. Check bwa version and make sure it is the path"
+    assert indexed is True, "Subprocess call didn't work. Make sure bwa is in the PATH"
     return indexed
 
 
+# jsa.hts.errorAnalysis --bamFile=test_fastq.bam --reference=reference-sequences/ecoli_k12_mg1655.fa
 # samtools view -S -b sample.sam > sample.bam
 # bwa mem [options] ref.fa in.fq | samtools view -bS - > out.bam
 # bwa index ecoli_k12_mg1655.fa
@@ -58,7 +93,8 @@ def create_label_file(fast5_object, output_dir, name):
         events = nanoraw_events["start", 'length', 'base']
         with open(output, 'w+') as fh:
             for event in events:
-                line = str(event['start']) + ' ' + str(event['start'] + event['length']) + ' ' + str(event['base'] + '\n')
+                line = str(event['start']) + ' ' + str(event['start'] + event['length']) + ' ' + str(
+                    event['base'] + '\n')
                 fh.write(line)
     except KeyError:
         output = False
@@ -145,8 +181,20 @@ def main():
     chiron_fast5_dir = "/Users/andrewbailey/CLionProjects/nanopore-RNN/methylated_test"
     ecoli_genome = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/reference-sequences/ecoli_k12_mg1655.fa"
 
-    fast5 = Fast5(test_fast5)
-    create_label_file(fast5, "/Users/andrewbailey/CLionProjects/nanopore-RNN/", "test1")
+    fasta_dir = "/Users/andrewbailey/CLionProjects/nanopore-RNN/chiron/test_output/result"
+    files = list_dir(fasta_dir, ext="fasta")
+    output = "/Users/andrewbailey/CLionProjects/nanopore-RNN/chiron/test_output/result/all_reads2.fasta"
+    print(files)
+    path = cat_files(files, output)
+    bam = align_to_reference(path, ecoli_genome,
+                             "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/test2.bam", threads=2)
+    data = get_summary_alignment_stats(bam, ecoli_genome, report_all=True)
+    print(data)
+    # for x in range(len(data)):
+    #     print(x, (data[x]))
+
+    # fast5 = Fast5(test_fast5)
+    # create_label_file(fast5, "/Users/andrewbailey/CLionProjects/nanopore-RNN/", "test1")
     # call_nanoraw(chiron_fast5_dir, ecoli_genome, 2, overwrite=True)
     # indexed = check_indexed_reference(ecoli_genome)
     # print(indexed)
