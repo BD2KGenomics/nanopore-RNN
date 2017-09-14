@@ -89,8 +89,9 @@ def create_label_file(fast5_object, output_dir, name):
     assert os.path.isdir(output_dir) is True, "output directory does not exist"
     output = os.path.join(output_dir, name + ".label")
     try:
-        nanoraw_events = fast5_object.get_corrected_events()
+        nanoraw_events, corr_start_rel_to_raw = fast5_object.get_corrected_events()
         events = nanoraw_events["start", 'length', 'base']
+        events["start"] = events["start"] + corr_start_rel_to_raw
         with open(output, 'w+') as fh:
             for event in events:
                 line = str(event['start']) + ' ' + str(event['start'] + event['length']) + ' ' + str(
@@ -182,19 +183,20 @@ def main():
     ecoli_genome = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/reference-sequences/ecoli_k12_mg1655.fa"
 
     fasta_dir = "/Users/andrewbailey/CLionProjects/nanopore-RNN/chiron/test_output/result"
-    files = list_dir(fasta_dir, ext="fasta")
-    output = "/Users/andrewbailey/CLionProjects/nanopore-RNN/chiron/test_output/result/all_reads2.fasta"
-    print(files)
-    path = cat_files(files, output)
-    bam = align_to_reference(path, ecoli_genome,
-                             "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/test2.bam", threads=2)
-    data = get_summary_alignment_stats(bam, ecoli_genome, report_all=True)
-    print(data)
+    # files = list_dir(fasta_dir, ext="fasta")
+    # output = "/Users/andrewbailey/CLionProjects/nanopore-RNN/chiron/test_output/result/all_reads2.fasta"
+    # print(files)
+    # path = cat_files(files, output)
+    # bam = align_to_reference(path, ecoli_genome,
+    #                          "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/test3.bam", threads=2)
+    # data = get_summary_alignment_stats(bam, ecoli_genome, report_all=True)
+    # print(data)
+    # call_nanoraw("/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/canonical", ecoli_genome, 1)
     # for x in range(len(data)):
     #     print(x, (data[x]))
 
-    # fast5 = Fast5(test_fast5)
-    # create_label_file(fast5, "/Users/andrewbailey/CLionProjects/nanopore-RNN/", "test1")
+    fast5 = Fast5(test_fast5)
+    create_label_file(fast5, "/Users/andrewbailey/CLionProjects/nanopore-RNN/", "test1")
     # call_nanoraw(chiron_fast5_dir, ecoli_genome, 2, overwrite=True)
     # indexed = check_indexed_reference(ecoli_genome)
     # print(indexed)
