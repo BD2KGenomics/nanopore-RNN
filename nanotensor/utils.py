@@ -226,7 +226,7 @@ def save_json(dict1, path):
     """Save a python object as a json file"""
     path = os.path.abspath(path)
     with open(path, 'w') as outfile:
-        json.dump(dict1, outfile, indent=4)
+        json.dump(dict1, outfile)
     assert os.path.isfile(path)
     return path
 

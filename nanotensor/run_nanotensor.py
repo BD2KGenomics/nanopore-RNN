@@ -20,9 +20,10 @@ import argparse
 from datetime import datetime
 import numpy as np
 import time
-from nanotensor.utils import project_folder, list_dir, DotDict, upload_model, load_json, save_config_file, test_aws_connection
+from nanotensor.utils import project_folder, list_dir, DotDict, upload_model, load_json, save_config_file, \
+    test_aws_connection
 from nanotensor.error import Usage
-from nanotensor.queue import DataQueue
+from nanotensor.queue import DataQueue, CreateDataset
 from nanotensor.network import BuildGraph
 from nanotensor.data_preparation import TrainingData
 import tensorflow as tf
@@ -50,7 +51,7 @@ class CommandLine(object):
         argparse.
         """
         # define program description, usage and epilog
-        self.parser = argparse.ArgumentParser(description='This program \ takes a config file with network '
+        self.parser = argparse.ArgumentParser(description='This program takes a config file with network '
                                                           'configurations and paths to data directories.',
                                               epilog="Dont forget to tar the files",
                                               usage='%(prog)s use "-h" for help')
@@ -99,13 +100,16 @@ class CommandLine(object):
     def check_args(args):
         """Check arguments, save config file in new folder if correct"""
         # make sure output dir exists
-        assert os.path.isdir(args["training_dir"])
+        assert os.path.isdir(args["training_dir"]), "{} does not exist".format(args["training_dir"])
         assert os.path.isdir(args["testing_dir"])
         # create new output dir
         if args["train"] and not args["load_trained_model"]:
             logfolder_path = os.path.join(args["output_dir"],
                                           datetime.now().strftime("%m%b-%d-%Hh-%Mm"))
-            os.makedirs(logfolder_path)
+            try:
+                os.makedirs(logfolder_path)
+            except OSError:
+                pass
             config_path = save_config_file(args, logfolder_path, name="run_nanotensor.config.json")
             # define log file dir
             args["output_dir"] = logfolder_path
@@ -120,14 +124,15 @@ class TrainModel(object):
     def __init__(self, args):
         super(TrainModel, self).__init__()
         self.args = args
-        self.training_files = list_dir(self.args.training_dir, ext="npy")
-        self.testing_files = list_dir(self.args.testing_dir, ext="npy")
+        self.training_files = list_dir(self.args.training_dir)
+        self.testing_files = list_dir(self.args.testing_dir)
         self.testing_bool = tf.placeholder(dtype=bool, shape=[], name='testing_bool')
         self.n_input = int()
         self.n_classes = int()
         self.training = "DataQueue"
         self.testing = "DataQueue"
         self.start = datetime.now()
+        # TODO recover global step if reloading graph
         self.global_step = tf.get_variable(
             'global_step', [],
             initializer=tf.constant_initializer(0), trainable=False)
@@ -151,12 +156,12 @@ class TrainModel(object):
             print("Using GPU's {}".format(gpu_indexes), file=sys.stderr)
             with tf.variable_scope(tf.get_variable_scope()):
                 for i in list(gpu_indexes):
-                    events, labels = self.training.get_inputs()
+                    x, seq_length, y = self.training.iterator.get_next()
                     with tf.device('/gpu:%d' % i):
-                        model = BuildGraph(self.n_input, self.n_classes, self.args.learning_rate,
-                                           n_steps=self.args.n_steps,
-                                           network=self.args.network, x=events, y=labels,
-                                           binary_cost=self.args.binary_cost,
+                        model = BuildGraph(n_input=self.n_input, n_classes=self.n_classes,
+                                           learning_rate=self.args.learning_rate, n_steps=self.args.n_steps,
+                                           network=self.args.network, x=x, y=y, seq_len=seq_length,
+                                           cost_function=self.args.cost_function,
                                            reuse=reuse)
                         tf.get_variable_scope().reuse_variables()
                         reuse = True
@@ -168,17 +173,23 @@ class TrainModel(object):
         else:
             print("No GPU's available, using CPU for computation", file=sys.stderr)
             if self.args.train:
-                events, labels = self.training.get_inputs()
+                self.x, seq_length, self.y = self.training.iterator.get_next()
+                model = BuildGraph(n_input=self.training.n_input, n_classes=self.training.n_classes,
+                                   learning_rate=self.args.learning_rate, n_steps=self.args.n_steps,
+                                   network=self.args.network, x=self.x, y=self.y, seq_len=seq_length,
+                                   cost_function=self.args.cost_function,
+                                   reuse=reuse)
+                grads = opt.compute_gradients(model.cost)
             else:
-                events, labels = self.testing.get_inputs()
-
-            model = BuildGraph(self.n_input, self.n_classes, self.args.learning_rate, n_steps=self.args.n_steps,
-                               network=self.args.network, x=events, y=labels, binary_cost=self.args.binary_cost,
-                               reuse=reuse)
-            # self.train_op = model.optimizer
-            grads = opt.compute_gradients(model.cost)
+                x, seq_length = self.training.iterator.get_next()
+                model = BuildGraph(n_input=self.training.n_input, n_classes=self.training.n_classes,
+                                   learning_rate=self.args.learning_rate, n_steps=self.args.n_steps,
+                                   network=self.args.network, x=x, y=None, seq_len=seq_length,
+                                   cost_function=self.args.cost_function,
+                                   reuse=reuse)
         with tf.variable_scope("apply_gradients"):
             self.train_op = opt.apply_gradients(grads, global_step=self.global_step)
+
         # variable_averages = tf.train.ExponentialMovingAverage(
         # cifar10.MOVING_AVERAGE_DECAY, global_step)
         # variables_averages_op = variable_averages.apply(tf.trainable_variables())
@@ -187,12 +198,18 @@ class TrainModel(object):
 
     def load_data(self):
         """Create training and testing queues from training and testing files"""
-        self.training = DataQueue(self.training_files, self.args.batch_size,
-                                  queue_size=self.args.queue_size, verbose=False, pad=0, trim=True,
-                                  n_steps=self.args.n_steps)
-        self.testing = DataQueue(self.testing_files, self.args.batch_size,
-                                 queue_size=self.args.queue_size, verbose=False, pad=0, trim=True,
-                                 n_steps=self.args.n_steps)
+        if self.args.cost_function == "ctc_loss":
+            sparse = True
+        else:
+            sparse = False
+        self.training = CreateDataset(self.testing_files, batch_size=self.args.batch_size, pad=0,
+                                      seq_len=self.args.n_steps, sparse=sparse, verbose=self.args.verbose,
+                                      training=True,
+                                      n_epochs=self.args.n_epochs)
+        self.training.test()
+        self.testing = CreateDataset(self.testing_files, batch_size=self.args.batch_size, pad=0,
+                                     seq_len=self.args.n_steps, sparse=sparse, verbose=self.args.verbose, training=True,
+                                     n_epochs=self.args.n_epochs)
         assert self.training.n_input == self.testing.n_input
         assert self.training.n_classes == self.testing.n_classes
         self.n_input = self.training.n_input
@@ -210,6 +227,7 @@ class TrainModel(object):
         # shows gpu memory usage
         config.gpu_options.allow_growth = True
 
+        # with tf.train.MonitoredTrainingSession(config=config) as sess:
         with tf.Session(config=config) as sess:
             # create logs
             run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
@@ -229,31 +247,39 @@ class TrainModel(object):
                 saver.save(sess, save_model_path,
                            global_step=self.global_step)
                 saver = tf.train.Saver(max_to_keep=4, keep_checkpoint_every_n_hours=2)
-            # start queue
-            coord = tf.train.Coordinator()
-            threads = tf.train.start_queue_runners(sess=sess, coord=coord)
-            self.training.start_threads(sess, n_threads=self.args.num_threads)
+            # # start queue
+            # coord = tf.train.Coordinator()
+            # threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+            # self.training.start_threads(sess, n_threads=self.args.num_threads)
             run_metadata = tf.RunMetadata()
+            sess.run(self.training.iterator.initializer,
+                     feed_dict={self.training.dataX: self.training.data.input,
+                                self.training.dataY: self.training.data.label,
+                                self.training.seq_length: self.training.data.seq_len})
+            sess.run(self.testing.iterator.initializer,
+                     feed_dict={self.testing.dataX: self.testing.data.input,
+                                self.testing.dataY: self.testing.data.label,
+                                self.testing.seq_length: self.testing.data.seq_len})
+
             # Keep training until reach max iterations
             # print("Training Has Started!")
-            while step < self.args.training_iters:
-                for _ in range(self.args.record_step):
-                    # Run optimization training step
-                    _ = sess.run([self.train_op])
-                    step += 1
-                # get training accuracy stats
-                self.report_summary_stats(sess, writer, run_metadata, run_options)
-                # if it has been enough time save model and print training stats
-                if self.test_time() and self.args.profile:
-                    # very expensive profiling steps to add time statistics
-                    self.profile_training(sess, writer, run_metadata, run_options)
+            try:
+                while step < self.args.training_iters:
+                    for _ in range(self.args.record_step):
+                        # Run optimization training step
+                        _ = sess.run([self.train_op])
+                        step += 1
+                    # get training accuracy stats
+                    self.report_summary_stats(sess, writer, run_metadata, run_options)
+                    # if it has been enough time save model and print training stats
+                    if self.test_time() and self.args.profile:
+                        # very expensive profiling steps to add time statistics
+                        self.profile_training(sess, writer, run_metadata, run_options)
 
-            saver.save(sess, save_model_path,
-                       global_step=self.global_step, write_meta_graph=False)
-
-        coord.request_stop()
-        # coord.join(threads)
-        self.training.join()
+                    saver.save(sess, save_model_path,
+                               global_step=self.global_step, write_meta_graph=False)
+            except tf.errors.OutOfRangeError:
+                print("End of dataset")  # ==> "End of dataset"
         sess.close()
         writer.close()
 
@@ -396,7 +422,7 @@ def average_gradients(tower_grads):
         grads = []
         for g, v in grad_and_vars:
             # print(g)
-            print(v)
+            # print(v)
             # print("Another gradient and variable")
             # Add 0 dimension to the gradients to represent the tower.
             expanded_g = tf.expand_dims(g, 0)
@@ -428,7 +454,8 @@ def test_for_nvidia_gpu(num_gpu):
                                      flags=re.MULTILINE | re.DOTALL)
             assert len(utilization) >= num_gpu, "Not enough GPUs are available"
             indices = [i for i, x in enumerate(utilization) if x == ('0', '0')]
-            assert len(indices) >= num_gpu, "Only {0} GPU's are not being used,  change num_gpu parameter to {0}".format(
+            assert len(
+                indices) >= num_gpu, "Only {0} GPU's are not being used,  change num_gpu parameter to {0}".format(
                 len(indices))
             return indices
         except OSError:
@@ -460,7 +487,6 @@ def main(in_opts=None):
         config = args.config_path
         # Parameters
         if args.train:
-
             train = TrainModel(args)
             train.run_training(intra_op_parallelism_threads=8, log_device_placement=False, allow_soft_placement=True)
             print("\n#  nanotensor - finished training \n", file=sys.stderr)
@@ -489,7 +515,6 @@ def main(in_opts=None):
 
     except Usage as err:
         command_line.do_usage_and_die(err.msg)
-
 
 
 if __name__ == "__main__":

@@ -172,18 +172,80 @@ def check_indexed_reference(reference_fasta):
     return indexed
 
 
+def replace_motif(reference):
+    """Find and replace search motif and replace with replace motif then write out new reference"""
+    header, sequence = readFasta(reference)
+    seq = sequence[0].replace("CCTGG", "CETGG")
+    final = seq.replace("CCAGG", "CEAGG")
+    with open("/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/reference-sequences/ecoli_k12_mg1655.motif.replaced.fa", 'w+') as new_ref:
+        new_ref.write('>' + header[0]+'\n')
+        new_ref.write(final)
+
+
+def readFasta(fasta):
+    '''
+    Taken from David Bernick but modified slightly to fit my purposes.
+
+    using filename given in init, returns each included FastA record
+    as 2 strings - header and sequence.
+    whitespace is removed, no adjustment is made to sequence contents.
+    The initial '>' is removed from the header.
+    '''
+    headerList = []
+    sequenceList = []
+    # initialize return containers
+    header = ''
+    sequence = ''
+
+    # skip to first fasta header
+    line = fasta.readline()
+    while not line.startswith('>'):
+        line = fasta.readline()
+    header = line[1:].rstrip()
+
+    # header is saved, get the rest of the sequence
+    # up until the next header is found
+    # then yield the results and wait for the next call.
+    # next call will resume at the yield point
+    # which is where we have the next header
+    for line in fasta:
+        if line.startswith ('>'):
+            headerList.append(header)
+            sequenceList.append(sequence)
+            header = line[1:].rstrip()
+            sequence = ''
+        else:
+            sequence += ''.join(line.rstrip().split()).upper()
+    # final header and sequence will be seen with an end of file
+    # with clause will terminate, so we do the final yield of the data
+    headerList.append(header)
+    sequenceList.append(sequence)
+
+    return [headerList, sequenceList]
+
+
+
 def main():
     """Main docstring"""
     start = timer()
-    ont_fasta = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/test_minion.fa"
-    ont_fastq = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/test_minion.fastq"
-    test_fast5 = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/canonical/miten_PC_20160820_FNFAD20259_MN17223_mux_scan_AMS_158_R9_WGA_Ecoli_08_20_16_83098_ch467_read35_strand.fast5"
+    # ont_fasta = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/test_minion.fa"
+    # ont_fastq = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/test_minion.fastq"
+    # test_fast5 = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/canonical/miten_PC_20160820_FNFAD20259_MN17223_mux_scan_AMS_158_R9_WGA_Ecoli_08_20_16_83098_ch467_read35_strand.fast5"
+    #
+    # chiron_fast5_dir = "/Users/andrewbailey/CLionProjects/nanopore-RNN/methylated_test"
+    # ecoli_genome = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/reference-sequences/ecoli_k12_mg1655.fa"
+    # with open(ecoli_genome, 'r+') as reference:
+    #     replace_motif(reference)
+    # fasta_dir = "/Users/andrewbailey/CLionProjects/nanopore-RNN/chiron/test_output/result"
+    # replace_motif(ecoli_genome)
 
-    chiron_fast5_dir = "/Users/andrewbailey/CLionProjects/nanopore-RNN/methylated_test"
-    ecoli_genome = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/reference-sequences/ecoli_k12_mg1655.fa"
+    files = list_dir("/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/methylated")
+    thing = create_label_chiron_data_args("/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/methylated",
+                                  "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/test_methylated",
+                                  "methylated_aligned", verbose=True)
+    for args in thing:
+        label_chiron_data(fast5_path=args["fast5_path"], output_dir=args["output_dir"], name=args["name"])
 
-    fasta_dir = "/Users/andrewbailey/CLionProjects/nanopore-RNN/chiron/test_output/result"
-    # files = list_dir(fasta_dir, ext="fasta")
     # output = "/Users/andrewbailey/CLionProjects/nanopore-RNN/chiron/test_output/result/all_reads2.fasta"
     # print(files)
     # path = cat_files(files, output)
@@ -194,9 +256,9 @@ def main():
     # call_nanoraw("/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/canonical", ecoli_genome, 1)
     # for x in range(len(data)):
     #     print(x, (data[x]))
-
-    fast5 = Fast5(test_fast5)
-    create_label_file(fast5, "/Users/andrewbailey/CLionProjects/nanopore-RNN/", "test1")
+    #
+    # fast5 = Fast5(test_fast5)
+    # create_label_file(fast5, "/Users/andrewbailey/CLionProjects/nanopore-RNN/", "test1")
     # call_nanoraw(chiron_fast5_dir, ecoli_genome, 2, overwrite=True)
     # indexed = check_indexed_reference(ecoli_genome)
     # print(indexed)
