@@ -169,7 +169,7 @@ class TrainModel(object):
                                                learning_rate=self.args.learning_rate, n_steps=self.args.n_steps,
                                                network=self.args.network, x=x, y=y, seq_len=seq_length,
                                                cost_function=self.args.cost_function,
-                                               reuse=reuse)
+                                               reuse=reuse, optimizer=False)
                             tf.get_variable_scope().reuse_variables()
                             reuse = True
                             gradients = opt.compute_gradients(model.cost)
@@ -184,7 +184,7 @@ class TrainModel(object):
                                        learning_rate=self.args.learning_rate, n_steps=self.args.n_steps,
                                        network=self.args.network, x=x, y=y, seq_len=seq_length,
                                        cost_function=self.args.cost_function,
-                                       reuse=reuse)
+                                       reuse=reuse, optimizer=False)
                     grads = opt.compute_gradients(model.cost)
                 with tf.device('/cpu:0'):
                     # Create validation graph on cpu
