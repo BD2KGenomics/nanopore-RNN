@@ -135,7 +135,7 @@ class CreateDataset:
                                 self.seq_length: self.data.seq_len,
                                 self.dataY: self.data.label})
             test1, test2, test3 = sess.run([in_1, seq, out])
-            # print(self.data.label[:2])
+            print(len(test1[0]))
             # print(test1, test2, test3)
         return True
 
@@ -181,15 +181,28 @@ class CreateDataset:
         file_count = 0
         for name in self.file_list:
             if name.endswith(".signal"):
-                file_pre = os.path.splitext(name)[0]
-                f_signal = read_signal(name)
-                label_name = file_pre + '.label'
-                if motif:
-                    trim_signal = SignalLabel(name, label_name)
-                    motif_generator = trim_signal.trim_to_motif(["CCAGG", "CCTGG", "CEAGG", "CETGG"], prefix_length=10,
-                                                                suffix_length=10)
-                    for motif in motif_generator:
-                        tmp_event, tmp_event_length, tmp_label, tmp_label_length = read_raw(f_signal, motif, self.seq_len)
+                try:
+                    file_pre = os.path.splitext(name)[0]
+                    f_signal = read_signal(name)
+                    label_name = file_pre + '.label'
+                    if motif:
+                        trim_signal = SignalLabel(name, label_name)
+                        motif_generator = trim_signal.trim_to_motif(["CCAGG", "CCTGG", "CEAGG", "CETGG"], prefix_length=10,
+                                                                    suffix_length=10)
+                        for motif in motif_generator:
+                            tmp_event, tmp_event_length, tmp_label, tmp_label_length = read_raw(f_signal, motif, self.seq_len)
+                            event += tmp_event
+                            event_length += tmp_event_length
+                            label += tmp_label
+                            label_length += tmp_label_length
+                            count = len(event)
+                            if file_count % 10 == 0:
+                                sys.stdout.write("%d lines read.   \n" % (count))
+                            file_count += 1
+                    else:
+                        f_label = read_label(label_name, skip_start=10, window_n=(k_mer - 1) / 2,
+                                             alphabet=self.n_classes)
+                        tmp_event, tmp_event_length, tmp_label, tmp_label_length = read_raw(f_signal, f_label, self.seq_len)
                         event += tmp_event
                         event_length += tmp_event_length
                         label += tmp_label
@@ -198,18 +211,8 @@ class CreateDataset:
                         if file_count % 10 == 0:
                             sys.stdout.write("%d lines read.   \n" % (count))
                         file_count += 1
-                else:
-                    f_label = read_label(label_name, skip_start=10, window_n=(k_mer - 1) / 2,
-                                         alphabet=self.n_classes)
-                    tmp_event, tmp_event_length, tmp_label, tmp_label_length = read_raw(f_signal, f_label, self.seq_len)
-                    event += tmp_event
-                    event_length += tmp_event_length
-                    label += tmp_label
-                    label_length += tmp_label_length
-                    count = len(event)
-                    if file_count % 10 == 0:
-                        sys.stdout.write("%d lines read.   \n" % (count))
-                    file_count += 1
+                except ValueError:
+                    continue
         padded_labels = []
         pad_len = max(label_length)
         for i in range(len(label)):
