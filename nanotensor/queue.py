@@ -124,7 +124,7 @@ class CreateDataset:
             dataset = tf.data.Dataset.zip((X, seq_length))
         dataset = dataset.prefetch(buffer_size=10)
         self.iterator = dataset.make_initializable_iterator()
-        self.data = self.signal_label_reader()
+        self.data = self.signal_label_reader(motif=True)
 
     def test(self):
         """Test to make sure the data was loaded correctly"""
@@ -186,7 +186,8 @@ class CreateDataset:
                 label_name = file_pre + '.label'
                 if motif:
                     trim_signal = SignalLabel(name, label_name)
-                    motif_generator = trim_signal.trim_to_motif(["CCAGG", "CCTGG"], prefix_length=10, suffix_length=10)
+                    motif_generator = trim_signal.trim_to_motif(["CCAGG", "CCTGG", "CEAGG", "CETGG"], prefix_length=10,
+                                                                suffix_length=10)
                     for motif in motif_generator:
                         tmp_event, tmp_event_length, tmp_label, tmp_label_length = read_raw(f_signal, motif, self.seq_len)
                         event += tmp_event

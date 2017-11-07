@@ -83,8 +83,9 @@ class SignalLabel:
         indexes = [x.start() for x in re.finditer(motif, seq)]
         return [[x, x+len(motif)] for x in indexes]
 
-    def trim_to_motif(self, motifs, prefix_length=0, suffix_length=0):
+    def trim_to_motif(self, motifs, prefix_length=0, suffix_length=0, methyl_index=-1):
         """Trim labels around a motif"""
+        assert type(methyl_index) is int
         label = read_label(self.label_file, skip_start=0, bases=False)
         indices = []
         for motif in motifs:
@@ -92,9 +93,12 @@ class SignalLabel:
         for index_pair in indices:
             prefix = index_pair[0]-prefix_length
             suffix = index_pair[1]+suffix_length
+            base = label.base[prefix:suffix]
+            if methyl_index > -1:
+                base[methyl_index] = base2ind('E')
             yield raw_labels(start=label.start[prefix:suffix],
                              length=label.length[prefix:suffix],
-                             base=label.base[prefix:suffix])
+                             base=base)
 
 
 def read_label(file_path, skip_start=10, window_n=0, bases=False):
@@ -295,11 +299,11 @@ def main():
     # handler.trim_signal("/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/")
     seq = handler.get_sequence()
     # indexs = handler.motif_search("CCAGG")
-    indexs = handler.trim_to_motif(["CCAGG", "CCTGG"], prefix_length=10, suffix_length=10)
+    indexs = handler.trim_to_motif(["CCAGG", "CCTGG"], prefix_length=0, suffix_length=0, methyl=1)
     # print(indexs)
-    l = []
     for index in indexs:
         print(index)
+        break
 
 
 

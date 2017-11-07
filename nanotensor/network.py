@@ -30,7 +30,7 @@ class BuildGraph:
     """Build a tensorflow network graph."""
 
     def __init__(self, y=None, x=None, seq_len=None, network=None, n_input=0, n_classes=0, learning_rate=0, n_steps=0,
-                 forget_bias=5.0, cost_function="cross_entropy", reuse=None):
+                 forget_bias=5.0, cost_function="cross_entropy", reuse=None, optimizer=True):
         # initialize placeholders or take in tensors from a queue or Dataset object
         self.sequence_length = tf.placeholder_with_default(seq_len, shape=[None])
         self.cost_function = cost_function
@@ -87,7 +87,8 @@ class BuildGraph:
 
         # Define loss and optimizer
         self.cost = self.create_cost_function()
-        self.optimizer = self.optimizer_function()
+        if optimizer:
+            self.optimizer = self.optimizer_function()
         # # Evaluate model
         # merge summary information
         self.test_summary = tf.summary.merge(self.testing_summaries)
@@ -106,7 +107,7 @@ class BuildGraph:
             inshape = input_vector.get_shape().as_list()
             if layer["type"] == "blstm":
                 ratio = self.n_steps / inshape[1]
-                print("ratio = {}".format(ratio))
+                # print("ratio = {}".format(ratio))
                 input_vector = self.blstm(input_vector=input_vector, n_hidden=layer["size"],
                                           layer_name=layer["name"], forget_bias=layer["bias"], reuse=self.reuse,
                                           concat=layer["concat"], sequence_length=self.sequence_length/ratio)
@@ -220,7 +221,8 @@ class BuildGraph:
         return update_ops
 
     @staticmethod
-    def blstm(input_vector, sequence_length, layer_name="blstm_layer1", n_hidden=128, forget_bias=5.0, reuse=None, concat=True):
+    def blstm(input_vector, sequence_length, layer_name="blstm_layer1", n_hidden=128, forget_bias=5.0,
+              reuse=None, concat=True):
         """Create a bidirectional LSTM using code from the example at
         https://github.com/aymericdamien/TensorFlow-Examples/blob/master/examples/3_NeuralNetworks/bidirectional_rnn.py
         """

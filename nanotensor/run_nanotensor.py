@@ -101,7 +101,7 @@ class CommandLine(object):
         """Check arguments, save config file in new folder if correct"""
         # make sure output dir exists
         assert os.path.isdir(args["training_dir"]), "{} does not exist".format(args["training_dir"])
-        assert os.path.isdir(args["testing_dir"])
+        assert os.path.isdir(args["validation_dir"]), "{} does not exist".format(args["validation_dir"])
         # create new output dir
         if args["train"] and not args["load_trained_model"]:
             logfolder_path = os.path.join(args["output_dir"],
@@ -125,12 +125,12 @@ class TrainModel(object):
         super(TrainModel, self).__init__()
         self.args = args
         self.training_files = list_dir(self.args.training_dir)
-        self.testing_files = list_dir(self.args.testing_dir)
-        self.testing_bool = tf.placeholder(dtype=bool, shape=[], name='testing_bool')
+        self.validation_files = list_dir(self.args.validation_dir)
         self.n_input = int()
         self.n_classes = int()
-        self.training = "DataQueue"
-        self.testing = "DataQueue"
+        self.training = "CreateDataset"
+        self.validation = "CreateDataset"
+        self.inference = "CreateDataset"
         self.start = datetime.now()
         # TODO recover global step if reloading graph
         self.global_step = tf.get_variable(
@@ -152,43 +152,52 @@ class TrainModel(object):
         gpu_indexes = test_for_nvidia_gpu(self.args.num_gpu)
         reuse = None
         opt = tf.train.AdamOptimizer(learning_rate=self.args.learning_rate)
-        if gpu_indexes and self.args.train:
-            print("Using GPU's {}".format(gpu_indexes), file=sys.stderr)
+        if self.args.inference:
+            x, seq_length = self.inference.iterator.get_next()
+            model = BuildGraph(n_input=self.training.n_input, n_classes=self.training.n_classes,
+                               learning_rate=self.args.learning_rate, n_steps=self.args.n_steps,
+                               network=self.args.network, x=x, y=None, seq_len=seq_length,
+                               cost_function=self.args.cost_function, reuse=reuse)
+        elif self.args.train:
             with tf.variable_scope(tf.get_variable_scope()):
-                for i in list(gpu_indexes):
+                if gpu_indexes:
+                    print("Using GPU's {}".format(gpu_indexes), file=sys.stderr)
+                    for i in list(gpu_indexes):
+                        x, seq_length, y = self.training.iterator.get_next()
+                        with tf.device('/gpu:%d' % i):
+                            model = BuildGraph(n_input=self.n_input, n_classes=self.n_classes,
+                                               learning_rate=self.args.learning_rate, n_steps=self.args.n_steps,
+                                               network=self.args.network, x=x, y=y, seq_len=seq_length,
+                                               cost_function=self.args.cost_function,
+                                               reuse=reuse)
+                            tf.get_variable_scope().reuse_variables()
+                            reuse = True
+                            gradients = opt.compute_gradients(model.cost)
+                            tower_grads.append(gradients)
+                            # print(gradients)
+                            # print(len(gradients))
+                    grads = average_gradients(tower_grads)
+                else:
+                    print("No GPU's available, using CPU for computation", file=sys.stderr)
                     x, seq_length, y = self.training.iterator.get_next()
-                    with tf.device('/gpu:%d' % i):
-                        model = BuildGraph(n_input=self.n_input, n_classes=self.n_classes,
-                                           learning_rate=self.args.learning_rate, n_steps=self.args.n_steps,
-                                           network=self.args.network, x=x, y=y, seq_len=seq_length,
-                                           cost_function=self.args.cost_function,
-                                           reuse=reuse)
-                        tf.get_variable_scope().reuse_variables()
-                        reuse = True
-                        gradients = opt.compute_gradients(model.cost)
-                        tower_grads.append(gradients)
-                        # print(gradients)
-                        # print(len(gradients))
-            grads = average_gradients(tower_grads)
-        else:
-            print("No GPU's available, using CPU for computation", file=sys.stderr)
-            if self.args.train:
-                self.x, seq_length, self.y = self.training.iterator.get_next()
-                model = BuildGraph(n_input=self.training.n_input, n_classes=self.training.n_classes,
-                                   learning_rate=self.args.learning_rate, n_steps=self.args.n_steps,
-                                   network=self.args.network, x=self.x, y=self.y, seq_len=seq_length,
-                                   cost_function=self.args.cost_function,
-                                   reuse=reuse)
-                grads = opt.compute_gradients(model.cost)
-            else:
-                x, seq_length = self.training.iterator.get_next()
-                model = BuildGraph(n_input=self.training.n_input, n_classes=self.training.n_classes,
-                                   learning_rate=self.args.learning_rate, n_steps=self.args.n_steps,
-                                   network=self.args.network, x=x, y=None, seq_len=seq_length,
-                                   cost_function=self.args.cost_function,
-                                   reuse=reuse)
-        with tf.variable_scope("apply_gradients"):
-            self.train_op = opt.apply_gradients(grads, global_step=self.global_step)
+                    model = BuildGraph(n_input=self.training.n_input, n_classes=self.training.n_classes,
+                                       learning_rate=self.args.learning_rate, n_steps=self.args.n_steps,
+                                       network=self.args.network, x=x, y=y, seq_len=seq_length,
+                                       cost_function=self.args.cost_function,
+                                       reuse=reuse)
+                    grads = opt.compute_gradients(model.cost)
+                with tf.device('/cpu:0'):
+                    # Create validation graph on cpu
+                    tf.get_variable_scope().reuse_variables()
+                    x, seq_length, y = self.validation.iterator.get_next()
+                    self.validation_model = BuildGraph(n_input=self.n_input, n_classes=self.n_classes,
+                                                       learning_rate=self.args.learning_rate, n_steps=self.args.n_steps,
+                                                       network=self.args.network, x=x, y=y, seq_len=seq_length,
+                                                       cost_function=self.args.cost_function,
+                                                       reuse=True, optimizer=False)
+
+            with tf.variable_scope("apply_gradients"):
+                self.train_op = opt.apply_gradients(grads, global_step=self.global_step)
 
         # variable_averages = tf.train.ExponentialMovingAverage(
         # cifar10.MOVING_AVERAGE_DECAY, global_step)
@@ -202,18 +211,29 @@ class TrainModel(object):
             sparse = True
         else:
             sparse = False
-        self.training = CreateDataset(self.testing_files, batch_size=self.args.batch_size, pad=0,
-                                      seq_len=self.args.n_steps, sparse=sparse, verbose=self.args.verbose,
-                                      training=True,
-                                      n_epochs=self.args.n_epochs)
-        self.training.test()
-        self.testing = CreateDataset(self.testing_files, batch_size=self.args.batch_size, pad=0,
-                                     seq_len=self.args.n_steps, sparse=sparse, verbose=self.args.verbose, training=True,
-                                     n_epochs=self.args.n_epochs)
-        assert self.training.n_input == self.testing.n_input
-        assert self.training.n_classes == self.testing.n_classes
-        self.n_input = self.training.n_input
-        self.n_classes = self.training.n_classes
+        if self.args.train:
+            self.training = CreateDataset(self.training_files, batch_size=self.args.batch_size, pad=0,
+                                          seq_len=self.args.n_steps, sparse=sparse, verbose=self.args.verbose,
+                                          training=True,
+                                          n_epochs=self.args.n_epochs)
+            self.training.test()
+            self.validation = CreateDataset(self.validation_files, batch_size=self.args.batch_size, pad=0,
+                                            seq_len=self.args.n_steps, sparse=sparse, verbose=self.args.verbose,
+                                            training=True,
+                                            n_epochs=self.args.n_epochs)
+            self.validation.test()
+            assert self.training.n_input == self.validation.n_input
+            assert self.training.n_classes == self.validation.n_classes
+            self.n_input = self.training.n_input
+            self.n_classes = self.training.n_classes
+
+        if self.args.inference:
+            self.inference = CreateDataset(self.validation_files, batch_size=self.args.batch_size, pad=0,
+                                           seq_len=self.args.n_steps, sparse=sparse, verbose=self.args.verbose,
+                                           training=True,
+                                           n_epochs=self.args.n_epochs)
+            self.n_input = self.inference.n_input
+            self.n_classes = self.inference.n_classes
         return 0
 
     # @profile
@@ -247,19 +267,16 @@ class TrainModel(object):
                 saver.save(sess, save_model_path,
                            global_step=self.global_step)
                 saver = tf.train.Saver(max_to_keep=4, keep_checkpoint_every_n_hours=2)
-            # # start queue
-            # coord = tf.train.Coordinator()
-            # threads = tf.train.start_queue_runners(sess=sess, coord=coord)
-            # self.training.start_threads(sess, n_threads=self.args.num_threads)
+            # start queue
             run_metadata = tf.RunMetadata()
             sess.run(self.training.iterator.initializer,
                      feed_dict={self.training.dataX: self.training.data.input,
                                 self.training.dataY: self.training.data.label,
                                 self.training.seq_length: self.training.data.seq_len})
-            sess.run(self.testing.iterator.initializer,
-                     feed_dict={self.testing.dataX: self.testing.data.input,
-                                self.testing.dataY: self.testing.data.label,
-                                self.testing.seq_length: self.testing.data.seq_len})
+            sess.run(self.validation.iterator.initializer,
+                     feed_dict={self.validation.dataX: self.validation.data.input,
+                                self.validation.dataY: self.validation.data.label,
+                                self.validation.seq_length: self.validation.data.seq_len})
 
             # Keep training until reach max iterations
             # print("Training Has Started!")
@@ -299,17 +316,22 @@ class TrainModel(object):
 
     def report_summary_stats(self, sess, writer, run_metadata, run_options):
         # Calculate batch loss and accuracy for training
-        summary, global_step, train_acc, train_cost = sess.run([self.model.train_summary,
-                                                                self.global_step,
-                                                                self.model.accuracy, self.model.cost],
-                                                               run_metadata=run_metadata,
-                                                               options=run_options)
+        if self.args.cost_function == 'ctc_loss':
+            acc = "Normalized Edit Distance"
+        else:
+            acc = "Accuracy"
+        summary, global_step, val_acc, val_cost = sess.run([self.validation_model.test_summary,
+                                                            self.global_step,
+                                                            self.validation_model.accuracy,
+                                                            self.validation_model.cost],
+                                                           run_metadata=run_metadata,
+                                                           options=run_options)
         # add summary statistics
         writer.add_summary(summary, global_step)
         # print summary stats
-        print("Iter " + str(global_step) + ", Training Cost= " +
-              "{:.6f}".format(train_cost) + ", Training Accuracy= " +
-              "{:.5f}".format(train_acc), file=sys.stderr)
+        print("Iter " + str(global_step) + ", Validation Cost= " +
+              "{:.6f}".format(val_cost) + ", Validation {}= ".format(acc) +
+              "{:.5f}".format(val_acc), file=sys.stderr)
 
     def chrome_trace(self, metadata_proto, f_name):
         """Save a chrome trace json file.

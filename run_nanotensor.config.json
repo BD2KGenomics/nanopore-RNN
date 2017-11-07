@@ -1,57 +1,82 @@
 {
-    "testing_dir": "/Users/andrewbailey/nanopore-RNN/test_files/create_training_files/07Jul-20-11h-28m",
-    "training_dir": "/Users/andrewbailey/nanopore-RNN/test_files/create_training_files/07Jul-20-11h-28m",
-    "output_dir": "/Users/andrewbailey/CLionProjects/nanopore-RNN/logs",
-    "model_name": "my_test_model",
-    "num_gpu": 2,
-    "num_threads": 2,
-    "queue_size": 10,
-    "training_iters": 30,
-    "save_model": 1,
-    "record_step": 10,
-    "n_steps": 30,
-    "batch_size": 1,
-    "learning_rate": 0.001,
-    "binary_cost": true,
-    "network": [
-      {
-          "bias": 5.0,
-          "type": "blstm",
-          "name": "blstm_layer1",
-          "size": 128
-      },
-      {
-          "bias": 1.0,
-          "type": "tanh",
-          "name": "subsample_level_1",
-          "size": 64
-      },
-      {
-          "bias": 5.0,
-          "type": "blstm",
-          "name": "blstm_layer2",
-          "size": 128
-      },
-      {
-          "bias": 1.0,
-          "type": "tanh",
-          "name": "subsample_level_2",
-          "size": 64
-      }
-    ],
-    "train": false,
-    "inference": false,
-    "testing_accuracy": true,
-    "load_trained_model": false,
-    "alphabet": "ATGC",
-    "kmer_len": 5,
-    "inference_output": "/Users/andrewbailey/nanopore-RNN/kmers.txt",
-    "trained_model": "/Users/andrewbailey/CLionProjects/nanopore-RNN/logs/08Aug-23-10h-52m",
-    "trained_model_path": "/Users/andrewbailey/nanopore-RNN/logs/06Jun-29-11h-11m/my_test_model-5233",
-    "use_checkpoint": true,
-    "trace_name": "timeline.json",
-    "save_trace": true,
-    "profile": true,
-    "save_s3": true,
-    "s3bucket": "neuralnet-accuracy"
+  "training_dir": "/Users/andrewbailey/CLionProjects/nanopore-RNN/chiron/data/raw",
+  "validation_dir": "/Users/andrewbailey/CLionProjects/nanopore-RNN/chiron/data/raw",
+  "output_dir": "/Users/andrewbailey/CLionProjects/nanopore-RNN/logs",
+  "model_name": "my_test_model",
+  "num_gpu": 2,
+  "num_threads": 2,
+  "queue_size": 10,
+  "training_iters": 4,
+  "save_model": 1,
+  "record_step": 2,
+  "n_steps": 100,
+  "batch_size": 2,
+  "learning_rate": 0.001,
+  "cost_function": "ctc_loss",
+  "network": [
+    {
+      "type": "residual_layer",
+      "name": "residual_layer_1",
+      "out_channel": 256,
+      "batchnorm": true
+    },
+    {
+      "type": "residual_layer",
+      "name": "residual_layer_2",
+      "out_channel": 256,
+      "batchnorm": false
+    },
+    {
+      "type": "residual_layer",
+      "name": "residual_layer_3",
+      "out_channel": 256,
+      "batchnorm": false
+    },
+    {
+      "bias": 5.0,
+      "type": "blstm",
+      "name": "blstm_layer1",
+      "size": 100,
+      "concat": true
+
+    },
+    {
+      "bias": 5.0,
+      "type": "blstm",
+      "name": "blstm_layer2",
+      "size": 100,
+      "concat": true
+
+    },
+    {
+      "bias": 5.0,
+      "type": "blstm",
+      "name": "blstm_layer3",
+      "size": 100,
+      "concat": true
+    },
+    {
+      "bias": 1.0,
+      "type": "chiron_fnn",
+      "name": "chiron_fnn_layer",
+      "size": 64
+    }
+  ],
+  "train": true,
+  "inference": false,
+  "testing_accuracy": false,
+  "load_trained_model": false,
+  "alphabet": "ATGC",
+  "kmer_len": 5,
+  "inference_output": "/Users/andrewbailey/nanopore-RNN/kmers.txt",
+  "trained_model": "/Users/andrewbailey/CLionProjects/nanopore-RNN/logs/08Aug-23-10h-52m",
+  "trained_model_path": "/Users/andrewbailey/nanopore-RNN/logs/06Jun-29-11h-11m/my_test_model-5233",
+  "use_checkpoint": false,
+  "trace_name": "timeline.json",
+  "save_trace": false,
+  "profile": false,
+  "save_s3": false,
+  "s3bucket": "neuralnet-accuracy",
+  "n_epochs": 5,
+  "verbose": true
 }
