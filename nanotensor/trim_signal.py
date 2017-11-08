@@ -83,7 +83,7 @@ class SignalLabel:
         indexes = [x.start() for x in re.finditer(motif, seq)]
         return [[x, x+len(motif)] for x in indexes]
 
-    def trim_to_motif(self, motifs, prefix_length=0, suffix_length=0, methyl_index=-1):
+    def trim_to_motif(self, motifs, prefix_length=0, suffix_length=0, methyl_index=-1, blank=False):
         """Trim labels around a motif"""
         assert type(methyl_index) is int
         label = read_label(self.label_file, skip_start=0, bases=False)
@@ -94,8 +94,13 @@ class SignalLabel:
             prefix = index_pair[0]-prefix_length
             suffix = index_pair[1]+suffix_length
             base = label.base[prefix:suffix]
-            if methyl_index > -1:
-                base[methyl_index] = base2ind('E')
+            if blank:
+                b = [0]*len(base)
+                b[methyl_index] = base[methyl_index]
+                base = b
+            # print(base, label.start[prefix:suffix], sum(label.length[prefix:suffix]))
+            # if methyl_index > -1:
+            #     base[methyl_index] = base2ind('E')
             yield raw_labels(start=label.start[prefix:suffix],
                              length=label.length[prefix:suffix],
                              base=base)

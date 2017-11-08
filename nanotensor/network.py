@@ -19,7 +19,6 @@ import os
 from timeit import default_timer as timer
 from datetime import datetime
 from nanotensor.utils import project_folder, list_dir, load_json, save_json
-from nanotensor.queue import DataQueue
 from nanotensor.error import Usage
 import tensorflow as tf
 from tensorflow.contrib import rnn

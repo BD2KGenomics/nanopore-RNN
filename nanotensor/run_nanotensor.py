@@ -23,7 +23,7 @@ import time
 from nanotensor.utils import project_folder, list_dir, DotDict, upload_model, load_json, save_config_file, \
     test_aws_connection
 from nanotensor.error import Usage
-from nanotensor.queue import DataQueue, CreateDataset
+from nanotensor.queue import CreateDataset
 from nanotensor.network import BuildGraph
 from nanotensor.data_preparation import TrainingData
 import tensorflow as tf
