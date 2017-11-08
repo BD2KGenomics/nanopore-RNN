@@ -96,9 +96,9 @@ class SignalLabel:
             base = label.base[prefix:suffix]
             if blank:
                 b = [0]*len(base)
-                if index2base(base[methyl_index]) == "E":
+                if index2base([base[methyl_index]]) == "E":
                     b[methyl_index] = 2
-                elif index2base(base[methyl_index]) == "C":
+                elif index2base([base[methyl_index]]) == "C":
                     b[methyl_index] = 1
                 else:
                     print("Something went terribly wrong and this should never print", file=sys.stderr)
