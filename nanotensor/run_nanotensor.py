@@ -23,7 +23,7 @@ import time
 from nanotensor.utils import project_folder, list_dir, DotDict, upload_model, load_json, save_config_file, \
     test_aws_connection
 from nanotensor.error import Usage
-from nanotensor.queue import CreateDataset
+from nanotensor.queue import CreateDataset, FullSequence
 from nanotensor.network import BuildGraph
 from nanotensor.data_preparation import TrainingData
 import tensorflow as tf
@@ -212,15 +212,15 @@ class TrainModel(object):
         else:
             sparse = False
         if self.args.train:
-            self.training = CreateDataset(self.training_files, batch_size=self.args.batch_size, pad=0,
-                                          seq_len=self.args.n_steps, sparse=sparse, verbose=self.args.verbose,
-                                          training=True,
-                                          n_epochs=self.args.n_epochs)
+            self.training = FullSequence(self.training_files, batch_size=self.args.batch_size, pad=0,
+                                         seq_len=self.args.n_steps, sparse=sparse, verbose=self.args.verbose,
+                                         training=True,
+                                         n_epochs=self.args.n_epochs)
             self.training.test()
-            self.validation = CreateDataset(self.validation_files, batch_size=self.args.batch_size, pad=0,
-                                            seq_len=self.args.n_steps, sparse=sparse, verbose=self.args.verbose,
-                                            training=True,
-                                            n_epochs=self.args.n_epochs)
+            self.validation = FullSequence(self.validation_files, batch_size=self.args.batch_size, pad=0,
+                                           seq_len=self.args.n_steps, sparse=sparse, verbose=self.args.verbose,
+                                           training=True,
+                                           n_epochs=self.args.n_epochs)
             self.validation.test()
             assert self.training.n_input == self.validation.n_input
             assert self.training.n_classes == self.validation.n_classes

@@ -27,7 +27,7 @@ from nanotensor.error import PathError
 import numpy as np
 from multiprocessing import Process, current_process, Manager
 import tarfile
-
+import logging as log
 
 def no_skipped_events(file_path):
     """Find if there are any skipped events in a signalalign file"""
@@ -325,6 +325,16 @@ def tarball_files(tar_name, file_paths, output_dir='.', prefix=''):
             f_out.add(file_path, arcname=file_name)
     return tar_path
 
+
+def debug(verbose=False):
+    """Method for setting log statements with verbose or not verbose"""
+    assert type(verbose) is bool, "Verbose needs to be a boolean"
+    if verbose:
+        log.basicConfig(format="%(levelname)s: %(message)s", level=log.DEBUG)
+    else:
+        log.basicConfig(format="%(levelname)s: %(message)s")
+        log.info("This should not print.")
+    return log
 
 # def main():
 #     """Test the methods"""
