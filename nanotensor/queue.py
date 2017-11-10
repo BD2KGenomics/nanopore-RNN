@@ -126,7 +126,7 @@ class CreateDataset(object):
             dataset = dataset.shuffle(buffer_size=self.shuffle_buffer_size)
         else:
             dataset = tf.data.Dataset.zip((self.batchX, self.batchSeq))
-            dataset = dataset.prefetch(buffer_size=self.prefetch_buffer_size)
+        dataset = dataset.prefetch(buffer_size=self.prefetch_buffer_size)
 
         return dataset
 

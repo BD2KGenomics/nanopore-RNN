@@ -28,6 +28,8 @@ import numpy as np
 from multiprocessing import Process, current_process, Manager
 import tarfile
 import logging as log
+from timeit import default_timer as timer
+
 
 def no_skipped_events(file_path):
     """Find if there are any skipped events in a signalalign file"""
@@ -326,6 +328,14 @@ def tarball_files(tar_name, file_paths, output_dir='.', prefix=''):
     return tar_path
 
 
+def time_it(funct, *args):
+    """Basic timing function"""
+    start = datetime.now()
+    funct(*args)
+    end = datetime.now()
+    return end-start
+
+
 def debug(verbose=False):
     """Method for setting log statements with verbose or not verbose"""
     assert type(verbose) is bool, "Verbose needs to be a boolean"
@@ -336,8 +346,8 @@ def debug(verbose=False):
         log.info("This should not print.")
     return log
 
-# def main():
-#     """Test the methods"""
+def main():
+    """Test the methods"""
 #     start = timer()
 #     if test_aws_connection("neuralnet-accuracy"):
 #         print("True")
@@ -351,7 +361,9 @@ def debug(verbose=False):
 #     # dir_name = "06Jun-29-11h-30m-11.0%"
 #     # upload_file_to_s3("nanotensor-data", "/Users/andrewbailey/nanopore-RNN/test_files/create_training_files/07Jul-19-16h-48m/create_training_data.config.json", "create_training_data.config.json")
 #     # upload_model(bucket, file_list, dir_name)
-#
+    a = DotDict({"a": {"a": 2}})
+    a.a = DotDict(a.a)
+    print(a.a.a)
 #     stop = timer()
 #     print("Running Time = {} seconds".format(stop - start), file=sys.stderr)
 
