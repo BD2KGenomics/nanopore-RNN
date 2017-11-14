@@ -29,11 +29,12 @@ class BuildGraph(object):
     """Build a tensorflow network graph."""
 
     def __init__(self, x_iterator=None, y_iterator=None, seq_iterator=None, network=None, len_x=1, len_y=1,
-                 learning_rate=0, seq_len=0, forget_bias=5.0, reuse=None, training=True,
-                 y_shape=None, x_shape=None, seq_shape=None, cost_function="cross_entropy"):
+                 learning_rate=0, seq_len=0, forget_bias=5.0, reuse=None, mode=0,
+                 y_shape=None, x_shape=None, seq_shape=None, cost_function="cross_entropy", summary_name="Training"):
 
         assert (x_iterator is None) != (x_shape is None), "Either x_shape or x_iterator must be specified"
-        assert (y_iterator is None) != (y_shape is None), "Either y_shape or y_iterator must be specified"
+        if mode == 0 or mode == 1:
+            assert (y_iterator is None) != (y_shape is None), "Either y_shape or y_iterator must be specified"
         assert (seq_iterator is None) != (seq_shape is None), "Either seq_shape or seq_iterator must be specified"
         assert network is not None, "Must specify network structure. [{'type': 'blstm', 'name': 'blstm_layer1', " \
                                     "'size': 128}, ...] "
@@ -50,12 +51,15 @@ class BuildGraph(object):
         self.seq_len = seq_len
         self.learning_rate = learning_rate
         self.forget_bias = forget_bias
+        self.summary_name = summary_name
         # TODO if retrain grab old global step
-        self.global_step = tf.Variable(0, name='global_step', trainable=False)
+        self.global_step = tf.get_variable(
+            'global_step', [],
+            initializer=tf.constant_initializer(0), trainable=False)
 
         # Summary Information
-        self.training_summaries = []
-        self.testing_summaries = []
+        self.summaries = []
+        # self.testing_summaries = []
 
         # bool for multi-gpu usage
         self.reuse = reuse
@@ -63,7 +67,6 @@ class BuildGraph(object):
         # initialize placeholders or take in tensors from a queue or Dataset object
         self.x = self.create_x()
         self.sequence_length = self.create_sequence_length()
-        self.y = self.create_y()
         self.batch_size = tf.shape(self.x)[0]
 
         # length of input tensor, step number and number of classes for output layer
@@ -79,11 +82,12 @@ class BuildGraph(object):
             # tf.add_to_collection("output_layer", self.output_layer)
 
         # create evaluation prediction
-        # evaluate_pred = tf.argmax(self.output_layer, 1, name="evaluate_pred")
-        if training:
-            # create prediction
-            with tf.name_scope("prediction_function"):
-                self.correct_pred = self.prediction_function()
+        # create prediction
+        with tf.name_scope("prediction_function"):
+            self.prediction = self.prediction_function()
+
+        if mode == 0 or mode == 1:
+            self.y = self.create_y()
             # create accuracy function
             with tf.name_scope("accuracy_function"):
                 self.accuracy = self.accuracy_function()
@@ -97,10 +101,8 @@ class BuildGraph(object):
                 with tf.name_scope("optimizer_function"):
                     self.optimizer = self.optimizer_function()
 
-        # merge summary information
-        self.test_summary = tf.summary.merge(self.testing_summaries)
-        self.train_summary = tf.summary.merge(self.training_summaries)
-        # list of operations to reset states of each blstm layer
+            # merge summary information
+            self.merged_summaries = tf.summary.merge(self.summaries)
 
     def create_x(self):
         return tf.placeholder_with_default(self.x_iterator, shape=self.x_shape)
@@ -189,13 +191,13 @@ class BuildGraph(object):
 
     def prediction_function(self):
         """Compare predicions with label to calculate number correct or edit distance"""
-        y_flat = tf.reshape(self.y, [-1, len_y])
-        predict = tf.equal(tf.argmax(self.output_layer, 1), tf.argmax(y_flat, 1))
+        predict = tf.equal(tf.argmax(self.output_layer, 1))
         return predict
 
     def accuracy_function(self):
         """Create accuracy function to calculate accuracy of the prediction"""
-        accuracy = tf.reduce_mean(tf.cast(self.correct_pred, tf.float32))
+        y_flat = tf.reshape(self.y, [-1, len_y])
+        accuracy = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(self.output_layer, 1), tf.argmax(y_flat, 1)), tf.float32))
         return accuracy
 
     def optimizer_function(self):
@@ -211,16 +213,16 @@ class BuildGraph(object):
         """Attach a lot of summaries to a Tensor (for TensorBoard visualization).
         source: https://github.com/tensorflow/tensorflow/blob/r1.1/tensorflow/examples/tutorials/mnist/mnist_with_summaries.py
         """
-        with tf.name_scope("testing"):
+        with tf.name_scope(self.summary_name):
             with tf.name_scope('summaries'):
                 mean = tf.reduce_mean(var)
                 summary = tf.summary.scalar('mean', mean)
-                self.testing_summaries.append(summary)
-        with tf.name_scope("training"):
-            with tf.name_scope('summaries'):
-                mean = tf.reduce_mean(var)
-                summary = tf.summary.scalar('mean', mean)
-                self.training_summaries.append(summary)
+                self.summaries.append(summary)
+        # with tf.name_scope("training"):
+        #     with tf.name_scope('summaries'):
+        #         mean = tf.reduce_mean(var)
+        #         summary = tf.summary.scalar('mean', mean)
+        #         self.training_summaries.append(summary)
                 # with tf.name_scope('stddev'):
                 #     stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
                 # tf.summary.scalar('stddev', stddev)
@@ -387,18 +389,22 @@ class CrossEntropy(BuildGraph):
 
     def __init__(self, x_iterator=None, y_iterator=None, seq_iterator=None, network=None, learning_rate=0, seq_len=0,
                  forget_bias=5.0, reuse=None, y_shape=None, x_shape=None,
-                 seq_shape=None, len_x=1, len_y=1, training=True, dataset=None):
+                 seq_shape=None, len_x=1, len_y=1, mode=0, dataset=None, summary_name="Training"):
         if dataset:
             len_x = dataset.len_x
             len_y = dataset.len_y
             seq_len = dataset.seq_len
-            training = dataset.training
-            x_iterator, seq_iterator, y_iterator = dataset.iterator.get_next()
+            mode = dataset.mode
+            if mode == 0 or mode == 1:
+                x_iterator, seq_iterator, y_iterator = dataset.iterator.get_next()
+            elif mode == 2:
+                x_iterator, seq_iterator = dataset.iterator.get_next()
 
         super(CrossEntropy, self).__init__(x_iterator=x_iterator, y_iterator=y_iterator, seq_iterator=seq_iterator,
                                            network=network, learning_rate=learning_rate, seq_len=seq_len,
-                                           forget_bias=forget_bias, reuse=reuse, training=training, y_shape=y_shape,
-                                           x_shape=x_shape, seq_shape=seq_shape, len_x=len_x, len_y=len_y)
+                                           forget_bias=forget_bias, reuse=reuse, mode=mode, y_shape=y_shape,
+                                           x_shape=x_shape, seq_shape=seq_shape, len_x=len_x, len_y=len_y,
+                                           summary_name=summary_name)
 
 
 class CtcLoss(BuildGraph):
@@ -406,20 +412,20 @@ class CtcLoss(BuildGraph):
 
     def __init__(self, dataset=None, x_iterator=None, y_iterator=None, seq_iterator=None, network=None, learning_rate=0,
                  seq_len=0, forget_bias=5.0, reuse=None, training=True,
-                 y_shape=None, x_shape=None, seq_shape=None, len_x=1, len_y=1):
+                 y_shape=None, x_shape=None, seq_shape=None, len_x=1, len_y=1, summary_name="Training"):
 
         # initialize placeholders or take in tensors from a queue or Dataset object
         if dataset:
-            training = dataset.training
             len_x = dataset.len_x
             len_y = dataset.len_y
             seq_len = dataset.seq_len
-            training = dataset.training
-            if training:
+            mode = dataset.mode
+            if mode == 0 or mode == 1:
                 x_iterator, seq_iterator, y_iterator = dataset.iterator.get_next()
-            else:
+            elif mode == 2:
                 x_iterator, seq_iterator = dataset.iterator.get_next()
 
+        self.sparse_predict = "sparse_prediction"
         len_y = len_y + 1
         if y_shape:
             self.y_indexs = tf.placeholder(tf.int64)
@@ -428,8 +434,9 @@ class CtcLoss(BuildGraph):
 
         super(CtcLoss, self).__init__(x_iterator=x_iterator, y_iterator=y_iterator, seq_iterator=seq_iterator,
                                       network=network, learning_rate=learning_rate, seq_len=seq_len,
-                                      forget_bias=forget_bias, reuse=reuse, training=training, y_shape=y_shape,
-                                      x_shape=x_shape, seq_shape=seq_shape, len_x=len_x, len_y=len_y)
+                                      forget_bias=forget_bias, reuse=reuse, mode=mode, y_shape=y_shape,
+                                      x_shape=x_shape, seq_shape=seq_shape, len_x=len_x, len_y=len_y,
+                                      summary_name=summary_name)
 
     def create_output_layer(self):
         """Create output layer for ctc loss"""
@@ -453,14 +460,15 @@ class CtcLoss(BuildGraph):
     def prediction_function(self):
         """Compare predicions with label to calculate number correct or edit distance"""
         logits = tf.transpose(self.output_layer, perm=[1, 0, 2])
-        predict = tf.nn.ctc_greedy_decoder(logits, self.sequence_length, merge_repeated=True)[0]
+        self.sparse_predict = tf.nn.ctc_greedy_decoder(logits, self.sequence_length, merge_repeated=True)[0]
+        predict = tf.sparse_tensor_to_dense(self.sparse_predict[0])
         return predict
 
     def accuracy_function(self):
         """Create accuracy function to calculate accuracy of the prediction"""
         with tf.name_scope("edit_distance"):
             # get edit distance and return mean as accuracy
-            edit_d = tf.edit_distance(tf.to_int32(self.correct_pred[0]), self.y, normalize=True)
+            edit_d = tf.edit_distance(tf.to_int32(self.sparse_predict[0]), self.y, normalize=True)
             accuracy = tf.reduce_mean(edit_d, axis=0)
         return accuracy
 
@@ -509,85 +517,6 @@ def sparse_tensor_merge(indices, values, shape):
         tf.concat([[tf.cast(batch_size, tf.int64)], merged_shape], axis=0))
 
 
-# def main():
-#     """Control the flow of the program"""
-    # start = timer()
-    #
-    # #
-    # # input1 = self.x
-    # # for layer_size in range(self.n_layers):
-    # #     input1 = self.blstm(input1, layer_name="blstm_layer"+str(layer_size),\
-    # #     n_hidden=self.layer_sizes[layer_size], forget_bias=self.forget_bias)
-    # # return input1
-    #
-    # # Parameters
-    # learning_rate = 0.001
-    # training_iters = 100
-    # batch_size = 2
-    # queue_size = 10
-    # display_step = 10
-    # n_steps = 300 # one vector per timestep
-    # layer_sizes = tuple([100]) # hidden layer num of features
-    # training_dir = project_folder()+"/training2"
-    # training_files = list_dir(training_dir, ext="npy")
-    #
-    # # continually load data on the CPU
-    # with tf.device("/cpu:0"):
-    #     data = DataQueue(training_files, batch_size, queue_size=queue_size, verbose=False, \
-    #             pad=0, trim=True, n_steps=n_steps)
-    #     images_batch, labels_batch = data.get_inputs()
-    # # build model
-    # model = BuildGraph(data.len_x, data.len_y, learning_rate, n_steps=n_steps, \
-    #         layer_sizes=layer_sizes, batch_size=batch_size, x=images_batch, y=labels_batch)
-    # cost = model.cost
-    # accuracy = model.accuracy
-    # merged_summaries = model.merged_summaries
-    # optimizer = model.optimizer
-    # # define what we want from the optimizer run
-    # init = tf.global_variables_initializer()
-    #
-    # saver = tf.train.Saver(max_to_keep=4, keep_checkpoint_every_n_hours=2)
-    # # Launch the graph
-    # with tf.Session(config=tf.ConfigProto(intra_op_parallelism_threads=8)) as sess:
-    #     # create logs
-    #     logfolder_path = os.path.join(project_folder(), 'logs/', \
-    #                     datetime.now().strftime("%m%b-%d-%Hh-%Mm"))
-    #     writer = tf.summary.FileWriter((logfolder_path), sess.graph)
-    #     # initialize
-    #     sess.run(init)
-    #     step = 1
-    #     # start queue
-    #     tf.train.start_queue_runners(sess=sess)
-    #     data.start_threads(sess)
-    #     # Keep training until reach max iterations
-    #     while step * batch_size < training_iters:
-    #         # Run optimization and update layers
-    #         output_states = sess.run([optimizer, model.zero_state])
-    #         if step % display_step == 0:
-    #             # Calculate batch loss and accuracy
-    #             run_metadata = tf.RunMetadata()
-    #             acc, summary, loss = sess.run([accuracy, merged_summaries, cost], run_metadata=run_metadata)
-    #             # add summary statistics
-    #             writer.add_summary(summary, step)
-    #             print("Iter " + str(step*batch_size) + ", Minibatch Loss= " + \
-    #                   "{:.6f}".format(loss) + ", Training Accuracy= " + \
-    #                   "{:.5f}".format(acc))
-    #         step += 1
-    #
-    #     print("Optimization Finished!")
-    #     # Calculate accuracy for a bunch of test data
-    #
-    #     saver.save(sess, project_folder()+'/testing/my_test_model.ckpt', global_step=model.global_step)
-    #
-    #     print("Testing Accuracy: {}".format(sess.run(accuracy)))
-    #     writer.close()
-    # #
-    #
-    # stop = timer()
-    # print("Running Time = {} seconds".format(stop-start), file=sys.stderr)
-
-
 if __name__ == "__main__":
-    # main()
     print("This file is just a library", file=sys.stderr)
     raise SystemExit

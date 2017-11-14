@@ -31,7 +31,7 @@ import tensorflow as tf
 class CreateDataset(object):
     """Create Dataset object for tensorflow imput pipeline"""
 
-    def __init__(self, training=True, x_shape=list(), y_shape=list(), sequence_shape=list(), batch_size=10,
+    def __init__(self, mode=0, x_shape=list(), y_shape=list(), sequence_shape=list(), batch_size=10,
                  seq_len=10, len_y=0, len_x=0, n_epochs=5, verbose=False,
                  shuffle_buffer_size=10000, prefetch_buffer_size=100):
         """
@@ -50,7 +50,7 @@ class CreateDataset(object):
 
         """
         # test if inputs are correct types
-        assert type(training) is bool, "training option is not bool: type(training) = {}".format(type(training))
+        assert type(mode) is int, "mode option is not int: type(mode) = {}".format(type(mode))
         assert type(x_shape) is list, "x_shape is not list: type(x_shape) = {}".format(type(x_shape))
         assert type(y_shape) is list, "y_shape is not list: type(y_shape) = {}".format(type(y_shape))
         assert type(sequence_shape) is list, \
@@ -79,7 +79,7 @@ class CreateDataset(object):
         self.sequence_shape = sequence_shape
         self.shuffle_buffer_size = shuffle_buffer_size
         self.prefetch_buffer_size = prefetch_buffer_size
-        self.training = training
+        self.mode = mode
 
         # log information regarding data
         self.log.info("Shape of input vector = {}".format(self.x_shape))
@@ -120,11 +120,17 @@ class CreateDataset(object):
 
     def create_dataset(self):
         """Creates dataset structure"""
-        if self.training:
+        # training
+        if self.mode == 0:
             dataset = tf.data.Dataset.zip((self.batchX, self.batchSeq, self.batchY))
             dataset = dataset.repeat(self.n_epochs)
             dataset = dataset.shuffle(buffer_size=self.shuffle_buffer_size)
-        else:
+        # testing
+        elif self.mode == 1:
+            dataset = tf.data.Dataset.zip((self.batchX, self.batchSeq, self.batchY))
+            dataset = dataset.shuffle(buffer_size=self.shuffle_buffer_size)
+        # inference
+        elif self.mode == 2:
             dataset = tf.data.Dataset.zip((self.batchX, self.batchSeq))
         dataset = dataset.prefetch(buffer_size=self.prefetch_buffer_size)
 
@@ -136,14 +142,24 @@ class CreateDataset(object):
 
     def test(self):
         """Test to make sure the data was loaded correctly"""
-        in_1, seq, out = self.iterator.get_next()
-        with tf.Session() as sess:
-            sess.run(self.iterator.initializer,
-                     feed_dict={self.place_X: self.data.input,
-                                self.place_Seq: self.data.seq_len,
-                                self.place_Y: self.data.label})
-            test1, test2, test3 = sess.run([in_1, seq, out])
-            self.log.info("Dataset Creation Complete")
+        if self.mode == 0 or self.mode == 1:
+            in_1, seq, out = self.iterator.get_next()
+            with tf.Session() as sess:
+                sess.run(self.iterator.initializer,
+                         feed_dict={self.place_X: self.data.input,
+                                    self.place_Seq: self.data.seq_len,
+                                    self.place_Y: self.data.label})
+                test1, test2, test3 = sess.run([in_1, seq, out])
+                self.log.info("Dataset Creation Complete")
+        elif self.mode == 1:
+            in_1, seq = self.iterator.get_next()
+            with tf.Session() as sess:
+                sess.run(self.iterator.initializer,
+                         feed_dict={self.place_X: self.data.input,
+                                    self.place_Seq: self.data.seq_len})
+                test1, test2 = sess.run([in_1, seq])
+                self.log.info("Dataset Creation Complete")
+
         return True
 
     @staticmethod
@@ -166,17 +182,21 @@ class CreateDataset(object):
     def load_data(self):
         pass
 
+    @abc.abstractmethod
+    def process_output(self, graph_output):
+        pass
+
 
 class MotifSequence(CreateDataset):
     """Subclass of CreateDataset for dealing with data from signal and label data"""
 
-    def __init__(self, file_list, training=True, batch_size=10, verbose=True, seq_len=100,
-                 n_epochs=5, shuffle_buffer_size=10000, prefetch_buffer_size=100):
+    def __init__(self, file_list, mode=0, batch_size=10, verbose=True, seq_len=100,
+                 n_epochs=5, shuffle_buffer_size=10000, prefetch_buffer_size=100, blank=True):
 
         """
 
         :param file_list: list of signal and label files within a single directory
-        :param training: bool to indicate to create repeat and shuffle batches
+        :param mode: int to indicate file loading protocol
         :param batch_size: integer representing number of elements in a batch
         :param verbose: bool option to print more information
         :param seq_len: estimated sequence length
@@ -189,8 +209,9 @@ class MotifSequence(CreateDataset):
         self.file_list = file_list
         self.len_y = 3
         self.len_x = 1
+        self.blank = blank
 
-        super(MotifSequence, self).__init__(training=training, x_shape=[None, seq_len],
+        super(MotifSequence, self).__init__(mode=mode, x_shape=[None, seq_len],
                                             y_shape=[None, None], sequence_shape=[None],
                                             batch_size=batch_size, seq_len=seq_len, len_y=self.len_y, len_x=self.len_x,
                                             n_epochs=n_epochs, verbose=verbose,
@@ -231,7 +252,7 @@ class MotifSequence(CreateDataset):
                                                                 prefix_length=0,
                                                                 suffix_length=0,
                                                                 methyl_index=1,
-                                                                blank=True)
+                                                                blank=self.blank)
                     for motif in motif_generator:
                         tmp_event, tmp_event_length, tmp_label, tmp_label_length = read_raw(f_signal, motif,
                                                                                             self.seq_len,
@@ -254,16 +275,22 @@ class MotifSequence(CreateDataset):
         return self.training_labels(input=np.asarray(event), seq_len=np.asarray(event_length),
                                     label=padded_labels)
 
+    def process_output(self, graph_output):
+        """Process output from prediciton function"""
+        # print(graph_output)
+        bpreads = [SignalLabel.index2base(read, blank=self.blank) for read in graph_output]
+        print(bpreads)
+
 
 class FullSignalSequence(CreateDataset):
     """Subclass of CreateDataset for dealing with data from signal and label data"""
 
-    def __init__(self, file_list, training=True, batch_size=10, verbose=True, seq_len=100,
+    def __init__(self, file_list, mode=0, batch_size=10, verbose=True, seq_len=100,
                  n_epochs=5, shuffle_buffer_size=10000, prefetch_buffer_size=100):
         """
 
         :param file_list: list of signal and label files within a single directory
-        :param training: bool to indicate to create repeat and shuffle batches
+        :param mode: int to indicate file loading protocol
         :param batch_size: integer representing number of elements in a batch
         :param verbose: bool option to print more information
         :param seq_len: estimated sequence length
@@ -275,7 +302,7 @@ class FullSignalSequence(CreateDataset):
         self.len_y = 5
         self.len_x = 1
         self.kmer = 1
-        super(FullSignalSequence, self).__init__(training=training, x_shape=[None, seq_len],
+        super(FullSignalSequence, self).__init__(mode=mode, x_shape=[None, seq_len],
                                                  y_shape=[None, None], sequence_shape=[None],
                                                  batch_size=batch_size, seq_len=seq_len, len_y=self.len_y,
                                                  len_x=self.len_x,
@@ -335,16 +362,22 @@ class FullSignalSequence(CreateDataset):
         return self.training_labels(input=np.asarray(event), seq_len=np.asarray(event_length),
                                     label=padded_labels)
 
+    def process_output(self, graph_output):
+        """Process output from prediciton function"""
+        # print(graph_output)
+        bpreads = [SignalLabel.index2base(read) for read in graph_output]
+        print(bpreads)
+
 
 class NumpyEventData(CreateDataset):
     """Subclass of CreateDataset for dealing with data from signal and label data"""
 
-    def __init__(self, file_list, training=True, batch_size=10, verbose=True, seq_len=100,
+    def __init__(self, file_list, mode=0, batch_size=10, verbose=True, seq_len=100,
                  n_epochs=5, shuffle_buffer_size=10000, prefetch_buffer_size=100):
         """
 
         :param file_list: list of signal and label files within a single directory
-        :param training: bool to indicate to create repeat and shuffle batches
+        :param mode: int to indicate file loading protocol
         :param batch_size: integer representing number of elements in a batch
         :param verbose: bool option to print more information
         :param seq_len: estimated sequence length
@@ -366,7 +399,7 @@ class NumpyEventData(CreateDataset):
         data = np.load(self.file_list[0])
         self.len_x = len(data[0][0])
         self.len_y = len(data[0][1])
-        super(NumpyEventData, self).__init__(training=training, x_shape=[None, seq_len, self.len_x],
+        super(NumpyEventData, self).__init__(mode=mode, x_shape=[None, seq_len, self.len_x],
                                              y_shape=[None, seq_len, self.len_y], sequence_shape=[None],
                                              batch_size=batch_size, seq_len=seq_len, len_y=self.len_y,
                                              len_x=self.len_x,
@@ -406,14 +439,14 @@ class NumpyEventData(CreateDataset):
 
 if __name__ == "__main__":
     file_list = list_dir("/Users/andrewbailey/CLionProjects/nanopore-RNN/chiron/data/raw")
-    motif = MotifSequence(file_list, training=True, batch_size=10, verbose=True, seq_len=100,
+    motif = MotifSequence(file_list, mode=0, batch_size=10, verbose=True, seq_len=100,
                           n_epochs=5)
-    full = FullSignalSequence(file_list, training=True, batch_size=10, verbose=True, seq_len=100,
+    full = FullSignalSequence(file_list, mode=0, batch_size=10, verbose=True, seq_len=100,
                               n_epochs=5)
     file_list = list_dir(
         "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/create_training_files/07Jul-20-11h-28m")
 
-    full = NumpyEventData(file_list, training=True, batch_size=10, verbose=True, seq_len=100,
+    full = NumpyEventData(file_list, mode=0, batch_size=10, verbose=True, seq_len=100,
                           n_epochs=5)
     print("This file is just a library", file=sys.stderr)
     raise SystemExit

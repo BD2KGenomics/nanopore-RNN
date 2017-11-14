@@ -24,6 +24,44 @@ raw_labels = collections.namedtuple('raw_labels', ['start', 'length', 'base'])
 
 ALPHABET = ['A', 'C', 'G', 'T', 'E']
 
+def readFasta(fasta):
+    '''
+    Taken from David Bernick but modified slightly to fit my purposes.
+
+    using filename given in init, returns each included FastA record
+    as 2 strings - header and sequence.
+    whitespace is removed, no adjustment is made to sequence contents.
+    The initial '>' is removed from the header.
+    '''
+    # initialize return containers
+    sequence = ''
+    with open(fasta, 'r+') as fasta_f:
+        # skip to first fasta header
+        line = fasta_f.readline()
+        while not line.startswith('>') :
+            line = fasta_f.readline()
+        header = line[1:].rstrip()
+
+        # header is saved, get the rest of the sequence
+        # up until the next header is found
+        # then yield the results and wait for the next call.
+        # next call will resume at the yield point
+        # which is where we have the next header
+        for line in fasta_f:
+            if line.startswith ('>'):
+                yield header, sequence
+                # headerList.append(header)
+                # sequenceList.append(sequence)
+                header = line[1:].rstrip()
+                sequence = ''
+            else:
+                sequence += ''.join(line.rstrip().split()).upper()
+        # final header and sequence will be seen with an end of file
+        # with clause will terminate, so we do the final yield of the data
+
+    yield header, sequence
+
+
 
 def index2base(read):
     bpread = [ALPHABET[x] for x in read]
@@ -47,7 +85,7 @@ class SignalLabel:
         self.signal_file = signal_file
         self.label_file = label_file
         assert os.path.isfile(self.signal_file), "{} does not exist".format(self.signal_file)
-
+        self.blank = None
     def trim_complement_signal(self, outdir):
         """Trim signal file to only have signal aligned from label file"""
         assert os.path.isdir(outdir), "{} does not exist".format(outdir)
@@ -94,6 +132,7 @@ class SignalLabel:
             prefix = index_pair[0]-prefix_length
             suffix = index_pair[1]+suffix_length
             base = label.base[prefix:suffix]
+            self.blank = blank
             if blank:
                 b = [0]*len(base)
                 if index2base([base[methyl_index]]) == "E":
@@ -109,6 +148,14 @@ class SignalLabel:
             yield raw_labels(start=label.start[prefix:suffix],
                              length=label.length[prefix:suffix],
                              base=base)
+    @staticmethod
+    def index2base(read, blank=False):
+        base = ['A', 'C', 'G', 'T', 'E']
+        if blank:
+            base = ['', 'C', 'E']
+        bpread = [base[x] for x in read]
+        bpread = ''.join(x for x in bpread)
+        return bpread
 
 
 def read_label(file_path, skip_start=10, window_n=0, bases=False):
@@ -295,6 +342,15 @@ def print_summary_stats_for_base(base_counts_list, char='E'):
     print("False Negatives = {}".format(float(deletions)/total))
     print("False Negatives (ref mismatch) = {}".format(float(ref_mismatches)/total))
 
+
+def complement_fasta(fasta, outpath):
+    """Write fasta file with complement sequence"""
+    with open(outpath, 'w+') as out_fa:
+        for header, sequence in readFasta(fasta):
+            out_fa.write('>'+header+'\n')
+            out_fa.write(sequence[::-1]+'\n')
+
+
 def main():
     """Main docstring"""
     start = timer()
@@ -304,16 +360,20 @@ def main():
     fasta = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/test_minion.fa"
     labeled_data = "/Users/andrewbailey/CLionProjects/nanopore-RNN/chiron/data/raw"
     fasta_dir = "/Users/andrewbailey/CLionProjects/nanopore-RNN/chiron/data/result"
+    fasta_ref = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/fake_rnaref/fake_rna.fa"
+    out_path = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/fake_rnaref/fake_rna_reverse.fa"
 
-    handler = SignalLabel(signal, label)
-    # handler.trim_signal("/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/")
-    seq = handler.get_sequence()
-    # indexs = handler.motif_search("CCAGG")
-    indexs = handler.trim_to_motif(["CCAGG", "CCTGG"], prefix_length=0, suffix_length=0, methyl=1)
-    # print(indexs)
-    for index in indexs:
-        print(index)
-        break
+    complement_fasta(fasta_ref, out_path)
+
+    # handler = SignalLabel(signal, label)
+    # # handler.trim_signal("/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/")
+    # seq = handler.get_sequence()
+    # # indexs = handler.motif_search("CCAGG")
+    # indexs = handler.trim_to_motif(["CCAGG", "CCTGG"], prefix_length=0, suffix_length=0, methyl=1)
+    # # print(indexs)
+    # for index in indexs:
+    #     print(index)
+    #     break
 
 
 
