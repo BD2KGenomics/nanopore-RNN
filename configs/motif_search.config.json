@@ -1,0 +1,71 @@
+{
+  "CreateDataset": {
+    "dataset": "MotifSequence",
+    "training_dir": "/Users/andrewbailey/CLionProjects/nanopore-RNN/chiron/data/raw",
+    "validation_dir": "/Users/andrewbailey/CLionProjects/nanopore-RNN/chiron/data/raw",
+    "inference_dir": "/Users/andrewbailey/CLionProjects/nanopore-RNN/chiron/data/raw",
+    "test_dir": "/Users/andrewbailey/CLionProjects/nanopore-RNN/chiron/data/raw",
+    "dataset_args": {
+      "batch_size": 4,
+      "n_epochs": 100,
+      "seq_len": 100,
+      "shuffle_buffer_size": 10000,
+      "prefetch_buffer_size": 4,
+      "blank": true
+    }
+  },
+  "BuildGraph": {
+    "graph": "CtcLoss",
+    "graph_args": {
+    }
+  },
+  "network": [
+    {
+      "type": "residual_layer",
+      "name": "residual_layer_1",
+      "out_channel": 256,
+      "batchnorm": true
+    },
+    {
+      "type": "residual_layer",
+      "name": "residual_layer_2",
+      "out_channel": 256,
+      "batchnorm": false
+    },
+    {
+      "bias": 5.0,
+      "type": "blstm",
+      "name": "blstm_layer1",
+      "size": 100,
+      "concat": true
+
+    },
+    {
+      "bias": 1.0,
+      "type": "chiron_fnn",
+      "name": "chiron_fnn_layer",
+      "size": 64
+    }
+  ],
+  "train": false,
+  "inference": false,
+  "test": true,
+  "load_trained_model": true,
+  "use_checkpoint": true,
+  "trained_model": "/Users/andrewbailey/CLionProjects/nanopore-RNN/logs/11Nov-17-17h-27m/",
+  "trained_model_path": "/Users/andrewbailey/nanopore-RNN/logs/11Nov-17-17h-27m/small_blank_test-6",
+  "save_trace": false,
+  "trace_name": "timeline.json",
+  "profile": false,
+  "save_s3": false,
+  "s3bucket": "neuralnet-accuracy",
+  "verbose": true,
+  "output_dir": "/Users/andrewbailey/CLionProjects/nanopore-RNN/logs",
+  "model_name": "small_blank_test",
+  "num_gpu": 2,
+  "num_threads": 2,
+  "training_iters": 6,
+  "save_model": 60,
+  "record_step": 2,
+  "learning_rate": 0.001
+}

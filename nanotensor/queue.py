@@ -19,6 +19,7 @@ from chiron.chiron_input import read_signal, read_label, read_raw
 from nanotensor.trim_signal import SignalLabel
 from nanotensor.utils import debug
 import abc
+import logging as log
 
 try:
     import Queue as queue
@@ -66,7 +67,6 @@ class CreateDataset(object):
         assert type(prefetch_buffer_size) is int, \
             "prefetch_buffer_size is not int: type(prefetch_buffer_size) = {}".format(type(prefetch_buffer_size))
 
-        self.log = debug(verbose)
         # assign class objects
         self.seq_len = seq_len
         self.batch_size = batch_size
@@ -82,12 +82,12 @@ class CreateDataset(object):
         self.mode = mode
 
         # log information regarding data
-        self.log.info("Shape of input vector = {}".format(self.x_shape))
-        self.log.info("Shape of output vector = {}".format(self.y_shape))
-        self.log.info("Batch Size = {}".format(self.batch_size))
-        self.log.info("Sequence Length = {}".format(self.seq_len))
-        self.log.info("Size of input vector = {}".format(self.len_x))
-        self.log.info("Size of label vector = {}".format(self.len_y))
+        log.info("Shape of input vector = {}".format(self.x_shape))
+        log.info("Shape of output vector = {}".format(self.y_shape))
+        log.info("Batch Size = {}".format(self.batch_size))
+        log.info("Sequence Length = {}".format(self.seq_len))
+        log.info("Size of input vector = {}".format(self.len_x))
+        log.info("Size of label vector = {}".format(self.len_y))
 
         # data structures for training and inference
         self.training_labels = collections.namedtuple('training_data', ['input', 'seq_len', 'label'])
@@ -105,7 +105,7 @@ class CreateDataset(object):
 
         # optional batching, dataset and iteration creation
         self.batchX, self.batchSeq, self.batchY = self.create_batches()
-        # self.log.info("Shape of input vector = {}".format(self.x_shape))
+        # log.info("Shape of input vector = {}".format(self.x_shape))
         self.dataset = self.create_dataset()
         self.iterator = self.create_iterator()
         self.data = self.load_data()
@@ -128,7 +128,6 @@ class CreateDataset(object):
         # testing
         elif self.mode == 1:
             dataset = tf.data.Dataset.zip((self.batchX, self.batchSeq, self.batchY))
-            dataset = dataset.shuffle(buffer_size=self.shuffle_buffer_size)
         # inference
         elif self.mode == 2:
             dataset = tf.data.Dataset.zip((self.batchX, self.batchSeq))
@@ -150,7 +149,7 @@ class CreateDataset(object):
                                     self.place_Seq: self.data.seq_len,
                                     self.place_Y: self.data.label})
                 test1, test2, test3 = sess.run([in_1, seq, out])
-                self.log.info("Dataset Creation Complete")
+                log.info("Dataset Creation Complete")
         elif self.mode == 1:
             in_1, seq = self.iterator.get_next()
             with tf.Session() as sess:
@@ -158,7 +157,7 @@ class CreateDataset(object):
                          feed_dict={self.place_X: self.data.input,
                                     self.place_Seq: self.data.seq_len})
                 test1, test2 = sess.run([in_1, seq])
-                self.log.info("Dataset Creation Complete")
+                log.info("Dataset Creation Complete")
 
         return True
 
@@ -279,7 +278,7 @@ class MotifSequence(CreateDataset):
         """Process output from prediciton function"""
         # print(graph_output)
         bpreads = [SignalLabel.index2base(read, blank=self.blank) for read in graph_output]
-        print(bpreads)
+        # print(bpreads)
 
 
 class FullSignalSequence(CreateDataset):
@@ -385,15 +384,15 @@ class NumpyEventData(CreateDataset):
         :param shuffle_buffer_size: size of buffer for shuffle option when training
         :param prefetch_buffer_size: size of buffer for prefetch option
         """
-        self.log = debug(verbose)
+        log = debug(verbose)
         self.file_list, self.bad_files = self.test_numpy_files(file_list)
         self.num_files = len(self.file_list)
         assert self.num_files >= 1, "There are no passing npy files to read into queue"
         if self.bad_files == 0:
-            self.log.info("All numpy files passed")
+            log.info("All numpy files passed")
         else:
-            self.log.warning("{} files were unable to be loaded using np.load()".format(len(self.bad_files)))
-            self.log.info("{}".format(self.bad_files))
+            log.warning("{} files were unable to be loaded using np.load()".format(len(self.bad_files)))
+            log.info("{}".format(self.bad_files))
 
         # get size of inputs and classes
         data = np.load(self.file_list[0])

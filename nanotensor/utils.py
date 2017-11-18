@@ -344,7 +344,7 @@ def debug(verbose=False):
     else:
         log.basicConfig(format="%(levelname)s: %(message)s")
         log.info("This should not print.")
-    return log
+
 
 def main():
     """Test the methods"""

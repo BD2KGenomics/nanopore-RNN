@@ -86,6 +86,7 @@ class SignalLabel:
         self.label_file = label_file
         assert os.path.isfile(self.signal_file), "{} does not exist".format(self.signal_file)
         self.blank = None
+
     def trim_complement_signal(self, outdir):
         """Trim signal file to only have signal aligned from label file"""
         assert os.path.isdir(outdir), "{} does not exist".format(outdir)

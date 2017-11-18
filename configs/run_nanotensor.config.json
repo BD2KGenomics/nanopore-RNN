@@ -1,0 +1,93 @@
+{
+  "CreateDataset": {
+    "dataset": "MotifSequence",
+    "training_dir": "/Users/andrewbailey/CLionProjects/nanopore-RNN/chiron/data/raw",
+    "validation_dir": "/Users/andrewbailey/CLionProjects/nanopore-RNN/chiron/data/raw",
+    "dataset_args": {
+      "batch_size": 10,
+      "n_epochs": 5,
+      "seq_len": 100,
+      "shuffle_buffer_size": 10000,
+      "prefetch_buffer_size": 100
+    }
+  },
+  "BuildGraph": {
+    "graph": "CtcLoss",
+    "graph_args": {
+      "batch_size": 10
+    }
+  },
+  "output_dir": "/Users/andrewbailey/CLionProjects/nanopore-RNN/logs",
+  "model_name": "my_test_model",
+  "num_gpu": 2,
+  "num_threads": 2,
+  "training_iters": 20,
+  "save_model": 1,
+  "record_step": 1,
+  "learning_rate": 0.001,
+  "network": [
+    {
+      "type": "residual_layer",
+      "name": "residual_layer_1",
+      "out_channel": 256,
+      "batchnorm": true
+    },
+    {
+      "type": "residual_layer",
+      "name": "residual_layer_2",
+      "out_channel": 256,
+      "batchnorm": false
+    },
+    {
+      "type": "residual_layer",
+      "name": "residual_layer_3",
+      "out_channel": 256,
+      "batchnorm": false
+    },
+    {
+      "bias": 5.0,
+      "type": "blstm",
+      "name": "blstm_layer1",
+      "size": 100,
+      "concat": true
+
+    },
+    {
+      "bias": 5.0,
+      "type": "blstm",
+      "name": "blstm_layer2",
+      "size": 100,
+      "concat": true
+
+    },
+    {
+      "bias": 5.0,
+      "type": "blstm",
+      "name": "blstm_layer3",
+      "size": 100,
+      "concat": true
+    },
+    {
+      "bias": 1.0,
+      "type": "chiron_fnn",
+      "name": "chiron_fnn_layer",
+      "size": 64
+    }
+  ],
+  "train": true,
+  "inference": false,
+  "testing_accuracy": false,
+  "load_trained_model": false,
+  "alphabet": "ATGC",
+  "kmer_len": 5,
+  "inference_output": "/Users/andrewbailey/nanopore-RNN/kmers.txt",
+  "trained_model": "/Users/andrewbailey/CLionProjects/nanopore-RNN/logs/08Aug-23-10h-52m",
+  "trained_model_path": "/Users/andrewbailey/nanopore-RNN/logs/06Jun-29-11h-11m/my_test_model-5233",
+  "use_checkpoint": false,
+  "trace_name": "timeline.json",
+  "save_trace": false,
+  "profile": false,
+  "save_s3": false,
+  "s3bucket": "neuralnet-accuracy",
+  "verbose": true
+}
