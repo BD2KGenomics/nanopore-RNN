@@ -191,10 +191,6 @@ class RunTensorflow(object):
                         # create graph
                         graph_type = self.create_model(validation=(count == 0))
                         log.info("Created {} graph on gpu:{}".format(graph_type, i))
-                with tf.device('/cpu:0'):
-                    # Create validation graph on cpu
-                    self.validation_model = self.Graph(network=self.args.network, dataset=self.validation,
-                                                       summary_name="Validation")
             else:
                 log.info("No GPU's available, using CPU for computation")
                 graph_type = self.create_model(validation=True)
