@@ -80,6 +80,7 @@ class CreateDataset(object):
         self.shuffle_buffer_size = shuffle_buffer_size
         self.prefetch_buffer_size = prefetch_buffer_size
         self.mode = mode
+        self.file_path = "path"
 
         # log information regarding data
         log.info("Shape of input vector = {}".format(self.x_shape))
@@ -108,7 +109,8 @@ class CreateDataset(object):
         # log.info("Shape of input vector = {}".format(self.x_shape))
         self.dataset = self.create_dataset()
         self.iterator = self.create_iterator()
-        self.data = self.load_data()
+        if self.mode == 0 or self.mode == 1:
+            self.data = self.load_data()
         self.test()
 
     def create_batches(self):
@@ -130,9 +132,12 @@ class CreateDataset(object):
             dataset = tf.data.Dataset.zip((self.batchX, self.batchSeq, self.batchY))
         # inference
         elif self.mode == 2:
-            dataset = tf.data.Dataset.zip((self.batchX, self.batchSeq))
+            # inference needs to be done per file
+            dataset = tf.data.Dataset.from_generator(
+                self.load_data_inference, (tf.float32, tf.int32), (tf.TensorShape([self.seq_len]),
+                                                                   tf.TensorShape(None)))
+            dataset = dataset.batch(self.batch_size)
         dataset = dataset.prefetch(buffer_size=self.prefetch_buffer_size)
-
         return dataset
 
     def create_iterator(self):
@@ -177,12 +182,29 @@ class CreateDataset(object):
 
         return good, bad
 
+    @staticmethod
+    def padding(x, L, padding_list=None):
+        """Padding the vector x to length L"""
+        len_x = len(x)
+        assert len_x <= L, "Length of vector x is larger than the padding length"
+        zero_n = L - len_x
+        if padding_list is None:
+            return x + [0] * zero_n
+        elif len(padding_list) < zero_n:
+            return x + padding_list + [0] * (zero_n - len(padding_list))
+        else:
+            return x + padding_list[0:zero_n]
+
     @abc.abstractmethod
     def load_data(self):
         pass
 
     @abc.abstractmethod
     def process_output(self, graph_output):
+        pass
+
+    @abc.abstractmethod
+    def load_data_inference(self):
         pass
 
 
@@ -277,15 +299,27 @@ class MotifSequence(CreateDataset):
     def process_output(self, graph_output):
         """Process output from prediciton function"""
         # print(graph_output)
-        bpreads = [SignalLabel.index2base(read, blank=self.blank) for read in graph_output]
-        # print(bpreads)
+        bpreads = [SignalLabel.index2base(read) for read in graph_output]
+        print(bpreads)
+
+    def load_data_inference(self):
+        """Load data in using inference functions"""
+        f_signal = read_signal(self.file_path, normalize=True)
+        f_signal = f_signal[self.start_index:]
+        sig_len = len(f_signal)
+        for indx in range(0, sig_len, self.step):
+            segment_sig = f_signal[indx:indx + self.seq_len]
+            segment_len = len(segment_sig)
+            padded_segment_sig = self.padding(segment_sig, self.seq_len)
+            yield self.inference_labels(input=np.asarray(padded_segment_sig),
+                                        seq_len=np.asarray(segment_len))
 
 
 class FullSignalSequence(CreateDataset):
     """Subclass of CreateDataset for dealing with data from signal and label data"""
 
     def __init__(self, file_list, mode=0, batch_size=10, verbose=True, seq_len=100,
-                 n_epochs=5, shuffle_buffer_size=10000, prefetch_buffer_size=100):
+                 n_epochs=5, shuffle_buffer_size=10000, prefetch_buffer_size=100, step=300, start_index=0):
         """
 
         :param file_list: list of signal and label files within a single directory
@@ -301,6 +335,8 @@ class FullSignalSequence(CreateDataset):
         self.len_y = 5
         self.len_x = 1
         self.kmer = 1
+        self.step = step
+        self.start_index = start_index
         super(FullSignalSequence, self).__init__(mode=mode, x_shape=[None, seq_len],
                                                  y_shape=[None, None], sequence_shape=[None],
                                                  batch_size=batch_size, seq_len=seq_len, len_y=self.len_y,
@@ -309,7 +345,7 @@ class FullSignalSequence(CreateDataset):
                                                  shuffle_buffer_size=shuffle_buffer_size,
                                                  prefetch_buffer_size=prefetch_buffer_size)
 
-    def create_batches(self):
+    def create_batches(self, inference=False):
         """Create dataset batches for sequence data"""
 
         def remove_padding(y):
@@ -321,6 +357,8 @@ class FullSignalSequence(CreateDataset):
                                                                       row_shape=[self.seq_len]))
         batch_x = self.datasetX.batch(self.batch_size)
         batch_seq_length = self.datasetSeq.batch(self.batch_size)
+        if inference:
+            self.datasetX.batch(self.batch_size)
 
         return batch_x, batch_seq_length, batch_y
 
@@ -367,6 +405,18 @@ class FullSignalSequence(CreateDataset):
         bpreads = [SignalLabel.index2base(read) for read in graph_output]
         print(bpreads)
 
+    def load_data_inference(self):
+        """Load data in using inference functions"""
+        f_signal = read_signal(self.file_path, normalize=True)
+        f_signal = f_signal[self.start_index:]
+        sig_len = len(f_signal)
+        for indx in range(0, sig_len, self.step):
+            segment_sig = f_signal[indx:indx + self.seq_len]
+            segment_len = len(segment_sig)
+            padded_segment_sig = self.padding(segment_sig, self.seq_len)
+            yield self.inference_labels(input=np.asarray(padded_segment_sig),
+                                   seq_len=np.asarray(segment_len))
+
 
 class NumpyEventData(CreateDataset):
     """Subclass of CreateDataset for dealing with data from signal and label data"""
@@ -398,6 +448,8 @@ class NumpyEventData(CreateDataset):
         data = np.load(self.file_list[0])
         self.len_x = len(data[0][0])
         self.len_y = len(data[0][1])
+
+
         super(NumpyEventData, self).__init__(mode=mode, x_shape=[None, seq_len, self.len_x],
                                              y_shape=[None, seq_len, self.len_y], sequence_shape=[None],
                                              batch_size=batch_size, seq_len=seq_len, len_y=self.len_y,
@@ -435,9 +487,15 @@ class NumpyEventData(CreateDataset):
         seq_len = np.asarray(sequence_length)
         return self.training_labels(input=features, seq_len=seq_len, label=labels)
 
+    def process_output(self, graph_output):
+        for x in graph_output:
+            print(x)
+
 
 if __name__ == "__main__":
+
     file_list = list_dir("/Users/andrewbailey/CLionProjects/nanopore-RNN/chiron/data/raw")
+
     motif = MotifSequence(file_list, mode=0, batch_size=10, verbose=True, seq_len=100,
                           n_epochs=5)
     full = FullSignalSequence(file_list, mode=0, batch_size=10, verbose=True, seq_len=100,

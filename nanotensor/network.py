@@ -59,7 +59,6 @@ class BuildGraph(object):
 
         # Summary Information
         self.summaries = []
-        # self.testing_summaries = []
 
         # bool for multi-gpu usage
         self.reuse = reuse

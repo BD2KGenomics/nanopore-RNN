@@ -21,6 +21,7 @@ import argparse
 from datetime import datetime
 import numpy as np
 import time
+from itertools import izip
 from nanotensor.utils import project_folder, list_dir, DotDict, upload_model, load_json, save_config_file, \
     test_aws_connection, merge_two_dicts, time_it, debug
 from nanotensor.error import Usage
@@ -143,17 +144,22 @@ class TrainModel(object):
             self.training_model = "BuildGraph"
             self.validation_model = "BuildGraph"
             self.cost_diff_summary = None
+            self.tower_grads = []
+            learning_rate = tf.train.exponential_decay(self.args.learning_rate, self.global_step,
+                                                       100000, 0.96, staircase=True)
+            self.opt = tf.train.AdamOptimizer(learning_rate=learning_rate)
 
         elif self.args.test:
             self.test_files = list_dir(self.args.CreateDataset.test_dir)
             self.testing = "CreateDataset"
             self.testing_model = "BuildGraph"
+            self.testing_opts = []
 
         elif self.args.inference:
             self.inference_files = list_dir(self.args.CreateDataset.inference_dir)
             self.inference = "CreateDataset"
             self.inference_model = "BuildGraph"
-
+            self.inference_opts = []
         # load data
         log.info("Data Loading Started")
         speed = time_it(self.load_data)
@@ -176,49 +182,31 @@ class TrainModel(object):
 
     def initialize_model(self):
         """Initialize the model with multi-gpu options"""
-        tower_grads = []
-        learning_rate = tf.train.exponential_decay(self.args.learning_rate, self.global_step,
-                                                   100000, 0.96, staircase=True)
-        opt = tf.train.AdamOptimizer(learning_rate=learning_rate)
         with tf.variable_scope(self.args.model_name, reuse=tf.AUTO_REUSE):
-            if self.args.inference:
-                # load inference model
-                self.inference_model = self.Graph(network=self.args.network, dataset=self.inference,
-                                                  summary_name="Inference")
-                log.info("Created Inference graph on cpu")
-            elif self.args.test:
-                # load testing model
-                self.testing_model = self.Graph(network=self.args.network, dataset=self.testing,
-                                                summary_name="Testing")
-                log.info("Created Testing graph on cpu")
-            elif self.args.train:
-                if self.gpu_indexes:
-                    log.info("Using GPU's {}".format(gpu_indexes))
-                    for i in list(self.gpu_indexes):
-                        with tf.device('/gpu:%d' % i):
-                            # create model on specific gpu
-                            self.training_model = self.Graph(network=self.args.network, dataset=self.training)
-                            # compute gradients for each gpu
-                            gradients = opt.compute_gradients(model.cost)
-                            tower_grads.append(gradients)
-                            log.info("Created Training graph on gpu{}".format(i))
-                    # average gradients
-                    grads = average_gradients(tower_grads)
-                else:
-                    # if no gpu's create graph on cpu
-                    log.info("No GPU's available, using CPU for computation")
-                    self.training_model = self.Graph(network=self.args.network, dataset=self.training)
-                    grads = opt.compute_gradients(self.training_model.cost)
-                    log.info("Created Training graph on cpu")
-                # create validation graph for separate analysis from training graph
+            # if gpus are availiable
+            if self.gpu_indexes:
+                log.info("Using GPU's {}".format(self.gpu_indexes))
+                for count, i in enumerate(self.gpu_indexes):
+                    with tf.device('/gpu:%d' % i):
+                        # create graph
+                        graph_type = self.create_model(validation=(count == 0))
+                        log.info("Created {} graph on gpu:{}".format(graph_type, i))
+                grads = average_gradients(self.tower_grads)
                 with tf.device('/cpu:0'):
                     # Create validation graph on cpu
                     self.validation_model = self.Graph(network=self.args.network, dataset=self.validation,
                                                        summary_name="Validation")
+            else:
+                log.info("No GPU's available, using CPU for computation")
+                graph_type = self.create_model(validation=True)
+                log.info("Created {} graph on CPU".format(graph_type))
 
+            if self.args.training:
                 # update graph with new weights after backprop
+                if not self.gpu_indexes:
+                    grads = self.tower_grads[0]
                 with tf.variable_scope("apply_gradients", reuse=tf.AUTO_REUSE):
-                    self.train_op = opt.apply_gradients(grads, global_step=self.global_step)
+                    self.train_op = self.opt.apply_gradients(grads, global_step=self.global_step)
 
                 self.cost_diff_summary = tf.summary.scalar('cost_diff',
                                                            (self.training_model.cost - self.validation_model.cost))
@@ -227,7 +215,32 @@ class TrainModel(object):
                 # cifar10.MOVING_AVERAGE_DECAY, global_step)
                 # variables_averages_op = variable_averages.apply(tf.trainable_variables())
 
-        return 0
+    def create_model(self, validation=False):
+        """Create inference, test or training model"""
+        if self.args.inference:
+            self.inference_model = self.Graph(network=self.args.network, dataset=self.inference,
+                                              summary_name="Inference")
+            self.inference_opts.append(self.inference_model.prediction)
+            graph_type = "Inference"
+        elif self.args.test:
+            self.testing_model = self.Graph(network=self.args.network, dataset=self.testing,
+                                            summary_name="Testing")
+            self.testing_opts.append(self.testing_model.accuracy)
+            self.testing_opts.append(self.testing_model.batch_size)
+            graph_type = "Testing"
+        elif self.args.train:
+            self.training_model = self.Graph(network=self.args.network, dataset=self.training, summary_name="Training")
+            # compute gradients
+            gradients = self.opt.compute_gradients(self.training_model.cost)
+            self.tower_grads.append(gradients)
+            graph_type = "Training"
+            if validation:
+                with tf.device('/cpu:0'):
+                    self.validation_model = self.Graph(network=self.args.network, dataset=self.validation,
+                                                       summary_name="Validation")
+                    graph_type = "Training and Validation"
+
+        return graph_type
 
     def load_data(self):
         """Create training and testing queues from training and testing files"""
@@ -316,25 +329,30 @@ class TrainModel(object):
     def run_model(self):
         """Run a model from a saved model path"""
         with tf.Session() as sess:
-            sess.run(self.inference.iterator.initializer,
-                     feed_dict={self.inference.place_X: self.inference.data.input,
-                                self.inference.place_Seq: self.inference.data.seq_len})
-
             saver = tf.train.Saver(max_to_keep=4, keep_checkpoint_every_n_hours=2)
             saver.restore(sess, self.model_path)
-            # graph = tf.get_default_graph()
-            try:
-                while True:
-                    evaluate_pred = sess.run([self.inference_model.prediction])
-                    self.inference.process_output(evaluate_pred[0])
-            except tf.errors.OutOfRangeError:
-                print("End of dataset")
+            for file_path in self.inference_files:
+                if file_path.endswith(".signal"):
+                    self.inference.file_path = file_path
+                    sess.run(self.inference.iterator.initializer)
+                    prediction_list = []
+                    try:
+                        while True:
+                            evaluate_pred = sess.run([self.inference_opts])
+                            prediction_list.extend(np.asarray(np.vstack(evaluate_pred[0])))
+                            print("prediction_list", np.asarray(prediction_list).shape)
+                    except tf.errors.OutOfRangeError:
+                        print("New File")
+                        self.inference.process_output(np.asarray(prediction_list))
+                        continue
+            print("Finished Inference")
 
     def test_model(self, intra_op_parallelism_threads=8, log_device_placement=False):
         """Get testing accuracy and save model along with configuration file on s3"""
         if self.args.save_s3:
             aws_test = test_aws_connection(self.args.s3bucket)
             assert aws_test is True, "Selected save to s3 option but cannot connect to specified bucket"
+        # testing_accuracy = tf.group(self.testing_opts)
         with tf.Session(config=tf.ConfigProto(log_device_placement=log_device_placement,
                                               intra_op_parallelism_threads=intra_op_parallelism_threads)) as sess:
             # restore model
@@ -350,11 +368,13 @@ class TrainModel(object):
 
             try:
                 while True:
-
-                    acc, batch_size = sess.run([self.testing_model.accuracy, self.testing_model.batch_size])
-                    acc_sum += acc*batch_size
-                    step += batch_size
-                    log.info("Iter " + str(step) + ", Testing Accuracy= " + "{:.5f}".format(acc))
+                    acc = sess.run(self.testing_opts)
+                    a = iter(acc)
+                    zips = izip(a, a)
+                    for acc, batch_size in zips:
+                        acc_sum += acc * batch_size
+                        step += batch_size
+                        log.info("Iter " + str(step) + ", Testing Accuracy= " + "{:.5f}".format(acc))
             except tf.errors.OutOfRangeError:
                 print("End of dataset", file=sys.stderr)
 
@@ -380,7 +400,8 @@ class TrainModel(object):
         if self.args.save_trace:
             self.chrome_trace(run_metadata, self.args.trace_name)
 
-    def chrome_trace(self, metadata_proto, f_name):
+    @staticmethod
+    def chrome_trace(metadata_proto, f_name):
         """Save a chrome trace json file.
         To view json vile go to - chrome://tracing/
         """
@@ -473,13 +494,12 @@ def test_for_nvidia_gpu(num_gpu):
             utilization = re.findall(r"Utilization.*?Gpu.*?(\d+).*?Memory.*?(\d+)",
                                      subprocess.check_output(["nvidia-smi", "-q"]),
                                      flags=re.MULTILINE | re.DOTALL)
-            assert len(utilization) >= num_gpu, "Not enough GPUs are available"
             indices = [i for i, x in enumerate(utilization) if x == ('0', '0')]
-            assert len(
-                indices) >= num_gpu, "Only {0} GPU's are not being used,  change num_gpu parameter to {0}".format(
+            assert len(indices) >= num_gpu, "Only {0} GPU's are available, change num_gpu parameter to {0}".format(
                 len(indices))
-            return indices
+            return indices[:num_gpu]
         except OSError:
+            log.info("No GPU's found. Using CPU.")
             return False
 
 
