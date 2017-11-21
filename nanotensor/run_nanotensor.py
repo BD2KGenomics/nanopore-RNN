@@ -196,7 +196,7 @@ class RunTensorflow(object):
                 graph_type = self.create_model()
                 log.info("Created {} graph on /cpu:0".format(graph_type))
 
-            if self.args.training:
+            if self.args.train:
                 with tf.device('/cpu:0'):
                     self.validation_model = self.Graph(network=self.args.network, dataset=self.validation,
                                                        summary_name="Validation")
