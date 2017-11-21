@@ -189,14 +189,19 @@ class RunTensorflow(object):
                 for count, i in enumerate(self.gpu_indexes):
                     with tf.device('/gpu:%d' % i):
                         # create graph
-                        graph_type = self.create_model(validation=(count == 0))
+                        graph_type = self.create_model()
                         log.info("Created {} graph on gpu:{}".format(graph_type, i))
             else:
                 log.info("No GPU's available, using CPU for computation")
-                graph_type = self.create_model(validation=True)
-                log.info("Created {} graph on CPU".format(graph_type))
+                graph_type = self.create_model()
+                log.info("Created {} graph on /cpu:0".format(graph_type))
 
             if self.args.training:
+                with tf.device('/cpu:0'):
+                    self.validation_model = self.Graph(network=self.args.network, dataset=self.validation,
+                                                       summary_name="Validation")
+                    log.info("Created Validation graph on /cpu:0")
+
                 # update graph with new weights after backprop
                 if self.gpu_indexes:
                     grads = average_gradients(self.tower_grads)
@@ -212,7 +217,7 @@ class RunTensorflow(object):
                 # cifar10.MOVING_AVERAGE_DECAY, global_step)
                 # variables_averages_op = variable_averages.apply(tf.trainable_variables())
 
-    def create_model(self, validation=False):
+    def create_model(self, validation=False, gpu=False):
         """Create inference, test or training model"""
         if self.args.inference:
             self.inference_model = self.Graph(network=self.args.network, dataset=self.inference,
@@ -231,12 +236,6 @@ class RunTensorflow(object):
             gradients = self.opt.compute_gradients(self.training_model.cost)
             self.tower_grads.append(gradients)
             graph_type = "Training"
-            if validation:
-                with tf.device('/cpu:0'):
-                    self.validation_model = self.Graph(network=self.args.network, dataset=self.validation,
-                                                       summary_name="Validation")
-                    graph_type = "Training and Validation"
-
         return graph_type
 
     def load_data(self):
