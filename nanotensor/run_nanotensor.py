@@ -322,9 +322,13 @@ class RunTensorflow(object):
         print("Training Finished!")
 
     # TODO refactor to work correctly
-    def run_model(self):
+    def run_model(self, intra_op_parallelism_threads=8, log_device_placement=False, allow_soft_placement=True):
         """Run a model from a saved model path"""
-        with tf.Session() as sess:
+        config = tf.ConfigProto(log_device_placement=log_device_placement,
+                                intra_op_parallelism_threads=intra_op_parallelism_threads,
+                                allow_soft_placement=allow_soft_placement)
+
+        with tf.Session(config=config) as sess:
             saver = tf.train.Saver(max_to_keep=4, keep_checkpoint_every_n_hours=2)
             saver.restore(sess, self.model_path)
             for file_path in self.inference_files:
@@ -342,14 +346,15 @@ class RunTensorflow(object):
                         continue
             print("Finished Inference")
 
-    def test_model(self, intra_op_parallelism_threads=8, log_device_placement=False):
+    def test_model(self, intra_op_parallelism_threads=8, log_device_placement=False, allow_soft_placement=True):
         """Get testing accuracy and save model along with configuration file on s3"""
         if self.args.save_s3:
             aws_test = test_aws_connection(self.args.s3bucket)
             assert aws_test is True, "Selected save to s3 option but cannot connect to specified bucket"
         # testing_accuracy = tf.group(self.testing_opts)
         with tf.Session(config=tf.ConfigProto(log_device_placement=log_device_placement,
-                                              intra_op_parallelism_threads=intra_op_parallelism_threads)) as sess:
+                                              intra_op_parallelism_threads=intra_op_parallelism_threads,
+                                              allow_soft_placement=allow_soft_placement)) as sess:
             # restore model
             saver = tf.train.Saver()
             saver.restore(sess, self.model_path)
