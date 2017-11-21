@@ -251,8 +251,10 @@ def alignment_stats(alignment):
     alphabet = set(alignment['query'] + alignment['reference'])
     base_counts = {key: {'matches': 0, 'deletions': 0, 'insertions': 0, 'ref_mismatches': 0, 'query_mismatches': 0}
                    for key in alphabet}
-    total_counts = {'matches': 0, 'deletions': 0, 'insertions': 0, 'mismatches': 0, "reference": 0, 'read': 0}
+    total_counts = {'matches': 0, 'deletions': 0, 'insertions': 0, 'mismatches': 0,
+                    "reference": 0, 'read': 0, 'total': 0}
     for ref, query in zip(alignment['reference'], alignment["query"]):
+        total_counts['total'] += 1
         if ref == query:
             base_counts[ref]['matches'] += 1
             total_counts['matches'] += 1
@@ -282,10 +284,10 @@ def create_summary_stats(total_counts):
     """Report summary alignment stats from total counts created by alignment_stats"""
     print("Reference sequence length: {}".format(total_counts["reference"]))
     print("Read sequence length: {}".format(total_counts["read"]))
-    print("Identity Rate: {}".format(float(total_counts['matches']) / total_counts["reference"]))
-    print("Mismatch Rate: {}".format(float(total_counts["mismatches"]) / total_counts['reference']))
-    print("Insertion Rate: {}".format(float(total_counts["insertions"]) / total_counts['reference']))
-    print("Deletion Rate: {}".format(float(total_counts["deletions"]) / total_counts['reference']))
+    print("Identity Rate: {}".format(float(total_counts['matches']) / total_counts["total"]))
+    print("Mismatch Rate: {}".format(float(total_counts["mismatches"]) / total_counts['total']))
+    print("Insertion Rate: {}".format(float(total_counts["insertions"]) / total_counts['total']))
+    print("Deletion Rate: {}".format(float(total_counts["deletions"]) / total_counts['total']))
 
 
 def find_accuracy(fasta_dir, label_dir):
@@ -376,19 +378,15 @@ def main():
     #     print(index)
     #     break
 
-
-
-
-
-    # pairs = match_label_fasta(fasta_dir, labeled_data)
-    # base_counts_list = []
-    # for pair in pairs:
-    #     print(pair)
-    #     alignment = create_alignment(pair[0], pair[1])
-    #     total_counts, base_counts = alignment_stats(alignment)
-    #     base_counts_list.append(base_counts)
-    #     create_summary_stats(total_counts)
-    # print_summary_stats_for_base(base_counts_list, char='C')
+    pairs = match_label_fasta(fasta_dir, labeled_data)
+    base_counts_list = []
+    for pair in pairs:
+        print(pair)
+        alignment = create_alignment(pair[0], pair[1])
+        total_counts, base_counts = alignment_stats(alignment)
+        base_counts_list.append(base_counts)
+        create_summary_stats(total_counts)
+    print_summary_stats_for_base(base_counts_list, char='C')
 
 
     # True Positives = 0.0328947368421

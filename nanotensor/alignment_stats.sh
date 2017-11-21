@@ -25,6 +25,11 @@ case $key in
     shift # past argument
     shift # past value
     ;;
+    --rna)
+    RNA=true
+    shift # past argument
+    ;;
+
 esac
 done
 
@@ -33,10 +38,16 @@ echo FASTA FILE  = "${FASTA}"
 echo THREADS  = "${THREADS}"
 echo REFERENCE = "${REFERENCE}"
 echo OUTPUT = "${OUTPUT}"
+echo RNA = "${RNA}"
 
 
 #echo `$FASTA `
-echo `bwa mem -x ont2d -t $THREADS $REFERENCE $FASTA > $OUTPUT/all_files.sam`
+if [ "$RNA" = true ] ; then
+    echo `minimap2 -ax splice -uf -k14 $REFERENCE $FASTA > $OUTPUT/all_files.sam`
+else
+    echo `bwa mem -x ont2d -t $THREADS $REFERENCE $FASTA > $OUTPUT/all_files.sam`
+fi
+
 echo `samtools view -bS $OUTPUT/all_files.sam > $OUTPUT/all_files.bam`
 echo `samtools sort $OUTPUT/all_files.bam -o $OUTPUT/all_files.sorted.bam`
 echo `samtools view -F 0x904 -b $OUTPUT/all_files.sorted.bam > $OUTPUT/unique.sorted.bam`

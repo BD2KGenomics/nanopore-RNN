@@ -16,6 +16,7 @@ import threading
 import numpy as np
 import collections
 from chiron.chiron_input import read_signal, read_label, read_raw
+from chiron.utils.easy_assembler import simple_assembly
 from nanotensor.trim_signal import SignalLabel
 from nanotensor.utils import debug
 import abc
@@ -34,7 +35,7 @@ class CreateDataset(object):
 
     def __init__(self, mode=0, x_shape=list(), y_shape=list(), sequence_shape=list(), batch_size=10,
                  seq_len=10, len_y=0, len_x=0, n_epochs=5, verbose=False,
-                 shuffle_buffer_size=10000, prefetch_buffer_size=100):
+                 shuffle_buffer_size=10000, prefetch_buffer_size=100, fasta_output_dir="path"):
         """
         :param x_shape: input shape in form of list
         :param y_shape: label shape in form of list
@@ -81,6 +82,7 @@ class CreateDataset(object):
         self.prefetch_buffer_size = prefetch_buffer_size
         self.mode = mode
         self.file_path = "path"
+        self.fasta_output_dir = fasta_output_dir
 
         # log information regarding data
         log.info("Shape of input vector = {}".format(self.x_shape))
@@ -200,7 +202,7 @@ class CreateDataset(object):
         pass
 
     @abc.abstractmethod
-    def process_output(self, graph_output):
+    def process_output(self, graph_output, input_path):
         pass
 
     @abc.abstractmethod
@@ -212,7 +214,8 @@ class MotifSequence(CreateDataset):
     """Subclass of CreateDataset for dealing with data from signal and label data"""
 
     def __init__(self, file_list, mode=0, batch_size=10, verbose=True, seq_len=100,
-                 n_epochs=5, shuffle_buffer_size=10000, prefetch_buffer_size=100, blank=True):
+                 n_epochs=5, shuffle_buffer_size=10000, prefetch_buffer_size=100, blank=True,
+                 fasta_output_dir="path"):
 
         """
 
@@ -237,7 +240,8 @@ class MotifSequence(CreateDataset):
                                             batch_size=batch_size, seq_len=seq_len, len_y=self.len_y, len_x=self.len_x,
                                             n_epochs=n_epochs, verbose=verbose,
                                             shuffle_buffer_size=shuffle_buffer_size,
-                                            prefetch_buffer_size=prefetch_buffer_size)
+                                            prefetch_buffer_size=prefetch_buffer_size,
+                                            fasta_output_dir=fasta_output_dir)
 
     def create_batches(self):
         """Create dataset batches for sequence and motifs data"""
@@ -296,11 +300,18 @@ class MotifSequence(CreateDataset):
         return self.training_labels(input=np.asarray(event), seq_len=np.asarray(event_length),
                                     label=padded_labels)
 
-    def process_output(self, graph_output):
+    def process_output(self, graph_output, input_path):
         """Process output from prediciton function"""
         # print(graph_output)
+        name = os.path.splitext(os.path.basename(input_path))[0]
+        fasta_out_path = os.path.join(self.fasta_output_dir, name+".fasta")
         bpreads = [SignalLabel.index2base(read) for read in graph_output]
-        print(bpreads)
+        concensus = simple_assembly(bpreads)
+        c_bpread = SignalLabel.index2base(np.argmax(concensus, axis=0))
+        with open(fasta_out_path, 'w+') as fasta_f:
+            fasta_f.write(">{}\n{}\n".format(name, c_bpread))
+
+        print(c_bpread)
 
     def load_data_inference(self):
         """Load data in using inference functions"""
@@ -319,7 +330,8 @@ class FullSignalSequence(CreateDataset):
     """Subclass of CreateDataset for dealing with data from signal and label data"""
 
     def __init__(self, file_list, mode=0, batch_size=10, verbose=True, seq_len=100,
-                 n_epochs=5, shuffle_buffer_size=10000, prefetch_buffer_size=100, step=300, start_index=0):
+                 n_epochs=5, shuffle_buffer_size=10000, prefetch_buffer_size=100, step=300, start_index=0,
+                 fasta_output_dir="path"):
         """
 
         :param file_list: list of signal and label files within a single directory
@@ -343,7 +355,8 @@ class FullSignalSequence(CreateDataset):
                                                  len_x=self.len_x,
                                                  n_epochs=n_epochs, verbose=verbose,
                                                  shuffle_buffer_size=shuffle_buffer_size,
-                                                 prefetch_buffer_size=prefetch_buffer_size)
+                                                 prefetch_buffer_size=prefetch_buffer_size,
+                                                 fasta_output_dir=fasta_output_dir)
 
     def create_batches(self, inference=False):
         """Create dataset batches for sequence data"""
@@ -399,11 +412,18 @@ class FullSignalSequence(CreateDataset):
         return self.training_labels(input=np.asarray(event), seq_len=np.asarray(event_length),
                                     label=padded_labels)
 
-    def process_output(self, graph_output):
+    def process_output(self, graph_output, input_path):
         """Process output from prediciton function"""
         # print(graph_output)
+        name = os.path.splitext(os.path.basename(input_path))[0]
+        fasta_out_path = os.path.join(self.fasta_output_dir, name+".fasta")
         bpreads = [SignalLabel.index2base(read) for read in graph_output]
-        print(bpreads)
+        concensus = simple_assembly(bpreads)
+        c_bpread = SignalLabel.index2base(np.argmax(concensus, axis=0))
+        with open(fasta_out_path, 'w+') as fasta_f:
+            fasta_f.write(">{}\n{}\n".format(name, c_bpread))
+
+        print(c_bpread)
 
     def load_data_inference(self):
         """Load data in using inference functions"""
@@ -422,7 +442,7 @@ class NumpyEventData(CreateDataset):
     """Subclass of CreateDataset for dealing with data from signal and label data"""
 
     def __init__(self, file_list, mode=0, batch_size=10, verbose=True, seq_len=100,
-                 n_epochs=5, shuffle_buffer_size=10000, prefetch_buffer_size=100):
+                 n_epochs=5, shuffle_buffer_size=10000, prefetch_buffer_size=100, fasta_output_dir="path"):
         """
 
         :param file_list: list of signal and label files within a single directory
@@ -456,7 +476,8 @@ class NumpyEventData(CreateDataset):
                                              len_x=self.len_x,
                                              n_epochs=n_epochs, verbose=verbose,
                                              shuffle_buffer_size=shuffle_buffer_size,
-                                             prefetch_buffer_size=prefetch_buffer_size)
+                                             prefetch_buffer_size=prefetch_buffer_size,
+                                             fasta_output_dir=fasta_output_dir)
 
     def load_data(self):
         """Load data from numpy files"""
@@ -487,7 +508,7 @@ class NumpyEventData(CreateDataset):
         seq_len = np.asarray(sequence_length)
         return self.training_labels(input=features, seq_len=seq_len, label=labels)
 
-    def process_output(self, graph_output):
+    def process_output(self, graph_output, input_path):
         for x in graph_output:
             print(x)
 

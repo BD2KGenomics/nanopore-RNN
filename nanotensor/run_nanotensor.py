@@ -118,7 +118,7 @@ class CommandLine(object):
         return args
 
 
-class TrainModel(object):
+class RunTensorflow(object):
     """Class for running a tensorflow model."""
 
     def __init__(self, args):
@@ -191,7 +191,6 @@ class TrainModel(object):
                         # create graph
                         graph_type = self.create_model(validation=(count == 0))
                         log.info("Created {} graph on gpu:{}".format(graph_type, i))
-                grads = average_gradients(self.tower_grads)
                 with tf.device('/cpu:0'):
                     # Create validation graph on cpu
                     self.validation_model = self.Graph(network=self.args.network, dataset=self.validation,
@@ -203,7 +202,9 @@ class TrainModel(object):
 
             if self.args.training:
                 # update graph with new weights after backprop
-                if not self.gpu_indexes:
+                if self.gpu_indexes:
+                    grads = average_gradients(self.tower_grads)
+                else:
                     grads = self.tower_grads[0]
                 with tf.variable_scope("apply_gradients", reuse=tf.AUTO_REUSE):
                     self.train_op = self.opt.apply_gradients(grads, global_step=self.global_step)
@@ -340,10 +341,9 @@ class TrainModel(object):
                         while True:
                             evaluate_pred = sess.run([self.inference_opts])
                             prediction_list.extend(np.asarray(np.vstack(evaluate_pred[0])))
-                            print("prediction_list", np.asarray(prediction_list).shape)
                     except tf.errors.OutOfRangeError:
                         print("New File")
-                        self.inference.process_output(np.asarray(prediction_list))
+                        self.inference.process_output(np.asarray(prediction_list), file_path)
                         continue
             print("Finished Inference")
 
@@ -522,19 +522,19 @@ def main():
         debug(verbose=args.verbose)
         # Parameters
         if args.train:
-            train = TrainModel(args)
+            train = RunTensorflow(args)
             train.train_model(intra_op_parallelism_threads=8, log_device_placement=False, allow_soft_placement=True)
             print("\n#  nanotensor - finished training \n", file=sys.stderr)
             print("\n#  nanotensor - finished training \n", file=sys.stderr)
 
         elif args.inference:
-            infer = TrainModel(args)
+            infer = RunTensorflow(args)
             infer.run_model()
             print("\n#  nanotensor - finished inference \n", file=sys.stderr)
             print("\n#  nanotensor - finished inference \n", file=sys.stderr)
 
         elif args.test:
-            test = TrainModel(args)
+            test = RunTensorflow(args)
             test.test_model(config)
             print("\n#  nanotensor - finished testing accuracy \n", file=sys.stderr)
             print("\n#  nanotensor - finished testing accuracy \n", file=sys.stderr)
