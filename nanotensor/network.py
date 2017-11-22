@@ -460,7 +460,7 @@ class CtcLoss(BuildGraph):
         """Compare predicions with label to calculate number correct or edit distance"""
         logits = tf.transpose(self.output_layer, perm=[1, 0, 2])
         self.sparse_predict = tf.nn.ctc_greedy_decoder(logits, self.sequence_length, merge_repeated=True)[0]
-        predict = tf.sparse_tensor_to_dense(self.sparse_predict[0])
+        predict = tf.sparse_tensor_to_dense(self.sparse_predict[0], default_value=-1)
         return predict
 
     def accuracy_function(self):

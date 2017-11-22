@@ -154,7 +154,7 @@ class SignalLabel:
         base = ['A', 'C', 'G', 'T', 'E']
         if blank:
             base = ['', 'C', 'E']
-        bpread = [base[x] for x in read]
+        bpread = [base[x] if x != -1 else '' for x in read]
         bpread = ''.join(x for x in bpread)
         return bpread
 
@@ -279,7 +279,6 @@ def alignment_stats(alignment):
     return total_counts, base_counts
 
 
-#
 def create_summary_stats(total_counts):
     """Report summary alignment stats from total counts created by alignment_stats"""
     print("Reference sequence length: {}".format(total_counts["reference"]))

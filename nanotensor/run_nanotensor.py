@@ -156,7 +156,7 @@ class RunTensorflow(object):
             self.testing_opts = []
 
         elif self.args.inference:
-            self.inference_files = list_dir(self.args.CreateDataset.inference_dir)
+            self.inference_files = list_dir(self.args.CreateDataset.inference_dir, ext=self.args.file_ext)
             self.inference = "CreateDataset"
             self.inference_model = "BuildGraph"
             self.inference_opts = []
@@ -332,19 +332,19 @@ class RunTensorflow(object):
             saver = tf.train.Saver(max_to_keep=4, keep_checkpoint_every_n_hours=2)
             saver.restore(sess, self.model_path)
             for file_path in self.inference_files:
-                if file_path.endswith(".signal"):
-                    self.inference.file_path = file_path
-                    sess.run(self.inference.iterator.initializer)
-                    prediction_list = []
-                    try:
-                        while True:
-                            evaluate_pred = sess.run([self.inference_opts])
-                            prediction_list.extend(np.asarray(np.vstack(evaluate_pred[0])))
-                    except tf.errors.OutOfRangeError:
-                        print("New File")
-                        self.inference.process_output(np.asarray(prediction_list), file_path)
-                        continue
-            print("Finished Inference")
+                self.inference.file_path = file_path
+                sess.run(self.inference.iterator.initializer)
+                prediction_list = []
+                try:
+                    while True:
+                        evaluate_pred = sess.run([self.inference_opts])
+                        prediction_list.extend((evaluate_pred[0]))
+                except tf.errors.OutOfRangeError:
+                    self.inference.process_output(prediction_list, file_path)
+                    log.info(file_path)
+                    continue
+            print("Finished Inference", file=sys.stderr)
+        sess.close()
 
     def test_model(self, intra_op_parallelism_threads=8, log_device_placement=False, allow_soft_placement=True):
         """Get testing accuracy and save model along with configuration file on s3"""

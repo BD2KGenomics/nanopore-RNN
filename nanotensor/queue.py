@@ -185,15 +185,16 @@ class CreateDataset(object):
         return good, bad
 
     @staticmethod
-    def padding(x, L, padding_list=None):
+    def padding(x, L, padding_list=None, pad=0):
         """Padding the vector x to length L"""
         len_x = len(x)
         assert len_x <= L, "Length of vector x is larger than the padding length"
+        assert type(pad) is int, "Pad should be an integer"
         zero_n = L - len_x
         if padding_list is None:
-            return x + [0] * zero_n
+            return x + [pad] * zero_n
         elif len(padding_list) < zero_n:
-            return x + padding_list + [0] * (zero_n - len(padding_list))
+            return x + padding_list + [pad] * (zero_n - len(padding_list))
         else:
             return x + padding_list[0:zero_n]
 
@@ -305,13 +306,13 @@ class MotifSequence(CreateDataset):
         # print(graph_output)
         name = os.path.splitext(os.path.basename(input_path))[0]
         fasta_out_path = os.path.join(self.fasta_output_dir, name+".fasta")
-        bpreads = [SignalLabel.index2base(read) for read in graph_output]
-        concensus = simple_assembly(bpreads)
+        all_reads = []
+        for batch in graph_output:
+            all_reads.extend([SignalLabel.index2base(read) for read in batch])
+        concensus = simple_assembly(all_reads)
         c_bpread = SignalLabel.index2base(np.argmax(concensus, axis=0))
         with open(fasta_out_path, 'w+') as fasta_f:
             fasta_f.write(">{}\n{}\n".format(name, c_bpread))
-
-        print(c_bpread)
 
     def load_data_inference(self):
         """Load data in using inference functions"""
@@ -331,7 +332,7 @@ class FullSignalSequence(CreateDataset):
 
     def __init__(self, file_list, mode=0, batch_size=10, verbose=True, seq_len=100,
                  n_epochs=5, shuffle_buffer_size=10000, prefetch_buffer_size=100, step=300, start_index=0,
-                 fasta_output_dir="path"):
+                 fasta_output_dir="path", alphabet=5):
         """
 
         :param file_list: list of signal and label files within a single directory
@@ -344,7 +345,7 @@ class FullSignalSequence(CreateDataset):
         :param prefetch_buffer_size: size of buffer for prefetch option
         """
         self.file_list = file_list
-        self.len_y = 5
+        self.len_y = alphabet
         self.len_x = 1
         self.kmer = 1
         self.step = step
@@ -417,13 +418,13 @@ class FullSignalSequence(CreateDataset):
         # print(graph_output)
         name = os.path.splitext(os.path.basename(input_path))[0]
         fasta_out_path = os.path.join(self.fasta_output_dir, name+".fasta")
-        bpreads = [SignalLabel.index2base(read) for read in graph_output]
-        concensus = simple_assembly(bpreads)
+        all_reads = []
+        for batch in graph_output:
+            all_reads.extend([SignalLabel.index2base(read) for read in batch])
+        concensus = simple_assembly(all_reads)
         c_bpread = SignalLabel.index2base(np.argmax(concensus, axis=0))
         with open(fasta_out_path, 'w+') as fasta_f:
             fasta_f.write(">{}\n{}\n".format(name, c_bpread))
-
-        print(c_bpread)
 
     def load_data_inference(self):
         """Load data in using inference functions"""
