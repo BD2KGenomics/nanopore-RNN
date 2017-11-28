@@ -22,7 +22,8 @@ from collections import defaultdict
 
 raw_labels = collections.namedtuple('raw_labels', ['start', 'length', 'base'])
 
-ALPHABET = ['A', 'C', 'G', 'T', 'E']
+ALPHABET = ['A', 'C', 'G', 'T', 'E', 'N']
+
 
 def readFasta(fasta):
     '''
@@ -62,7 +63,6 @@ def readFasta(fasta):
     yield header, sequence
 
 
-
 def index2base(read):
     bpread = [ALPHABET[x] for x in read]
     bpread = ''.join(x for x in bpread)
@@ -84,7 +84,6 @@ class SignalLabel:
         """Initiate signal and label files"""
         self.signal_file = signal_file
         self.label_file = label_file
-        assert os.path.isfile(self.signal_file), "{} does not exist".format(self.signal_file)
         self.blank = None
 
     def trim_complement_signal(self, outdir):

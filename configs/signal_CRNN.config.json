@@ -4,13 +4,16 @@
     "training_dir": "/Users/andrewbailey/CLionProjects/nanopore-RNN/chiron/data/raw",
     "validation_dir": "/Users/andrewbailey/CLionProjects/nanopore-RNN/chiron/data/raw",
     "test_dir": "/Users/andrewbailey/CLionProjects/nanopore-RNN/chiron/data/raw",
-    "inference_dir": "/Users/andrewbailey/CLionProjects/nanopore-RNN/chiron/data/raw",
+    "inference_dir": "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/signal_rna_data/10_reads",
     "dataset_args": {
       "batch_size": 20,
       "n_epochs": 5,
       "seq_len": 100,
       "shuffle_buffer_size": 10000,
-      "prefetch_buffer_size": 4
+      "prefetch_buffer_size": 4,
+      "fasta_output_dir": "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/test_inference_output",
+      "alphabet": 5,
+      "max_event_len": 50
     }
   },
   "BuildGraph": {
@@ -46,13 +49,13 @@
       "size": 64
     }
   ],
-  "train": false,
+  "train": true,
   "inference": false,
-  "test": true,
+  "test": false,
   "load_trained_model": true,
   "use_checkpoint": true,
-  "trained_model": "/Users/andrewbailey/CLionProjects/nanopore-RNN/logs/11Nov-18-15h-26m/",
-  "trained_model_path": "/Users/andrewbailey/CLionProjects/nanopore-RNN/logs/11Nov-18-15h-26m/small_blank_test",
+  "trained_model": "/Users/andrewbailey/CLionProjects/nanopore-RNN/tensorboard/11Nov-19-01h-33m",
+  "trained_model_path": "/Users/andrewbailey/CLionProjects/nanopore-RNN/tensorboard/11Nov-19-01h-33m/small_test",
   "trace_name": "timeline.json",
   "save_trace": false,
   "profile": false,
@@ -60,11 +63,12 @@
   "s3bucket": "neuralnet-accuracy",
   "verbose": true,
   "output_dir": "/Users/andrewbailey/CLionProjects/nanopore-RNN/logs",
-  "model_name": "small_blank_test",
+  "model_name": "small_test",
   "num_gpu": 2,
   "num_threads": 2,
   "training_iters": 50,
   "save_model": 1,
   "record_step": 10,
-  "learning_rate": 0.001
+  "learning_rate": 0.001,
+  "file_ext": "signal"
 }

@@ -35,7 +35,7 @@ class CreateDataset(object):
 
     def __init__(self, mode=0, x_shape=list(), y_shape=list(), sequence_shape=list(), batch_size=10,
                  seq_len=10, len_y=0, len_x=0, n_epochs=5, verbose=False,
-                 shuffle_buffer_size=10000, prefetch_buffer_size=100, fasta_output_dir="path"):
+                 shuffle_buffer_size=10000, prefetch_buffer_size=100, fasta_output_dir="path", file_list="list"):
         """
         :param x_shape: input shape in form of list
         :param y_shape: label shape in form of list
@@ -81,7 +81,8 @@ class CreateDataset(object):
         self.shuffle_buffer_size = shuffle_buffer_size
         self.prefetch_buffer_size = prefetch_buffer_size
         self.mode = mode
-        self.file_path = "path"
+        self.file_list = file_list
+        self.file_path = self.file_list[0]
         self.fasta_output_dir = fasta_output_dir
 
         # log information regarding data
@@ -106,41 +107,12 @@ class CreateDataset(object):
         self.datasetSeq = tf.data.Dataset.from_tensor_slices(self.place_Seq)
         self.datasetY = tf.data.Dataset.from_tensor_slices(self.place_Y)
 
-        # optional batching, dataset and iteration creation
-        self.batchX, self.batchSeq, self.batchY = self.create_batches()
         # log.info("Shape of input vector = {}".format(self.x_shape))
         self.dataset = self.create_dataset()
         self.iterator = self.create_iterator()
         if self.mode == 0 or self.mode == 1:
             self.data = self.load_data()
         self.test()
-
-    def create_batches(self):
-        """Create batch data for self.datasetX, self.datasetSeq, self.datasetY"""
-        X = self.datasetX.batch(self.batch_size)
-        seq_length = self.datasetSeq.batch(self.batch_size)
-        y = self.datasetY.batch(self.batch_size)
-        return X, seq_length, y
-
-    def create_dataset(self):
-        """Creates dataset structure"""
-        # training
-        if self.mode == 0:
-            dataset = tf.data.Dataset.zip((self.batchX, self.batchSeq, self.batchY))
-            dataset = dataset.repeat(self.n_epochs)
-            dataset = dataset.shuffle(buffer_size=self.shuffle_buffer_size)
-        # testing
-        elif self.mode == 1:
-            dataset = tf.data.Dataset.zip((self.batchX, self.batchSeq, self.batchY))
-        # inference
-        elif self.mode == 2:
-            # inference needs to be done per file
-            dataset = tf.data.Dataset.from_generator(
-                self.load_data_inference, (tf.float32, tf.int32), (tf.TensorShape([self.seq_len]),
-                                                                   tf.TensorShape(None)))
-            dataset = dataset.batch(self.batch_size)
-        dataset = dataset.prefetch(buffer_size=self.prefetch_buffer_size)
-        return dataset
 
     def create_iterator(self):
         """Creates boilerplate iterator depending on dataset"""
@@ -156,16 +128,13 @@ class CreateDataset(object):
                                     self.place_Seq: self.data.seq_len,
                                     self.place_Y: self.data.label})
                 test1, test2, test3 = sess.run([in_1, seq, out])
-                log.info("Dataset Creation Complete")
-        elif self.mode == 1:
+        # TODO make this work for inference
+        elif self.mode == 2:
             in_1, seq = self.iterator.get_next()
             with tf.Session() as sess:
-                sess.run(self.iterator.initializer,
-                         feed_dict={self.place_X: self.data.input,
-                                    self.place_Seq: self.data.seq_len})
+                sess.run(self.iterator.initializer)
                 test1, test2 = sess.run([in_1, seq])
-                log.info("Dataset Creation Complete")
-
+        log.info("Dataset Creation Complete")
         return True
 
     @staticmethod
@@ -210,6 +179,10 @@ class CreateDataset(object):
     def load_data_inference(self):
         pass
 
+    @abc.abstractmethod
+    def create_dataset(self):
+        pass
+
 
 class MotifSequence(CreateDataset):
     """Subclass of CreateDataset for dealing with data from signal and label data"""
@@ -242,9 +215,10 @@ class MotifSequence(CreateDataset):
                                             n_epochs=n_epochs, verbose=verbose,
                                             shuffle_buffer_size=shuffle_buffer_size,
                                             prefetch_buffer_size=prefetch_buffer_size,
-                                            fasta_output_dir=fasta_output_dir)
+                                            fasta_output_dir=fasta_output_dir,
+                                            file_list=file_list)
 
-    def create_batches(self):
+    def create_dataset(self):
         """Create dataset batches for sequence and motifs data"""
 
         def remove_padding(y):
@@ -332,7 +306,7 @@ class FullSignalSequence(CreateDataset):
 
     def __init__(self, file_list, mode=0, batch_size=10, verbose=True, seq_len=100,
                  n_epochs=5, shuffle_buffer_size=10000, prefetch_buffer_size=100, step=300, start_index=0,
-                 fasta_output_dir="path", alphabet=5):
+                 fasta_output_dir="path", alphabet=5, max_event_len=50):
         """
 
         :param file_list: list of signal and label files within a single directory
@@ -350,6 +324,7 @@ class FullSignalSequence(CreateDataset):
         self.kmer = 1
         self.step = step
         self.start_index = start_index
+        self.max_event_len = max_event_len
         super(FullSignalSequence, self).__init__(mode=mode, x_shape=[None, seq_len],
                                                  y_shape=[None, None], sequence_shape=[None],
                                                  batch_size=batch_size, seq_len=seq_len, len_y=self.len_y,
@@ -357,24 +332,51 @@ class FullSignalSequence(CreateDataset):
                                                  n_epochs=n_epochs, verbose=verbose,
                                                  shuffle_buffer_size=shuffle_buffer_size,
                                                  prefetch_buffer_size=prefetch_buffer_size,
-                                                 fasta_output_dir=fasta_output_dir)
+                                                 fasta_output_dir=fasta_output_dir,
+                                                 file_list=file_list)
 
-    def create_batches(self, inference=False):
+    def create_dataset(self):
         """Create dataset batches for sequence data"""
 
-        def remove_padding(y):
-            """Remove padding from Y labels"""
+        def remove_padding(x, seq, y):
+            """Remove padding from Y labels and split into new dataset"""
             return tf.boolean_mask(y, tf.not_equal(y, -1))
 
-        dataset = self.datasetY.map(remove_padding, num_parallel_calls=10)
-        batch_y = dataset.apply(tf.contrib.data.dense_to_sparse_batch(batch_size=self.batch_size,
-                                                                      row_shape=[self.seq_len]))
-        batch_x = self.datasetX.batch(self.batch_size)
-        batch_seq_length = self.datasetSeq.batch(self.batch_size)
-        if inference:
-            self.datasetX.batch(self.batch_size)
+        def split_x(x, seq, y):
+            """Split x and seq into a separate dataset"""
+            return x
 
-        return batch_x, batch_seq_length, batch_y
+        def split_seq(x, seq, y):
+            """Split x and seq into a separate dataset"""
+            return seq
+
+        dataset = tf.data.Dataset.zip((self.datasetX, self.datasetSeq, self.datasetY))
+        dataset1 = dataset.shuffle(buffer_size=self.shuffle_buffer_size)
+        # create Y dataset
+        datasety = dataset1.map(remove_padding, num_parallel_calls=10)
+        # create x and seq dataset
+        dataset_x = dataset1.map(split_x, num_parallel_calls=10)
+        dataset_seq = dataset1.map(split_seq, num_parallel_calls=10)
+        # create x and seq batches
+        batch_x = dataset_x.batch(self.batch_size)
+        batch_seq = dataset_seq.batch(self.batch_size)
+        # create sparse batch for y
+        batch_y = datasety.apply(tf.contrib.data.dense_to_sparse_batch(batch_size=self.batch_size,
+                                                                       row_shape=[self.seq_len]))
+        dataset = tf.data.Dataset.zip((batch_x, batch_seq, batch_y))
+        # training
+        if self.mode == 0:
+            dataset = dataset.repeat(self.n_epochs)
+        # inference
+        elif self.mode == 2:
+            # inference needs to be done per file
+            dataset = tf.data.Dataset.from_generator(
+                self.load_data_inference, (tf.float32, tf.int32), (tf.TensorShape([self.seq_len]),
+                                                                   tf.TensorShape(None)))
+            dataset = dataset.batch(self.batch_size)
+        # prefetch data
+        dataset = dataset.prefetch(buffer_size=self.prefetch_buffer_size)
+        return dataset
 
     def load_data(self):
         """Read in data from signal files and create specific motif comparisons"""
@@ -393,14 +395,16 @@ class FullSignalSequence(CreateDataset):
                     f_label = read_label(label_name, skip_start=10, window_n=(self.kmer - 1) / 2,
                                          alphabet=self.len_y)
                     tmp_event, tmp_event_length, tmp_label, tmp_label_length = read_raw(f_signal, f_label,
-                                                                                        self.seq_len)
+                                                                                        self.seq_len,
+                                                                                        max_event_length=
+                                                                                        self.max_event_len)
                     event += tmp_event
                     event_length += tmp_event_length
                     label += tmp_label
                     label_length += tmp_label_length
                     count = len(event)
                     if file_count % 10 == 0:
-                        sys.stdout.write("%d lines read.   \n" % (count))
+                        sys.stdout.write("%d files read.   \n" % (count))
                     file_count += 1
                 except ValueError:
                     print("Error Reading Data from file {}".format(name))
@@ -478,7 +482,8 @@ class NumpyEventData(CreateDataset):
                                              n_epochs=n_epochs, verbose=verbose,
                                              shuffle_buffer_size=shuffle_buffer_size,
                                              prefetch_buffer_size=prefetch_buffer_size,
-                                             fasta_output_dir=fasta_output_dir)
+                                             fasta_output_dir=fasta_output_dir,
+                                             file_list=file_list)
 
     def load_data(self):
         """Load data from numpy files"""
@@ -512,6 +517,29 @@ class NumpyEventData(CreateDataset):
     def process_output(self, graph_output, input_path):
         for x in graph_output:
             print(x)
+
+    def create_dataset(self):
+        """Creates dataset structure"""
+        # training
+        if self.mode == 0:
+            dataset = tf.data.Dataset.zip((self.datasetX, self.datasetSeq, self.datasetY))
+            dataset = dataset.shuffle(buffer_size=self.shuffle_buffer_size)
+            dataset = dataset.batch(self.batch_size)
+            dataset = dataset.repeat(self.n_epochs)
+        # testing
+        elif self.mode == 1:
+            dataset = tf.data.Dataset.zip((self.datasetX, self.datasetSeq, self.datasetY))
+            dataset = dataset.batch(self.batch_size)
+        # inference
+        elif self.mode == 2:
+            # inference needs to be done per file
+            dataset = tf.data.Dataset.from_generator(
+                self.load_data_inference, (tf.float32, tf.int32), (tf.TensorShape([self.seq_len]),
+                                                                   tf.TensorShape(None)))
+            dataset = dataset.batch(self.batch_size)
+        dataset = dataset.prefetch(buffer_size=self.prefetch_buffer_size)
+        return dataset
+
 
 
 if __name__ == "__main__":

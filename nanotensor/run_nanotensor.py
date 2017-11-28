@@ -8,7 +8,6 @@ then use's tensorflow to train a mulit layer BLSTM-RNN"""
 # Author: Andrew Bailey
 # History: 05/28/17 Created
 ########################################################################
-
 from __future__ import print_function
 import logging as log
 import sys
@@ -29,6 +28,8 @@ from nanotensor.queue import FullSignalSequence, MotifSequence, NumpyEventData
 from nanotensor.network import CtcLoss, CrossEntropy
 import tensorflow as tf
 from tensorflow.python.client import timeline
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 
 class CommandLine(object):
@@ -160,6 +161,7 @@ class RunTensorflow(object):
             self.inference = "CreateDataset"
             self.inference_model = "BuildGraph"
             self.inference_opts = []
+
         # load data
         log.info("Data Loading Started")
         speed = time_it(self.load_data)
@@ -339,7 +341,7 @@ class RunTensorflow(object):
                     while True:
                         evaluate_pred = sess.run([self.inference_opts])
                         prediction_list.extend((evaluate_pred[0]))
-                except tf.errors.OutOfRangeError:
+                except tf.errors.OutOfRangeError or StopIteration:  # and tf.errors.StopIteration:
                     self.inference.process_output(prediction_list, file_path)
                     log.info(file_path)
                     continue
