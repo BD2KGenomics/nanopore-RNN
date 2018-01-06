@@ -39,9 +39,8 @@ def main():
                           "codecov>=2.0.9",
                           "coverage>=4.4.1",
                           "pytest>=3.0.7"],
-        zip_safe=False
+        zip_safe=True
     )
-
 
     stop = timer()
     print("Running Time = {} seconds".format(stop-start), file=sys.stderr)

@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 """
-    Place unit tests for network.py
-    """
+    Place unit tests for fast5.py
+"""
 ########################################################################
-# File: data_preparation_test.py
-#  executable: data_preparation_test.py
-# Purpose: data_preparation test functions
+# File: fast5_test.py
+#  executable: fast5_test.py
+# Purpose: fast5 test functions
 #
-# Author: Rojin Safavi
-# History: 08/01/2017 Created
+# Author: Andrew Bailey
+# History: 12/20/2017 Created
 ########################################################################
 from __future__ import print_function
 import unittest
@@ -27,7 +27,8 @@ class Fast5Test(unittest.TestCase):
         super(Fast5Test, cls).setUpClass()
         cls.HOME = '/'.join(os.path.abspath(__file__).split("/")[:-3])
         fast5_file = os.path.join(cls.HOME, "test_files/minion-reads/canonical/miten_PC_20160820_FNFAD20259_MN17223_sequencing_run_AMS_158_R9_WGA_Ecoli_08_20_16_43623_ch100_read104_strand.fast5")
-        cls.fast5handle = Fast5(fast5_file)
+        fast5handle = Fast5(fast5_file, 'r+')
+        cls.fast5handle = fast5handle.create_copy("test.fast5")
 
     def test_get_fastq(self):
         """Test get_fastq method of Fast5 class"""
@@ -48,6 +49,29 @@ class Fast5Test(unittest.TestCase):
     def test_get_corrected_events(self):
         """Test get_corrected_events from Fast5 class"""
         self.fast5handle.get_corrected_events()
+
+    def test_delete(self):
+        """Test delete fast5 file"""
+        channel_id = self.fast5handle["UniqueGlobalKey/channel_id"].attrs
+        self.fast5handle.delete("UniqueGlobalKey/channel_id")
+        self.fast5handle.delete("UniqueGlobalKey/fakedata", ignore=True)
+        with self.assertRaises(KeyError):
+            error = self.fast5handle["UniqueGlobalKey/channel_id"]
+            self.fast5handle.delete("UniqueGlobalKey/channel_id")
+            self.fast5handle.delete("UniqueGlobalKey/fakedata")
+        self.fast5handle._add_attrs(channel_id, "UniqueGlobalKey/channel_id", convert=None)
+
+    def test_test_event_table(self):
+        """Test the method test_event_table"""
+        pass
+
+
+
+    @classmethod
+    def tearDownClass(cls):
+        """Remove test fast5 file"""
+        os.remove("test.fast5")
+
 
 if __name__ == '__main__':
     unittest.main()

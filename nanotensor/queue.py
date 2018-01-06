@@ -21,11 +21,6 @@ from nanotensor.trim_signal import SignalLabel
 from nanotensor.utils import debug
 import abc
 import logging as log
-
-try:
-    import Queue as queue
-except ImportError:
-    import queue
 from nanotensor.utils import list_dir
 import tensorflow as tf
 
@@ -35,7 +30,7 @@ class CreateDataset(object):
 
     def __init__(self, mode=0, x_shape=list(), y_shape=list(), sequence_shape=list(), batch_size=10,
                  seq_len=10, len_y=0, len_x=0, n_epochs=5, verbose=False,
-                 shuffle_buffer_size=10000, prefetch_buffer_size=100, fasta_output_dir="path", file_list="list"):
+                 shuffle_buffer_size=10000, prefetch_buffer_size=100, inference_output_dir="path", file_list="list"):
         """
         :param x_shape: input shape in form of list
         :param y_shape: label shape in form of list
@@ -83,8 +78,7 @@ class CreateDataset(object):
         self.mode = mode
         self.file_list = file_list
         self.file_path = self.file_list[0]
-        self.fasta_output_dir = fasta_output_dir
-
+        self.inference_output_dir = inference_output_dir
         # log information regarding data
         log.info("Shape of input vector = {}".format(self.x_shape))
         log.info("Shape of output vector = {}".format(self.y_shape))
@@ -98,9 +92,7 @@ class CreateDataset(object):
         self.inference_labels = collections.namedtuple('inference_data', ['input', 'seq_len'])
 
         # placeholder creation
-        self.place_X = tf.placeholder(tf.float32, shape=self.x_shape, name='Input')
-        self.place_Seq = tf.placeholder(tf.int32, shape=self.sequence_shape, name='Sequence_Length')
-        self.place_Y = tf.placeholder(tf.int32, shape=self.y_shape, name='Label')
+        self.place_X, self.place_Seq, self.place_Y = self.create_placeholders()
 
         # dataset creation
         self.datasetX = tf.data.Dataset.from_tensor_slices(self.place_X)
@@ -113,6 +105,13 @@ class CreateDataset(object):
         if self.mode == 0 or self.mode == 1:
             self.data = self.load_data()
         self.test()
+
+    def create_placeholders(self):
+        """Create x, seq_len and y placehlders"""
+        place_X = tf.placeholder(tf.float32, shape=self.x_shape, name='Input')
+        place_Seq = tf.placeholder(tf.int32, shape=self.sequence_shape, name='Sequence_Length')
+        place_Y = tf.placeholder(tf.int32, shape=self.y_shape, name='Label')
+        return place_X, place_Seq, place_Y
 
     def create_iterator(self):
         """Creates boilerplate iterator depending on dataset"""
@@ -133,7 +132,9 @@ class CreateDataset(object):
             in_1, seq = self.iterator.get_next()
             with tf.Session() as sess:
                 sess.run(self.iterator.initializer)
-                test1, test2 = sess.run([in_1, seq])
+                test1= sess.run([in_1])
+                test2 = sess.run([seq])
+
         log.info("Dataset Creation Complete")
         return True
 
@@ -189,7 +190,7 @@ class MotifSequence(CreateDataset):
 
     def __init__(self, file_list, mode=0, batch_size=10, verbose=True, seq_len=100,
                  n_epochs=5, shuffle_buffer_size=10000, prefetch_buffer_size=100, blank=True,
-                 fasta_output_dir="path"):
+                 inference_output_dir="path"):
 
         """
 
@@ -215,7 +216,7 @@ class MotifSequence(CreateDataset):
                                             n_epochs=n_epochs, verbose=verbose,
                                             shuffle_buffer_size=shuffle_buffer_size,
                                             prefetch_buffer_size=prefetch_buffer_size,
-                                            fasta_output_dir=fasta_output_dir,
+                                            inference_output_dir=inference_output_dir,
                                             file_list=file_list)
 
     def create_dataset(self):
@@ -279,7 +280,7 @@ class MotifSequence(CreateDataset):
         """Process output from prediciton function"""
         # print(graph_output)
         name = os.path.splitext(os.path.basename(input_path))[0]
-        fasta_out_path = os.path.join(self.fasta_output_dir, name+".fasta")
+        fasta_out_path = os.path.join(self.inference_output_dir, name+".fasta")
         all_reads = []
         for batch in graph_output:
             all_reads.extend([SignalLabel.index2base(read) for read in batch])
@@ -306,7 +307,7 @@ class FullSignalSequence(CreateDataset):
 
     def __init__(self, file_list, mode=0, batch_size=10, verbose=True, seq_len=100,
                  n_epochs=5, shuffle_buffer_size=10000, prefetch_buffer_size=100, step=300, start_index=0,
-                 fasta_output_dir="path", alphabet=5, max_event_len=50):
+                 inference_output_dir="path", alphabet=5, max_event_len=50):
         """
 
         :param file_list: list of signal and label files within a single directory
@@ -332,7 +333,7 @@ class FullSignalSequence(CreateDataset):
                                                  n_epochs=n_epochs, verbose=verbose,
                                                  shuffle_buffer_size=shuffle_buffer_size,
                                                  prefetch_buffer_size=prefetch_buffer_size,
-                                                 fasta_output_dir=fasta_output_dir,
+                                                 inference_output_dir=inference_output_dir,
                                                  file_list=file_list)
 
     def create_dataset(self):
@@ -421,7 +422,7 @@ class FullSignalSequence(CreateDataset):
         """Process output from prediciton function"""
         # print(graph_output)
         name = os.path.splitext(os.path.basename(input_path))[0]
-        fasta_out_path = os.path.join(self.fasta_output_dir, name+".fasta")
+        fasta_out_path = os.path.join(self.inference_output_dir, name+".fasta")
         all_reads = []
         for batch in graph_output:
             all_reads.extend([SignalLabel.index2base(read) for read in batch])
@@ -430,6 +431,7 @@ class FullSignalSequence(CreateDataset):
         with open(fasta_out_path, 'w+') as fasta_f:
             fasta_f.write(">{}\n{}\n".format(name, c_bpread))
 
+    # TODO make sure that the padding is only happening when needed
     def load_data_inference(self):
         """Load data in using inference functions"""
         f_signal = read_signal(self.file_path, normalize=True)
@@ -440,14 +442,14 @@ class FullSignalSequence(CreateDataset):
             segment_len = len(segment_sig)
             padded_segment_sig = self.padding(segment_sig, self.seq_len)
             yield self.inference_labels(input=np.asarray(padded_segment_sig),
-                                   seq_len=np.asarray(segment_len))
+                                        seq_len=np.asarray(segment_len))
 
 
 class NumpyEventData(CreateDataset):
     """Subclass of CreateDataset for dealing with data from signal and label data"""
 
     def __init__(self, file_list, mode=0, batch_size=10, verbose=True, seq_len=100,
-                 n_epochs=5, shuffle_buffer_size=10000, prefetch_buffer_size=100, fasta_output_dir="path"):
+                 n_epochs=5, shuffle_buffer_size=10000, prefetch_buffer_size=100, inference_output_dir="path"):
         """
 
         :param file_list: list of signal and label files within a single directory
@@ -482,7 +484,7 @@ class NumpyEventData(CreateDataset):
                                              n_epochs=n_epochs, verbose=verbose,
                                              shuffle_buffer_size=shuffle_buffer_size,
                                              prefetch_buffer_size=prefetch_buffer_size,
-                                             fasta_output_dir=fasta_output_dir,
+                                             inference_output_dir=inference_output_dir,
                                              file_list=file_list)
 
     def load_data(self):
@@ -539,7 +541,6 @@ class NumpyEventData(CreateDataset):
             dataset = dataset.batch(self.batch_size)
         dataset = dataset.prefetch(buffer_size=self.prefetch_buffer_size)
         return dataset
-
 
 
 if __name__ == "__main__":

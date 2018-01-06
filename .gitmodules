@@ -10,3 +10,9 @@
 	path = nanonet
 	url = https://github.com/adbailey4/nanonet.git
 	branch = bailey_dev
+[submodule "PyPore"]
+	path = PyPore
+	url = https://github.com/jmschrei/PyPore
+[submodule "python_utils"]
+	path = python_utils
+	url = https://github.com/adbailey4/python_utils

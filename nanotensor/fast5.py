@@ -21,6 +21,8 @@ import h5py
 import numpy as np
 import numpy.lib.recfunctions as nprf
 from copy import deepcopy
+from py3helpers.utils import test_numpy_table
+
 
 def short_names(fname):
     filename_short = os.path.splitext(os.path.basename(fname))[0]
@@ -78,6 +80,7 @@ class Fast5(h5py.File):
 
     __default_corrected_genome__ = '/Analyses/RawGenomeCorrected_000/BaseCalled_template'  # nanoraw
 
+    __default_event_table_fields__ = ('start', 'length', 'mean', 'stdv')
 
     __default_engine_state_path__ = '/EngineStates/'
     __temp_fields__ = ('heatsink', 'asic')
@@ -86,7 +89,7 @@ class Fast5(h5py.File):
         super(Fast5, self).__init__(fname, read)
 
         # Attach channel_meta as attributes, slightly redundant
-        for k, v in self[self.__channel_meta_path__].attrs.iteritems():
+        for k, v in self[self.__channel_meta_path__].attrs.items():
             setattr(self, k, v)
         # Backward compat.
         self.sample_rate = self.sampling_rate
@@ -131,7 +134,7 @@ class Fast5(h5py.File):
         :param location: hdf path
         :param convert: function to apply to all dictionary values
         """
-        self.__add_attrs(self, data, location, convert=None)
+        self.__add_attrs(self, data, location, convert=convert)
 
     @staticmethod
     def __add_attrs(self, data, location, convert=None):
@@ -141,7 +144,7 @@ class Fast5(h5py.File):
         if location not in self:
             self.create_group(location)
         attrs = self[location].attrs
-        for k, v in data.iteritems():
+        for k, v in data.items():
             if convert is not None:
                 attrs[k] = convert(v)
             else:
@@ -192,9 +195,14 @@ class Fast5(h5py.File):
         return dict(self[self.__tracking_id_path__].attrs)
 
     @property
-    def attributes(self):
+    def raw_attributes(self):
         """Attributes for a read, assumes one read in file"""
-        return dict(self.get_read(group = True).attrs)
+        return dict(self.get_read(group=True, raw=True).attrs)
+
+    @property
+    def event_attributes(self):
+        """Attributes for a read, assumes one read in file"""
+        return dict(self.get_read(group=True).attrs)
 
     def summary(self, rename=True, delete=True, scale=True):
         """A read summary, assumes one read in file"""
@@ -253,6 +261,14 @@ class Fast5(h5py.File):
         shutil.move(path_tmp, path)
         return Fast5(path, mode)
 
+    def create_copy(self, copy_path):
+        """Run h5repack on the current file. Returns a fresh object."""
+        path = os.path.abspath(self.filename)
+        path_tmp = copy_path
+        mode = self.mode
+        self.close()
+        subprocess.call(['h5repack', path, path_tmp])
+        return Fast5(path_tmp, mode)
 
     ###
     # Extracting read event data
@@ -291,16 +307,15 @@ class Fast5(h5py.File):
                 else:
                     yield self._get_read_data_raw(reads[read], scale=scale)
 
-
     def get_read(self, group=False, raw=False, read_number=None, scale=False):
         """Like get_reads, but only the first read in the file
 
         :param group: return hdf group rather than event/raw data
         """
         if read_number is None:
-            return self.get_reads(group, raw, scale=scale).next()
+            return self.get_reads(group, raw, scale=scale).__next__()
         else:
-            return self.get_reads(group, raw, read_numbers=[read_number], scale=scale).next()
+            return self.get_reads(group, raw, read_numbers=[read_number], scale=scale).__next__()
 
     def get_corrected_events(self):
         """Returns corrected events table along with the start relative to raw data"""
@@ -311,7 +326,7 @@ class Fast5(h5py.File):
             corr_start_rel_to_raw = attributes['read_start_rel_to_raw']
         except KeyError:
             raise KeyError('Read does not contain required fields: {}'.format(self.__default_corrected_genome__))
-        return events, corr_start_rel_to_raw
+        return np.asarray(events), corr_start_rel_to_raw
 
     def _get_read_data(self, read, indices=None):
         """Private accessor to read event data"""
@@ -326,8 +341,7 @@ class Fast5(h5py.File):
         if events['start'].dtype.kind in ['i', 'u']:
             needs_scaling = True
 
-        dtype = np.dtype([(
-                              d[0], 'float') if d[0] in float_fields else d
+        dtype = np.dtype([(d[0], 'float') if d[0] in float_fields else d
                           for d in events.dtype.descr
                           ])
         data = None
@@ -349,7 +363,6 @@ class Fast5(h5py.File):
             data['start'] /= self.sample_rate
             data['length'] /= self.sample_rate
         return data
-
 
     def _get_read_data_raw(self, read, indices=None, scale=True):
         """Private accessor to read raw data"""
@@ -375,7 +388,7 @@ class Fast5(h5py.File):
             data = (data + meta['offset']) * raw_unit
         return data
 
-    def set_read(self, data, meta):
+    def set_read(self, data, meta, scale=True):
         """Write event data to file
 
         :param data: event data
@@ -392,36 +405,54 @@ class Fast5(h5py.File):
                     req_fields, meta.keys()
                 )
             )
-        req_fields = ['start', 'length', 'mean', 'stdv']
-        if not isinstance(data, np.ndarray):
-            raise TypeError('Data is not ndarray.')
-        if not set(req_fields).issubset(data.dtype.names):
-            raise KeyError(
-                'Read data does not contain required fields: {}, got {}.'.format(
-                    req_fields, data.dtype.names
-                )
-            )
-
+        self.test_event_table(data)
         path = self._join_path(
             self.__event_path__, 'Read_{}'.format(meta['read_number'])
         )
         self._add_attrs(meta, path)
 
-        uint_fields = ('start', 'length')
-        dtype = np.dtype([(
-                              d[0], 'uint32') if d[0] in uint_fields else d
-                          for d in data.dtype.descr
-                          ])
+        # (see _get_read_data()). If the data is not an int or uint
+        #    we assume it is in seconds and scale appropriately
+        if scale:
+            data['start'] *= self.sample_rate
+            data['length'] *= self.sample_rate
+
+        self._add_event_table(data, self._join_path(path, 'Events'))
+
+
+    def set_new_event_table(self, name, data, meta, scale=False, overwrite=False):
+        """Write new event data to file
+
+        :param data: event data
+        :param meta: meta data to attach to read
+        """
+        self.assert_writable()
+        # req_fields = [
+        #     'start_time', 'duration', 'read_number',
+        #     'start_mux', 'read_id', 'scaling_used'
+        # ]
+        # if not set(req_fields).issubset(meta.keys()):
+        #     raise KeyError(
+        #         'Read meta does not contain required fields: {}, got {}'.format(
+        #             req_fields, meta.keys()
+        #         )
+        #     )
+        self.test_event_table(data)
+
+        path = self._join_path(self.__base_analysis__, name)
+        if overwrite:
+            self.delete(path, ignore=True)
+        else:
+            assert path not in self, "Path exists, set overwrite to True"
+
+        self._add_attrs(meta, path)
 
         # (see _get_read_data()). If the data is not an int or uint
         #    we assume it is in seconds and scale appropriately
-        if data['start'].dtype.kind not in ['i', 'u']:
+        if scale:
             data['start'] *= self.sample_rate
             data['length'] *= self.sample_rate
-        self._add_event_table(
-            data.astype(dtype), self._join_path(path, 'Events')
-        )
-
+        self._add_event_table(data, self._join_path(path, 'Events'))
 
     def get_read_stats(self):
         """Combines stats based on events with output of .summary, assumes a
@@ -439,6 +470,13 @@ class Fast5(h5py.File):
         data['num_events'] = n_events
         data['median_sd'] = np.median(read['stdv'])
         return data
+
+    @staticmethod
+    def test_event_table(data, req_fields=__default_event_table_fields__):
+        """Wrapper function to test if event tables have required fields
+        :param data: numpy array
+        :param req_fields: required fields for event table """
+        return test_numpy_table(data, req_fields)
 
     ###
     # Raw Data
@@ -906,7 +944,6 @@ class Fast5(h5py.File):
             else:
                 raise ValueError(err_msg.format(location))
 
-
     def get_sam(self, analysis=__default_alignment_analysis__, section=__default_seq_section__, custom=None):
         """Get SAM (alignment) data.
 
@@ -926,8 +963,6 @@ class Fast5(h5py.File):
         except:
             raise ValueError('Could not retrieve SAM data from {}'.format(location))
 
-
-
     def get_reference_fasta(self, analysis=__default_alignment_analysis__, section=__default_seq_section__, custom=None):
         """Get fasta sequence of known DNA fragment for the read.
 
@@ -946,6 +981,17 @@ class Fast5(h5py.File):
             return self[location][()]
         except:
             raise ValueError('Could not retrieve sequence data from {}'.format(location))
+
+    def delete(self, section, ignore=False):
+        """Delete a section of the H5file"""
+        self.assert_writable()
+        try:
+            del self[section]
+        except KeyError:
+            if ignore:
+                pass
+            else:
+                raise KeyError("{} not found in Fast5 file".format(section))
 
 
 def iterate_fast5(path, strand_list=None, paths=False, mode='r', limit=None, files_group_pattern=None, sort_by_size=None):
@@ -977,7 +1023,7 @@ def iterate_fast5(path, strand_list=None, paths=False, mode='r', limit=None, fil
         reverse = True if sort_by_size == 'desc' else False
         files.sort(reverse=reverse, key=lambda x: os.path.getsize(x))
 
-    for f in files[:limit] :
+    for f in files[:limit]:
         if not os.path.exists(f):
             sys.stderr.write('File {} does not exist, skipping\n'.format(f))
             continue
@@ -991,10 +1037,22 @@ def iterate_fast5(path, strand_list=None, paths=False, mode='r', limit=None, fil
 
 def main():
     fast5_file = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/canonical/miten_PC_20160820_FNFAD20259_MN17223_mux_scan_AMS_158_R9_WGA_Ecoli_08_20_16_83098_ch467_read35_strand.fast5"
-    f5fh = Fast5(fast5_file)
+    f5fh = Fast5(fast5_file, read='r+')
     f5fh.get_fastq()
-    # print(f5fh.get_read(raw=True, scale=False))
-    print(f5fh.get_corrected_events())
+    events = f5fh.get_read(raw=False, scale=False)
+    # events, start_rel_to_raw = f5fh.get_corrected_events()
+    # print(f5fh.get_analysis_new("RawGenomeCorrected_000"))
+    # print(f5fh.set_new_event_table(name="test_events_2", data=events, meta={"attrbute": 10}))
+    # a = f5fh.delete("/Analysds/test_events_2/")
+    f5 = f5fh.create_copy("test.fast5")
+    a = f5["UniqueGlobalKey/channel_id"].attrs
+    f5.delete("UniqueGlobalKey/channel_id")
+    try:
+        a = f5["UniqueGlobalKey/channel_id"].attrs
+    except KeyError as e:
+        print(e)
+    # finally:
+        # f5._add_attrs(a, "UniqueGlobalKey/channel_id", convert=None)
 
 
 if __name__ == '__main__':

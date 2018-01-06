@@ -89,7 +89,7 @@ class NetworkTest(unittest.TestCase):
         sess.close()
 
     def test_accuracy_function(self):
-        self.model.correct_pred = np.array([True, False, False, False])
+        self.model.prediction = np.array([True, False, False, False])
         init = tf.global_variables_initializer()
         sess = tf.Session()
         sess.run(init)

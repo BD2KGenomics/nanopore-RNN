@@ -23,6 +23,7 @@ from nanotensor.error import Usage
 import tensorflow as tf
 from tensorflow.contrib import rnn
 import numpy as np
+import logging as log
 
 
 class BuildGraph(object):
@@ -51,6 +52,7 @@ class BuildGraph(object):
         self.seq_len = seq_len
         self.learning_rate = learning_rate
         self.forget_bias = forget_bias
+        self.mode = mode
         self.summary_name = summary_name
         # TODO if retrain grab old global step
         self.global_step = tf.get_variable(
@@ -65,27 +67,24 @@ class BuildGraph(object):
 
         # initialize placeholders or take in tensors from a queue or Dataset object
         self.x = self.create_x()
+
         self.sequence_length = self.create_sequence_length()
         self.batch_size = tf.shape(self.x)[0]
 
         # length of input tensor, step number and number of classes for output layer
 
         # self.network = network
-        output, final_layer_size = self.create_model(network_model=network)
-        self.output_shape = output.get_shape().as_list()
-        self.flat_outputs = tf.reshape(output, [-1, final_layer_size])
-
+        self.output, final_layer_size = self.create_model(network_model=network)
         # create fully connected layer with correct number of classes
         with tf.name_scope("output_layer"):
             self.output_layer = self.create_output_layer()
             # tf.add_to_collection("output_layer", self.output_layer)
+        log.info("Shape {}".format(self.output_layer.get_shape()))
 
-        # create evaluation prediction
         # create prediction
         with tf.name_scope("prediction_function"):
             self.prediction = self.prediction_function()
-
-        if mode == 0 or mode == 1:
+        if self.mode == 0 or self.mode == 1:
             self.y = self.create_y()
             # create accuracy function
             with tf.name_scope("accuracy_function"):
@@ -104,16 +103,17 @@ class BuildGraph(object):
             self.merged_summaries = tf.summary.merge(self.summaries)
 
     def create_x(self):
-        return tf.placeholder_with_default(self.x_iterator, shape=self.x_shape)
+        return self.x_iterator
 
     def create_sequence_length(self):
-        return tf.placeholder_with_default(self.seq_iterator, shape=self.seq_shape)
+        return self.seq_iterator
 
     def create_y(self):
-        return tf.placeholder_with_default(self.y_iterator, shape=self.y_shape)
+        return self.y_iterator
 
     def create_output_layer(self):
         """Create standard output layer"""
+        self.flat_outputs = tf.reshape(self.output, [-1, final_layer_size])
         output_layer, _, _ = self.fulconn_layer(self.flat_outputs, self.len_y)
         return output_layer
 
@@ -126,14 +126,30 @@ class BuildGraph(object):
         prevlayer_size = 0
         input_vector = self.x
         for layer in network_model:
+            log.info("Shape {}".format(input_vector.get_shape()))
             inshape = input_vector.get_shape().as_list()
             if layer["type"] == "blstm":
                 ratio = self.seq_len / inshape[1]
-                # print("ratio = {}".format(ratio))
+
                 input_vector = self.blstm(input_vector=input_vector, n_hidden=layer["size"],
                                           layer_name=layer["name"], forget_bias=layer["bias"], reuse=self.reuse,
                                           concat=layer["concat"], sequence_length=self.sequence_length / ratio)
                 prevlayer_size = layer["size"] * 2
+            elif layer["type"] == "lstm":
+                ratio = self.seq_len / inshape[1]
+                input_vector = self.lstm(input_vector=input_vector, n_hidden=layer["size"],
+                                         layer_name=layer["name"], forget_bias=layer["bias"],
+                                         sequence_length=self.sequence_length / ratio)
+                prevlayer_size = layer["size"]
+
+            elif layer["type"] == "decoder_lstm":
+                ratio = self.seq_len / inshape[1]
+                input_vector = self.decoder_lstm(input_vector=input_vector, n_hidden=layer["size"],
+                                                 layer_name=layer["name"], forget_bias=layer["bias"],
+                                                 output_keep_prob=layer["output_keep_prob"])
+                prevlayer_size = layer["size"]
+
+
             elif layer["type"] == "residual_layer":
                 with tf.variable_scope(layer["name"]):
                     if len(inshape) != 4:
@@ -159,10 +175,11 @@ class BuildGraph(object):
                     prevlayer_size = inshape[2] / 2
             else:
                 with tf.variable_scope(layer["name"]):
+                    #TODO make sure this is working
                     # reshape matrix to fit into a single activation function
-                    input_vector = tf.reshape(input_vector, [-1, prevlayer_size * self.n_steps])
+                    input_vector = tf.reshape(input_vector, [-1, self.n_steps])
                     input_vector = self.fulconn_layer(input_data=input_vector, output_dim=layer["size"],
-                                                      seq_len=self.n_steps, activation_func=ref_types[layer["type"]])[0]
+                                                      seq_len=1, activation_func=ref_types[layer["type"]])[0]
                     # reshape matrix to correct shape from output of
                     input_vector = tf.reshape(input_vector, [-1, self.n_steps, layer["size"]])
                     prevlayer_size = layer["size"]
@@ -173,12 +190,12 @@ class BuildGraph(object):
         """Create cost function depending on cost function options"""
         if cost_function == "cross_entropy":
             # standard cross entropy implementation
-            y_flat = tf.reshape(self.y, [-1, len_y])
+            y_flat = tf.reshape(self.y, [-1, self.len_y])
             loss1 = tf.nn.softmax_cross_entropy_with_logits(logits=self.output_layer,
                                                             labels=y_flat)
         elif cost_function == "binary_cross_entropy":
             # cross entropy with binary labels.
-            y_flat = tf.reshape(self.y, [-1, len_y])
+            y_flat = tf.reshape(self.y, [-1, self.len_y])
             y_label_indices = tf.argmax(y_flat, 1, name="y_label_indices")
             loss1 = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.output_layer,
                                                                    labels=y_label_indices)
@@ -190,12 +207,12 @@ class BuildGraph(object):
 
     def prediction_function(self):
         """Compare predicions with label to calculate number correct or edit distance"""
-        predict = tf.equal(tf.argmax(self.output_layer, 1))
+        predict = tf.argmax(self.output_layer, 1)
         return predict
 
     def accuracy_function(self):
         """Create accuracy function to calculate accuracy of the prediction"""
-        y_flat = tf.reshape(self.y, [-1, len_y])
+        y_flat = tf.reshape(self.y, [-1, self.len_y])
         accuracy = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(self.output_layer, 1), tf.argmax(y_flat, 1)), tf.float32))
         return accuracy
 
@@ -217,11 +234,11 @@ class BuildGraph(object):
                 mean = tf.reduce_mean(var)
                 summary = tf.summary.scalar('mean', mean)
                 self.summaries.append(summary)
-        # with tf.name_scope("training"):
-        #     with tf.name_scope('summaries'):
-        #         mean = tf.reduce_mean(var)
-        #         summary = tf.summary.scalar('mean', mean)
-        #         self.training_summaries.append(summary)
+                # with tf.name_scope("training"):
+                #     with tf.name_scope('summaries'):
+                #         mean = tf.reduce_mean(var)
+                #         summary = tf.summary.scalar('mean', mean)
+                #         self.training_summaries.append(summary)
                 # with tf.name_scope('stddev'):
                 #     stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
                 # tf.summary.scalar('stddev', stddev)
@@ -271,7 +288,7 @@ class BuildGraph(object):
         return output
 
     @staticmethod
-    def fulconn_layer(input_data, output_dim, seq_len=1, activation_func=None, name=""):
+    def fulconn_layer(input_data, output_dim, seq_len=1, activation_func=None):
         """Create a fully connected layer.
         source:
         https://stackoverflow.com/questions/39808336/tensorflow-bidirectional-dynamic-rnn-none-values-error/40305673
@@ -339,30 +356,30 @@ class BuildGraph(object):
             avg_pool = tf.nn.avg_pool(indata, ksize=(1, 1, 3, 1), strides=(1, 1, 1, 1), padding='SAME',
                                       name='avg_pool0a1x3')
             conv1a = self.conv_layer(avg_pool, ksize=[1, 1, in_channel, times * 3], padding='SAME',
-                                name='conv1a_1x1')
+                                     name='conv1a_1x1')
         with tf.variable_scope('branch2_1x1'):
             conv0b = self.conv_layer(indata, ksize=[1, 1, in_channel, times * 3], padding='SAME',
-                                name='conv0b_1x1')
+                                     name='conv0b_1x1')
         with tf.variable_scope('branch3_1x3'):
             conv0c = self.conv_layer(indata, ksize=[1, 1, in_channel, times * 2], padding='SAME',
-                                name='conv0c_1x1')
+                                     name='conv0c_1x1')
             conv1c = self.conv_layer(conv0c, ksize=[1, 3, times * 2, times * 3], padding='SAME',
-                                name='conv1c_1x3')
+                                     name='conv1c_1x3')
         with tf.variable_scope('branch4_1x5'):
             conv0d = self.conv_layer(indata, ksize=[1, 1, in_channel, times * 2], padding='SAME',
-                                name='conv0d_1x1')
+                                     name='conv0d_1x1')
             conv1d = self.conv_layer(conv0d, ksize=[1, 5, times * 2, times * 3], padding='SAME',
-                                name='conv1d_1x5')
+                                     name='conv1d_1x5')
         with tf.variable_scope('branch5_1x3_dilate_2'):
             conv0e = self.conv_layer(indata, ksize=[1, 1, in_channel, times * 2], padding='SAME',
-                                name='conv0e_1x1')
+                                     name='conv0e_1x1')
             conv1e = self.conv_layer(conv0e, ksize=[1, 3, times * 2, times * 3], padding='SAME',
-                                name='conv1e_1x3_d2', dilate=2)
+                                     name='conv1e_1x3_d2', dilate=2)
         with tf.variable_scope('branch6_1x3_dilate_3'):
             conv0f = self.conv_layer(indata, ksize=[1, 1, in_channel, times * 2], padding='SAME',
-                                name='conv0f_1x1')
+                                     name='conv0f_1x1')
             conv1f = self.conv_layer(conv0f, ksize=[1, 3, times * 2, times * 3], padding='SAME',
-                                name='conv1f_1x3_d3', dilate=3)
+                                     name='conv1f_1x3_d3', dilate=3)
         return (tf.concat([conv1a, conv0b, conv1c, conv1d, conv1e, conv1f], axis=-1, name='concat'))
 
     def residual_layer(self, indata, out_channel, i_bn=False):
@@ -370,17 +387,66 @@ class BuildGraph(object):
         in_channel = fea_shape[-1]
         with tf.variable_scope('branch1'):
             indata_cp = self.conv_layer(indata, ksize=[1, 1, in_channel, out_channel], padding='SAME',
-                                   name='conv1', BN=i_bn, active=False)
+                                        name='conv1', BN=i_bn, active=False)
         with tf.variable_scope('branch2'):
             conv_out1 = self.conv_layer(indata, ksize=[1, 1, in_channel, out_channel], padding='SAME',
-                                   name='conv2a', bias_term=False)
+                                        name='conv2a', bias_term=False)
             conv_out2 = self.conv_layer(conv_out1, ksize=[1, 3, out_channel, out_channel], padding='SAME',
-                                   name='conv2b', bias_term=False)
+                                        name='conv2b', bias_term=False)
             conv_out3 = self.conv_layer(conv_out2, ksize=[1, 1, out_channel, out_channel], padding='SAME',
-                                   name='conv2c', bias_term=False, active=False)
+                                        name='conv2c', bias_term=False, active=False)
         with tf.variable_scope('plus'):
             relu_out = tf.nn.relu(indata_cp + conv_out3, name='final_relu')
         return relu_out
+
+    @staticmethod
+    def lstm(input_vector, sequence_length, n_hidden, forget_bias, layer_name):
+        """Define basic dynamic LSTM layer"""
+        with tf.variable_scope(layer_name):
+            rnn_layers = tf.nn.rnn_cell.LSTMCell(n_hidden, forget_bias=forget_bias, state_is_tuple=True)
+            # 'outputs' is a tensor of shape [batch_size, max_time, 256]
+            # 'state' is a N-tuple where N is the number of LSTMCells containing a
+            # tf.contrib.rnn.LSTMStateTuple for each cell
+            output, _ = tf.nn.dynamic_rnn(cell=rnn_layers,
+                                          inputs=input_vector,
+                                          dtype=tf.float32,
+                                          time_major=False,
+                                          sequence_length=sequence_length)
+        return output
+
+    def decoder_lstm(self, input_vector, n_hidden, forget_bias, layer_name, output_keep_prob=1):
+        """Feeds output from lstm into input of same lstm cell"""
+
+        with tf.variable_scope(layer_name):
+            def make_cell(input_vector, state, mode):
+                cell = tf.nn.rnn_cell.LSTMCell(n_hidden, forget_bias=forget_bias)
+                if mode == 0 and output_keep_prob < 1:
+                    cell = tf.contrib.rnn.DropoutWrapper(
+                        cell, output_keep_prob=output_keep_prob)
+                return cell(inputs=input_vector, state=state)
+
+            # Simplified version of tensorflow_models/tutorials/rnn/rnn.py's rnn().
+            # This builds an unrolled LSTM for tutorial purposes only.
+            # In general, use the rnn() or state_saving_rnn() from rnn.py.
+            #
+            # The alternative version of the code below is:
+            #
+            # inputs = tf.unstack(inputs, num=num_steps, axis=1)
+            # outputs, state = tf.contrib.rnn.static_rnn(cell, inputs,
+            #                            initial_state=self._initial_state)
+            state = tf.nn.rnn_cell.LSTMCell(n_hidden, forget_bias=forget_bias).zero_state(self.batch_size, tf.float32)
+
+            outputs = []
+            with tf.variable_scope("decoder_lstm"):
+                for time_step in range(self.seq_len):
+                    if time_step > 0:
+                        tf.get_variable_scope().reuse_variables()
+                    log.info("Shape {}".format(input_vector.get_shape()))
+                    (cell_output, state) = make_cell(input_vector, state, mode=self.mode)
+                    outputs.append(cell_output)
+                    input_vector = cell_output
+            output = tf.stack(outputs, 1)
+        return output
 
 
 class CrossEntropy(BuildGraph):
@@ -389,6 +455,7 @@ class CrossEntropy(BuildGraph):
     def __init__(self, x_iterator=None, y_iterator=None, seq_iterator=None, network=None, learning_rate=0, seq_len=0,
                  forget_bias=5.0, reuse=None, y_shape=None, x_shape=None,
                  seq_shape=None, len_x=1, len_y=1, mode=0, dataset=None, summary_name="Training"):
+
         if dataset:
             len_x = dataset.len_x
             len_y = dataset.len_y
@@ -439,7 +506,9 @@ class CtcLoss(BuildGraph):
 
     def create_output_layer(self):
         """Create output layer for ctc loss"""
+        self.flat_outputs = tf.reshape(self.output, [-1, final_layer_size])
         output_layer, _, _ = self.fulconn_layer(self.flat_outputs, self.len_y)
+        self.output_shape = self.output.get_shape().as_list()
         output_layer = tf.reshape(output_layer, shape=[-1, self.output_shape[1], self.len_y])
         return output_layer
 

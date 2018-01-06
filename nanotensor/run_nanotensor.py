@@ -26,6 +26,7 @@ from nanotensor.utils import project_folder, list_dir, DotDict, upload_model, lo
 from nanotensor.error import Usage
 from nanotensor.queue import FullSignalSequence, MotifSequence, NumpyEventData
 from nanotensor.network import CtcLoss, CrossEntropy
+from textGan.tweet_data import PostProcessGlove, LastLSTMOutput, CharacterEmbedding, Seq2SeqGenerator, RandomZInput
 import tensorflow as tf
 from tensorflow.python.client import timeline
 
@@ -126,10 +127,12 @@ class RunTensorflow(object):
         self.args = args
         # get correct data input pipeline
         dataset_options = {"FullSignalSequence": FullSignalSequence, "MotifSequence": MotifSequence,
-                           "NumpyEventData": NumpyEventData}
+                           "NumpyEventData": NumpyEventData, "PostProcessGlove": PostProcessGlove,
+                           "CharacterEmbedding": CharacterEmbedding, "RandomZInput": RandomZInput}
         self.Dataset = dataset_options[self.args.CreateDataset.dataset]
         # pick graph
-        graph_options = {"CtcLoss": CtcLoss, "CrossEntropy": CrossEntropy}
+        graph_options = {"CtcLoss": CtcLoss, "CrossEntropy": CrossEntropy, "LastLSTMOutput": LastLSTMOutput,
+                         "Seq2SeqGenerator": Seq2SeqGenerator}
         self.Graph = graph_options[self.args.BuildGraph.graph]
 
         self.global_step = tf.get_variable(
@@ -341,6 +344,7 @@ class RunTensorflow(object):
                     while True:
                         evaluate_pred = sess.run([self.inference_opts])
                         prediction_list.extend((evaluate_pred[0]))
+                        self.inference.process_output(evaluate_pred[0], "lala")
                 except tf.errors.OutOfRangeError or StopIteration:  # and tf.errors.StopIteration:
                     self.inference.process_output(prediction_list, file_path)
                     log.info(file_path)
@@ -504,6 +508,24 @@ def test_for_nvidia_gpu(num_gpu):
             log.info("No GPU's found. Using CPU.")
             return False
 
+
+def optimistic_restore(session, save_file):
+    """ Implementation from: https://github.com/tensorflow/tensorflow/issues/312 """
+    print('Restoring model from:', save_file)
+    reader = tf.train.NewCheckpointReader(save_file)
+    saved_shapes = reader.get_variable_to_shape_map()
+    var_names = sorted([(var.name, var.name.split(':')[0]) for var in tf.global_variables()
+                        if var.name.split(':')[0] in saved_shapes])
+    restore_vars = []
+    name2var = dict(zip(map(lambda x:x.name.split(':')[0], tf.global_variables()), tf.global_variables()))
+    with tf.variable_scope('', reuse=True):
+        for var_name, saved_var_name in var_names:
+            curr_var = name2var[saved_var_name]
+            var_shape = curr_var.get_shape().as_list()
+            if var_shape == saved_shapes[saved_var_name]:
+                restore_vars.append(curr_var)
+    saver = tf.train.Saver(restore_vars)
+    saver.restore(session, save_file)
 
 def main():
     """Main docstring"""

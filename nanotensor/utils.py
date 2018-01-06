@@ -14,7 +14,6 @@ This is a place for small scripts and utility functions
 # Author: Andrew Bailey, Rojin Safavi
 # History: 5/16/2017 Created
 from __future__ import print_function
-from timeit import default_timer as timer
 import sys
 import os
 import collections

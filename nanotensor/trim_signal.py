@@ -157,6 +157,11 @@ class SignalLabel:
         bpread = ''.join(x for x in bpread)
         return bpread
 
+    def read_label(self, skip_start=10, window_n=0, bases=False):
+        return read_label(self.label_file, skip_start=skip_start, window_n=window_n, bases=bases)
+
+    def read_signal(self, normalize):
+        return read_signal(self.signal_file, normalize=normalize)
 
 def read_label(file_path, skip_start=10, window_n=0, bases=False):
     """Method taken from chiron_input.py https://github.com/haotianteng/chiron"""
