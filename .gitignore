@@ -206,3 +206,10 @@ tests/outputnpParamEstimation/
 test_files/minion-reads/canonical/nanonet_output/
 test_files/minion-reads/canonical/one_file/
 test_files/train_signal_align/
+nanonet/fast5.py.bak
+nanonet/features.py.bak
+nanonet/nanonetcall.py.bak
+nanonet/nn.py.bak
+nanonet/segment.py.bak
+nanonet/util.py.bak
+setup.py.bak
