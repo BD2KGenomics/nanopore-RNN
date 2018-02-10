@@ -1,6 +1,6 @@
 language: python
 python:
-  - 2.7
+  - 3.5
 notifications: # set notification options
   slack:
     rooms:
@@ -50,8 +50,8 @@ install:
 # Useful for debugging any issues with conda
 - conda info -a
 - git submodule update --remote
-- conda env create -f requirements.yml
-- source activate nanotensor
+- conda env create -f requirements35.yml
+- source activate nanotensor3.5
 - make
 #- cd nanonet
 #- python setup.py install

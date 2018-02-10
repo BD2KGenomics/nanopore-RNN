@@ -1,0 +1,97 @@
+name: nanotensor3.5
+channels:
+- bioconda
+- r
+- defaults
+- conda-forge
+dependencies:
+- bcftools=1.6=0
+- biopython=1.68=py35_0
+- htslib=1.6=0
+- mmtf-python=1.0.2=py35_0
+- pysam=0.13.0=py35_htslib1.6_0
+- python-dateutil=2.3=py35_0
+- pyvcf=0.6.8=py35_0
+- samtools=1.6=0
+- codecov=2.0.9=py35_0
+- boto=2.48.0=py35_0
+- bzip2=1.0.6=3
+- certifi=2016.2.28=py35_0
+- coverage=4.4.1=py35_0
+- curl=7.54.1=0
+- cycler=0.10.0=py35_0
+- cython=0.26=py35_0
+- freetype=2.5.5=2
+- h5py=2.7.0=np113py35_0
+- hdf5=1.8.17=2
+- icu=54.1=0
+- jbig=2.1=0
+- jpeg=9b=0
+- krb5=1.13.2=0
+- libpng=1.6.30=1
+- libssh2=1.8.0=0
+- libtiff=4.0.6=3
+- matplotlib=2.0.2=np113py35_0
+- mkl=2017.0.3=0
+- msgpack-python=0.4.8=py35_0
+- numpy=1.13.1=py35_0
+- olefile=0.44=py35_0
+- openssl=1.0.2l=0
+- pandas=0.20.3=py35_0
+- patsy=0.4.1=py35_0
+- pillow=4.2.1=py35_0
+- pip=9.0.1=py35_1
+- py=1.4.34=py35_0
+- pyparsing=2.2.0=py35_0
+- pyqt=5.6.0=py35_2
+- pytest=3.2.1=py35_0
+- python=3.5.4=0
+- pytz=2017.2=py35_0
+- pyyaml=3.12=py35_0
+- qt=5.6.2=2
+- readline=6.2=2
+- reportlab=3.4.0=py35_0
+- requests=2.14.2=py35_0
+- scipy=0.19.1=np113py35_0
+- seaborn=0.8=py35_0
+- setuptools=36.4.0=py35_1
+- sip=4.18=py35_0
+- six=1.10.0=py35_0
+- sqlite=3.13.0=0
+- statsmodels=0.8.0=np113py35_0
+- tk=8.5.18=0
+- wheel=0.29.0=py35_0
+- xz=5.2.3=0
+- yaml=0.1.6=0
+- zlib=1.2.8=3
+- pip:
+  - attrs==17.3.0
+  - basetensor==0.0.1
+  - bleach==1.5.0
+  - chardet==3.0.4
+  - chiron==0.1.2.3
+  - distribute==0.7.3
+  - enum34==1.1.6
+  - html5lib==0.9999999
+  - idna==2.6
+  - markdown==2.6.10
+  - myriad==0.1.4
+  - nanonet==2.0.0
+  - nanotensor==0.2.0
+  - oauthlib==2.0.6
+  - pluggy==0.6.0
+  - protobuf==3.5.0.post1
+  - py3helpers==0.0.1
+  - pythonic-porin==0.2.0
+  - requests-oauthlib==0.8.0
+  - signalalign (/Users/andrewbailey/CLionProjects/nanopore-RNN/signalAlign/src)==0.1.4
+  - tensorflow==1.4.0
+  - tensorflow-tensorboard==0.4.0rc3
+  - textgan==0.0.1
+  - tweepy==3.5.0
+  - unicodecsv==0.14.1
+  - unidecode==0.4.21
+  - urllib3==1.22
+  - werkzeug==0.13
+prefix: /Users/andrewbailey/anaconda3/envs/nanotensor3.5
+
