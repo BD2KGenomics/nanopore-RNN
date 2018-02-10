@@ -73,7 +73,6 @@ dependencies:
   - idna==2.6
   - markdown==2.6.10
   - myriad==0.1.4
-  - nanonet==2.0.0
   - oauthlib==2.0.6
   - pluggy==0.6.0
   - protobuf==3.5.0.post1
