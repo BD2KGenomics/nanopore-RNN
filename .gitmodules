@@ -16,3 +16,12 @@
 [submodule "python_utils"]
 	path = python_utils
 	url = https://github.com/adbailey4/python_utils
+[submodule "signalAlign_notebook"]
+	path = signalAlign_notebook
+	url = https://github.com/ArtRand/signalAlign_notebook
+[submodule "HDP_models"]
+	path = HDP_models
+	url = https://github.com/ArtRand/HDP_models
+[submodule "CytosineMethylationAnalysis"]
+	path = CytosineMethylationAnalysis
+	url = https://github.com/ArtRand/CytosineMethylationAnalysis

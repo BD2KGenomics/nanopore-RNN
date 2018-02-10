@@ -85,6 +85,7 @@ def plot_histogram(rna_data, dna_data, outpath):
     panel1.set_ylabel('Number of events')
 
     plt.savefig(outpath)
+    # plot.show()
 
 
 def main():

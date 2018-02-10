@@ -10,14 +10,12 @@
 # Author: Andrew Bailey
 # History: 12/20/2017 Created
 ########################################################################
-from __future__ import print_function
 import unittest
 import os
 import numpy as np
 import threading
 import time
 from nanotensor.fast5 import Fast5
-import unittest
 
 
 class Fast5Test(unittest.TestCase):

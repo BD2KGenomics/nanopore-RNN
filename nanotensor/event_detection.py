@@ -21,7 +21,7 @@ from nanotensor.fast5 import Fast5
 from nanonet.eventdetection.filters import minknow_event_detect
 from nanonet.segment import segment
 from nanonet.features import make_basecall_input_multi
-from py3helpers.utils import test_numpy_table, list_dir
+from py3helpers.utils import test_numpy_table, list_dir, create_fastq, merge_two_dicts, TimeStamp
 
 
 def create_speedy_event_table(signal, sampling_freq, start_time, min_width=5, max_width=80, min_gain_per_sample=0.008,
@@ -163,7 +163,7 @@ def create_anchor_kmers(new_events, old_events):
     return new_events[start_index:end_index]
 
 
-def resegment_reads(fast5_path, params, speedy=False, overwrite=True, name="ReSegmentBasecall_000"):
+def resegment_reads(fast5_path, params, speedy=False, overwrite=False, name="ReSegmentBasecall_00{}", rna=True):
     """Re-segment and create anchor alignment from previously base-called fast5 file
     :param fast5_path: path to fast5 file
     :param params: event detection parameters
@@ -175,21 +175,60 @@ def resegment_reads(fast5_path, params, speedy=False, overwrite=True, name="ReSe
     assert os.path.isfile(fast5_path), "File does not exist: {}".format(fast5_path)
     # create Fast5 object
     f5fh = Fast5(fast5_path, read='r+')
+    read_id = bytes.decode(f5fh.raw_attributes['read_id'])
     sampling_freq = f5fh.sample_rate
     start_time = f5fh.raw_attributes['start_time']
     # pick event detection algorithm
     if speedy:
         signal = f5fh.get_read(raw=True, scale=True)
         event_table = create_speedy_event_table(signal, sampling_freq, start_time, **params)
+        params = merge_two_dicts(params, {"event_detection": "speedy_stat_split"})
+
     else:
         raw_signal = f5fh.get_read(raw=True)
         event_table = create_minknow_event_table(raw_signal, sampling_freq, start_time, **params)
+        params = merge_two_dicts(params, {"event_detection": "minknow_event_detect"})
 
+    keys = ["nanotensor version", "time_stamp"]
+    values = ["0.2.0", TimeStamp().posix_date()]
+    version_info = merge_two_dicts(params, dict(zip(keys, values)))
+    attributes = merge_two_dicts(f5fh.raw_attributes, version_info)
     # gather previous event detection
     old_event_table = f5fh.get_basecall_data()
+    if f5fh.is_read_rna():
+        old_event_table["start"] = old_event_table["start"] / sampling_freq + (start_time / sampling_freq)
+        old_event_table["length"] = old_event_table["length"] / sampling_freq
+
+    # set event table
     new_event_table = create_anchor_kmers(new_events=event_table, old_events=old_event_table)
-    f5fh.set_new_event_table(name, new_event_table, f5fh.raw_attributes, overwrite=overwrite)
+    f5fh.set_new_event_table(name, new_event_table, attributes, overwrite=overwrite)
+    # gather new sequence
+    sequence = sequence_from_events(new_event_table)
+    quality_scores = '!'*len(sequence)
+    fastq = create_fastq(read_id+" :", sequence, quality_scores)
+    # set fastq
+    f5fh.set_fastq(name, fastq)
     return f5fh
+
+
+def sequence_from_events(events):
+    """Get new read from event table with 'model_state' and 'move' fields
+
+    :param events: event table with 'model_state' and 'move' fields
+
+    """
+    test_numpy_table(events, req_fields=("model_state", "move"))
+    bases = []
+    for i, event in enumerate(events):
+        if i == 0:
+            bases.extend([chr(x) for x in event['model_state']])
+
+        else:
+            if event['move'] > 0:
+                bases.append(bytes.decode
+                             (event['model_state'][-event['move']:]))
+    sequence = ''.join(bases)
+    return sequence
 
 
 def main():
@@ -207,37 +246,42 @@ def main():
     # events = minknow_event_detect(np.asarray(sequence, dtype=float), sample_rate=rna_sample_rate, get_peaks=False,
     #                               **params)
     # print(events[20:40])
-    fast5_path = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/canonical/miten_PC_20160820_FNFAD20259_MN17223_mux_scan_AMS_158_R9_WGA_Ecoli_08_20_16_83098_ch467_read35_strand.fast5"
-
-    assert os.path.isfile(fast5_path), "fast5_path {} does not exist".format(fast5_path)
-    f5fh = Fast5(fast5_path, read='r+')
-    # speedy stat split parameters
-    sampling_freq = f5fh.sample_rate
-    signal = f5fh.get_read(raw=True, scale=True)
-    # print(signal)
-    # gener = make_basecall_input_multi([fast5_path], )
-    # print(gener.__next__())
-
-    start_time = f5fh.raw_attributes['start_time']
-    # print(f5fh.raw_attributes)
-    # print(start_time)
-    minknow_params = dict(window_lengths=(5, 10), thresholds=(2.0, 1.1), peak_height=1.2)
-    event_table = create_minknow_event_table(signal, sampling_freq, start_time,
-                                             **minknow_params)
-
-    old_event_table = f5fh.get_basecall_data()
-    new_event_table = create_anchor_kmers(new_events=event_table, old_events=old_event_table)
-    f5fh.set_new_event_table("ReSegmentBasecall_000", new_event_table, f5fh.raw_attributes, overwrite=True)
-
-
-    # fast5_dir = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/canonical"
+    # fast5_path = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/canonical/miten_PC_20160820_FNFAD20259_MN17223_mux_scan_AMS_158_R9_WGA_Ecoli_08_20_16_83098_ch467_read35_strand.fast5"
     #
+    # assert os.path.isfile(fast5_path), "fast5_path {} does not exist".format(fast5_path)
+    # f5fh = Fast5(fast5_path, read='r+')
+    # # speedy stat split parameters
+    # sampling_freq = f5fh.sample_rate
+    # signal = f5fh.get_read(raw=True, scale=True)
+    # # print(signal)
+    # # gener = make_basecall_input_multi([fast5_path], )
+    # # print(gener.__next__())
+    #
+    # start_time = f5fh.raw_attributes['start_time']
+    # # print(f5fh.raw_attributes)
+    # # print(start_time)
     # minknow_params = dict(window_lengths=(5, 10), thresholds=(2.0, 1.1), peak_height=1.2)
-    # speedy_params = dict(min_width=5, max_width=80, min_gain_per_sample=0.008, window_width=800)
+    # event_table = create_minknow_event_table(signal, sampling_freq, start_time,
+    #                                          **minknow_params)
     #
-    # fast5_files = list_dir(fast5_dir, ext='fast5')
-    # for fast5_path in fast5_files:
-    #     resegment_reads(fast5_path, speedy_params, speedy=False, overwrite=True)
+    # old_event_table = f5fh.get_basecall_data()
+    # new_event_table = create_anchor_kmers(new_events=event_table, old_events=old_event_table)
+    # f5fh.set_new_event_table("ReSegmentBasecall_000", new_event_table, f5fh.raw_attributes, overwrite=True)
+
+
+
+
+    fast5_dir = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/canonical/"
+    fast5_dir = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/rna_reads"
+
+    minknow_params = dict(window_lengths=(5, 10), thresholds=(2.0, 1.1), peak_height=1.2)
+    speedy_params = dict(min_width=5, max_width=80, min_gain_per_sample=0.008, window_width=800)
+
+    fast5_files = list_dir(fast5_dir, ext='fast5')
+    for fast5_path in fast5_files:
+        print(fast5_path)
+        resegment_reads(fast5_path, minknow_params, speedy=False, overwrite=True)
+        # break
     # create_speedy_event_table(signal=signal, sampling_freq=sampling_freq, start_time=start_time,
     #                           min_width=5, max_width=80, min_gain_per_sample=0.008,
     #                           window_width=800)

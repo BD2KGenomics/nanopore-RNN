@@ -11,7 +11,7 @@
       "seq_len": 100,
       "shuffle_buffer_size": 10000,
       "prefetch_buffer_size": 4,
-      "fasta_output_dir": "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/test_inference_output",
+      "inference_output_dir": "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/test_inference_output",
       "alphabet": 5,
       "max_event_len": 50
     }

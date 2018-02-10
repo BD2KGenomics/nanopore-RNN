@@ -21,7 +21,7 @@ import h5py
 import numpy as np
 import numpy.lib.recfunctions as nprf
 from copy import deepcopy
-from py3helpers.utils import test_numpy_table
+from py3helpers.utils import test_numpy_table, check_fastq
 
 
 def short_names(fname):
@@ -79,6 +79,7 @@ class Fast5(h5py.File):
     __default_basecall_alignment_summary__ = '/Summary/genome_mapping_{}/'  # under Alignment analysis
 
     __default_corrected_genome__ = '/Analyses/RawGenomeCorrected_000/BaseCalled_template'  # nanoraw
+    __default_signalalign_events__ = 'Analyses/SignalAlign_000'  # signalalign events
 
     __default_event_table_fields__ = ('start', 'length', 'mean', 'stdv')
 
@@ -328,6 +329,15 @@ class Fast5(h5py.File):
             raise KeyError('Read does not contain required fields: {}'.format(self.__default_corrected_genome__))
         return np.asarray(events), corr_start_rel_to_raw
 
+    def get_signalalign_events(self):
+        try:
+            reads = self[self.__default_signalalign_events__]
+            events = reads['Events']
+        except KeyError:
+            raise KeyError('Read does not contain required fields: {}'.format(self.__default_signalalign_events__))
+        return np.asarray(events)
+
+
     def _get_read_data(self, read, indices=None):
         """Private accessor to read event data"""
         # We choose the following to always be floats
@@ -419,13 +429,29 @@ class Fast5(h5py.File):
 
         self._add_event_table(data, self._join_path(path, 'Events'))
 
+    def set_fastq(self, path, data, section='template'):
+        """Write new fasta file to file
 
-    def set_new_event_table(self, name, data, meta, scale=False, overwrite=False):
+        :param path: path to fasta file
+        :param data: fastq file
+        :param section: name of basecall analysis default (template)
+        """
+        check_fastq(data)
+        path = self._join_path(self.__base_analysis__, path, "BaseCalled_{}".format(section))
+        path = self.check_path(path, latest=True)
+        self._add_string_dataset(data, self._join_path(path, 'Fastq'))
+
+    def set_new_event_table(self, path, data, meta, section='template', scale=False, overwrite=False):
         """Write new event data to file
 
+        :param path: path to Events table
         :param data: event data
         :param meta: meta data to attach to read
+        :param section: name of basecall analysis default (template)
+        :param scale: scale the the start and length by the sample rate
+        :param overwrite: overwrite most recent path
         """
+
         self.assert_writable()
         # req_fields = [
         #     'start_time', 'duration', 'read_number',
@@ -439,20 +465,30 @@ class Fast5(h5py.File):
         #     )
         self.test_event_table(data)
 
-        path = self._join_path(self.__base_analysis__, name)
+        path = self._join_path(self.__base_analysis__, path)
+        path = self.check_path(path, latest=overwrite)
         if overwrite:
             self.delete(path, ignore=True)
-        else:
-            assert path not in self, "Path exists, set overwrite to True"
-
         self._add_attrs(meta, path)
-
-        # (see _get_read_data()). If the data is not an int or uint
-        #    we assume it is in seconds and scale appropriately
         if scale:
             data['start'] *= self.sample_rate
             data['length'] *= self.sample_rate
-        self._add_event_table(data, self._join_path(path, 'Events'))
+        self._add_event_table(data, self._join_path(path, "BaseCalled_{}".format(section), 'Events'))
+
+    def check_path(self, path, latest=False):
+        """Check if path exists, if it does increment numbering
+
+        :param path: path to fast5 object. Needs to have a field where string.format can work! """
+        highest = 0
+        while highest < 10:
+            if path.format(highest) in self:
+                highest += 1
+                continue
+            else:
+                if latest:
+                    return path.format(highest-1)  # the last base-called version we saw
+                else:
+                    return path.format(highest)  # the new base-called version
 
     def get_read_stats(self):
         """Combines stats based on events with output of .summary, assumes a
@@ -992,6 +1028,38 @@ class Fast5(h5py.File):
                 pass
             else:
                 raise KeyError("{} not found in Fast5 file".format(section))
+
+    def is_read_rna(self):
+        """
+        Determine if a read is RNA or DNA
+        source: https://github.com/nanoporetech/tombo/blob/master/tombo/tombo_helper.py
+        """
+        # check both experiment type and kit slots for "rna"
+        exp_type, exp_kit = None, None
+        try:
+            exp_type = bytes.decode(self['UniqueGlobalKey/context_tags'].attrs[
+                                        'experiment_type'])
+            # remove the word internal since it contains rna.
+            exp_type = exp_type.replace('internal', '')
+        except:
+            pass
+        try:
+            exp_kit = bytes.decode(self['UniqueGlobalKey/context_tags'].attrs[
+                                       'experiment_kit'])
+            # remove the word internal since it contains rna.
+            exp_kit = exp_kit.replace('internal', '')
+        except:
+            pass
+
+        if exp_type is None and exp_kit is None:
+            rna = False
+        else:
+            rna = (
+                (exp_type is not None and re.search('rna', exp_type) is not None) or
+                (exp_kit is not None and re.search('rna', exp_kit) is not None))
+
+        return rna
+
 
 
 def iterate_fast5(path, strand_list=None, paths=False, mode='r', limit=None, files_group_pattern=None, sort_by_size=None):

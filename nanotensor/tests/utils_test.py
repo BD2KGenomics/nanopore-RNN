@@ -3,8 +3,8 @@
 Place unit tests in this file
 """
 ########################################################################
-# File: tests.py
-#  executable: tests.py
+# File: utils_test.py
+#  executable: utils_test.py
 # Purpose: test functions
 #
 # Author: Andrew Bailey

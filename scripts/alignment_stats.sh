@@ -36,7 +36,7 @@ esac
 done
 
 
-echo FASTA FILE  = "${FASTA}"
+echo FASTA  = "${FASTA}"
 echo THREADS  = "${THREADS}"
 echo REFERENCE = "${REFERENCE}"
 echo OUTPUT = "${OUTPUT}"
