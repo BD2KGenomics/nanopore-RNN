@@ -75,7 +75,6 @@ test_files/test3.bam
 test_files/test_inference_output/
 test_files/unique.sorted.bam
 test_files/all_files.sorted
-.gitignore
 bin/
 externalTools/lastz-distrib-1.03.54/src/align_diffs.o
 externalTools/lastz-distrib-1.03.54/src/align_diffs_D.o
@@ -213,3 +212,12 @@ nanonet/nn.py.bak
 nanonet/segment.py.bak
 nanonet/util.py.bak
 setup.py.bak
+PyPore/DataTypes.py.bak
+PyPore/__pycache__/
+PyPore/alignment.py.bak
+PyPore/calignment.c
+PyPore/core.py.bak
+PyPore/cparsers.c
+PyPore/database.py.bak
+PyPore/hmm.py.bak
+PyPore/parsers.py.bak

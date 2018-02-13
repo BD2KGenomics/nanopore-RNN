@@ -187,64 +187,6 @@ class Mea(unittest.TestCase):
                     best_forward_edge = x
             return best_forward_edge
 
-    @staticmethod
-    def maximum_expected_accuracy_alignment_slow(posterior_matrix):
-        """Computes the maximum expected accuracy alignment along a reference with given events and probabilities
-
-        :param posterior_matrix: matrix of posterior probabilities with reference along x axis and events along y.
-        """
-        # access previous edges based on reference position
-        forward_edges = defaultdict()
-        ref_len = len(posterior_matrix[0])
-        events_len = len(posterior_matrix)
-        ref_index = 0
-        most_prob = 0
-        best_ref = 0
-        initialize = True
-        # step through all events
-        for event_index in range(events_len):
-            if initialize:
-                while ref_index < ref_len:
-                    # intitialize forward edges with first event alignments
-                    # if type(posterior_matrix[ref_index][event_index]) is not int:
-                    prob = posterior_matrix[event_index][ref_index]
-                    event_data = [ref_index, event_index, prob, prob, None]
-                    forward_edges[ref_index] = [prob, event_data]
-                    ref_index += 1
-                initialize = False
-            else:
-                # connect with most probable previous node
-                new_edges = defaultdict()
-                ref_index = 0
-                while ref_index < ref_len:
-                    prob = posterior_matrix[event_index][ref_index]
-                    stay_prob = forward_edges[ref_index][0]
-                    if ref_index != 0:
-                        step_prob = forward_edges[ref_index-1][0]
-                    else:
-                        step_prob = -1
-                    # Find best connection from previous node
-                    if stay_prob < step_prob+prob:
-                        new_prob = prob+step_prob
-                        event_data = [ref_index, event_index, prob, new_prob, forward_edges[ref_index-1][1]]
-                        new_edges[ref_index] = [new_prob, event_data]
-                    else:
-                        new_prob = stay_prob
-                        event_data = [ref_index, event_index, prob, new_prob, forward_edges[ref_index][1]]
-                        new_edges[ref_index] = [new_prob, event_data]
-
-                    # keep track of best in order to easily return
-                    if new_prob > most_prob:
-                        most_prob = new_prob
-                        best_ref = ref_index
-                    ref_index += 1
-                # create new forward edges
-                forward_edges = new_edges
-        return forward_edges[best_ref][1]
-
-    # def test_get_events_from_best_path_sparse(self):
-    #     """test get_events_from_best_path_sparse"""
-    #     pass
 
 
 if __name__ == '__main__':

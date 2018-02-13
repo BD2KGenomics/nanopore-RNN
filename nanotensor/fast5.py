@@ -485,7 +485,7 @@ class Fast5(h5py.File):
                 highest += 1
                 continue
             else:
-                if latest:
+                if latest and highest > 0:
                     return path.format(highest-1)  # the last base-called version we saw
                 else:
                     return path.format(highest)  # the new base-called version

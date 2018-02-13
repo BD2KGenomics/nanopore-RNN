@@ -16,9 +16,11 @@ from scipy import sparse
 from timeit import default_timer as timer
 from nanotensor.fast5 import Fast5
 from py3helpers.utils import list_dir
+from collections import defaultdict
 
 
-def maximum_expected_accuracy_alignment(posterior_matrix, shortest_ref_per_event, return_all=False):
+def maximum_expected_accuracy_alignment(posterior_matrix, shortest_ref_per_event, return_all=False,
+                                        sparse_posterior_matrix=None):
     """Computes the maximum expected accuracy alignment along a reference with given events and probabilities
 
     :param posterior_matrix: matrix of posterior probabilities with reference along x axis (col) and
@@ -26,34 +28,37 @@ def maximum_expected_accuracy_alignment(posterior_matrix, shortest_ref_per_event
     :param shortest_ref_per_event: list of the highest possible reference position for all future events at a
                                     given index
     :param return_all: option to return all the paths through the matrix
+    :param sparse_posterior_matrix: bool sparse matrix option
 
     :return best_path: a nested list of lists-> last_event = [ref_index, event_index, prob, sum_prob, [prev_event]]
     """
-    assert type(posterior_matrix) is list or type(posterior_matrix) is np.ndarray, \
-        "posterior matrix must be an array or list: type: {}".format(type(posterior_matrix))
-    assert type(shortest_ref_per_event) is list or type(shortest_ref_per_event) is np.ndarray, \
-        "shortest_ref_per_event must be an array or list: type: {}".format(type(shortest_ref_per_event))
-    # convert to sparse matrix
-    sparse_posterior_matrix = sparse.coo_matrix(posterior_matrix)
+    # optional convert to sparse matrix
+    if sparse_posterior_matrix:
+        sparse_posterior_matrix = posterior_matrix
+    else:
+        sparse_posterior_matrix = sparse.coo_matrix(posterior_matrix)
 
     forward_edges = list()
     # get the index of the largest probability for the first event
     smallest_event = min(sparse_posterior_matrix.row)
-    largest_start_prob = np.argmax(sparse_posterior_matrix.data[sparse_posterior_matrix.row == smallest_event])
+    first_events = sparse_posterior_matrix.row == smallest_event
+    num_first_event = sum(first_events)
+
+    largest_start_prob = np.argmax(sparse_posterior_matrix.data[first_events])
     # gather leading edges for all references above max
     for x in range(int(largest_start_prob)+1):
         event_data = [sparse_posterior_matrix.col[x], sparse_posterior_matrix.row[x],
                       sparse_posterior_matrix.data[x], sparse_posterior_matrix.data[x],  None]
         forward_edges.append(event_data)
     # number of values for first event
-    num_first_event = sum(sparse_posterior_matrix.row == smallest_event)
-    prev_event = sparse_posterior_matrix.row[sum(sparse_posterior_matrix.row == smallest_event)]
+    prev_event = sparse_posterior_matrix.row[num_first_event]
     new_edges = list()
     first_pass = True
     prev_ref_pos = 0
     fill_gap = False
     # go through rest of events
-    for i in range(num_first_event, len(sparse_posterior_matrix.row)):
+    num_events = len(sparse_posterior_matrix.row)
+    for i in range(num_first_event, num_events):
         event_index = sparse_posterior_matrix.row[i]
         posterior = sparse_posterior_matrix.data[i]
         ref_index = sparse_posterior_matrix.col[i]
@@ -131,54 +136,65 @@ def get_events_from_best_path_sparse(best_path):
     """
     events = []
 
-    def get_event_info(best_path):
-        """Get event information from maximum_expected_accuracy_alignment_sparse"""
+    while best_path[4]:
         ref_pos = best_path[0]
         event_pos = best_path[1]
         events.append([ref_pos, event_pos])
-        if best_path[4] is not None:
-            get_event_info(best_path[4])
-        else:
-            pass
-
-    get_event_info(best_path)
+        best_path = best_path[4]
 
     return events
 
 
-def get_mea_alignment_path(fast5_path):
+def get_mea_alignment_path(fast5_path, events=None):
     """Get the maximum expected alignment from a nanopore read fast5 file which has signalalign data
 
     :param fast5_path: path to fast5 file
+    :param events: directly pass events in via a numpy array
     """
-    assert os.path.isfile(fast5_path)
-    fileh = Fast5(fast5_path)
-    events = fileh.get_signalalign_events()
+    if events is None:
+        assert os.path.isfile(fast5_path)
+        fileh = Fast5(fast5_path)
+        events = fileh.get_signalalign_events()
     # sort events before or min/max args
-    events = np.sort(events, order=['event_index', 'reference_index'])
-    # gather some basic info
-    ref_start = events["reference_index"][0]
-    ref_end = events["reference_index"][-1]
+    ref_start = min(events["reference_index"])
+    ref_end = max(events["reference_index"])
+
+    events = np.sort(events, order=['event_index'], kind='mergesort')
     event_start = events["event_index"][0]
     event_end = events["event_index"][-1]
+
+    negative_strand = False
+    if events[0]["reference_index"] > events[-1]["reference_index"]:
+        negative_strand = True
     ref_length = ref_end - ref_start + 1
     event_length = event_end - event_start + 1
+
+    # print(event_length, ref_length)
     # initialize data structures
     event_matrix = [[0 for _ in range(ref_length)] for _ in range(event_length)]
     posterior_matrix = np.zeros([event_length, ref_length])
     shortest_ref_per_event = [np.inf for _ in range(event_length)]
+
+    max_shortest_ref = np.inf
+    # print(ref_start, ref_end)
     # go through events backward to make sure the shortest ref per event is calculated at the same time
     for i in range(1, len(events)+1):
         event = events[-i]
-        ref_indx = event["reference_index"] - ref_start
         event_indx = event["event_index"] - event_start
+        if negative_strand:
+            ref_indx = event["reference_index"] - ref_end
+            ref_indx *= -1
+        else:
+            ref_indx = event["reference_index"] - ref_start
+
         # using full event so we can use the same matrix to assemble the training data later
         posterior_matrix[event_indx][ref_indx] = event['posterior_probability']
         event_matrix[event_indx][ref_indx] = event
         if shortest_ref_per_event[event_indx] > ref_indx:
-            shortest_ref_per_event[event_indx] = min(min(shortest_ref_per_event), ref_indx)
+            shortest_ref_per_event[event_indx] = max(max_shortest_ref, ref_indx)
+            if max_shortest_ref < ref_indx:
+                max_shortest_ref = ref_indx
 
-    # mea algorithm
     mea_alignemnt = maximum_expected_accuracy_alignment(posterior_matrix, shortest_ref_per_event)
     # get raw index values from alignment data structure
     best_path = get_events_from_best_path_sparse(mea_alignemnt)
@@ -187,13 +203,17 @@ def get_mea_alignment_path(fast5_path):
 
 def main():
     """Main docstring"""
-    start = timer()
+    start1 = timer()
     fast5_path = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/canonical"
     files = list_dir(fast5_path, ext='fast5')
-    path = get_mea_alignment_path(files[0])
-    # print(path)
+    for file in files:
+        start = timer()
+        path = get_mea_alignment_path(file)
+        stop = timer()
+        print("Total Time = {} seconds".format(stop - start), file=sys.stderr)
+
     stop = timer()
-    print("Running Time = {} seconds".format(stop - start), file=sys.stderr)
+    print("Running Time = {} seconds".format(stop - start1), file=sys.stderr)
 
 
 if __name__ == "__main__":

@@ -163,7 +163,7 @@ def create_anchor_kmers(new_events, old_events):
     return new_events[start_index:end_index]
 
 
-def resegment_reads(fast5_path, params, speedy=False, overwrite=False, name="ReSegmentBasecall_00{}", rna=True):
+def resegment_reads(fast5_path, params, speedy=False, overwrite=False, name="ReSegmentBasecall_00{}"):
     """Re-segment and create anchor alignment from previously base-called fast5 file
     :param fast5_path: path to fast5 file
     :param params: event detection parameters
