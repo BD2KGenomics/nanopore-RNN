@@ -1,6 +1,6 @@
 
 
-all : python-recs nanonet signalalign marginAlign chiron nanotensor
+all : python-recs nanonet signalalign chiron nanotensor PyPore
 
 python-recs:
 	pip install -U setuptools
@@ -12,6 +12,13 @@ marginAlign:
 
 signalalign:
 	cd signalAlign && make && python setup.py install
+
+python_utils:
+	cd python_utils && python setup.py install
+
+
+PyPore:
+	cd PyPore && python setup.py install
 
 nanotensor:
 	python setup.py install

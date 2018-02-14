@@ -13,22 +13,21 @@ import os
 import collections
 import re
 import numpy as np
+from collections import defaultdict
 from timeit import default_timer as timer
-# from chiron.chiron_input import read_signal
-# from nanotensor.trim_signal import SignalLabel
 from PyPore.parsers import SpeedyStatSplit
 from nanotensor.fast5 import Fast5
 from nanonet.eventdetection.filters import minknow_event_detect
 from nanonet.segment import segment
 from nanonet.features import make_basecall_input_multi
-from py3helpers.utils import test_numpy_table, list_dir, create_fastq, merge_two_dicts, TimeStamp
+from py3helpers.utils import test_numpy_table, list_dir, create_fastq, merge_two_dicts, TimeStamp, change_np_field_type
 
 
 def create_speedy_event_table(signal, sampling_freq, start_time, min_width=5, max_width=80, min_gain_per_sample=0.008,
                               window_width=800):
     """Create new event table using SpeedyStatSplit Event detection
 
-    :param signal: list or array of signal for finding events
+    :param signal: list or array of signal in pA for finding events
     :param sampling_freq: sampling frequency of ADC in Hz
     :param start_time: start time from fast5 file (time in seconds * sampling frequency
     :param min_width: param for SpeedyStatSplit
@@ -67,7 +66,7 @@ def create_minknow_event_table(signal, sampling_freq, start_time,
                                window_lengths=(16, 40), thresholds=(8.0, 4.0), peak_height=1.0):
     """Create new event table using minknow_event_detect event detection
 
-    :param signal: list or array of signal for finding events
+    :param signal: list or array of signal in pA for finding events
     :param sampling_freq: sampling frequency of ADC in Hz
     :param start_time: start time from fast5 file (time in seconds * sampling frequency
     :param window_lengths: t-test windows for minknow_event_detect
@@ -76,8 +75,7 @@ def create_minknow_event_table(signal, sampling_freq, start_time,
     :return: Table of events without model state or move information
     """
     assert np.sign(start_time) == 1, "Start time has to be positive: {}".format(start_time)
-
-    events = minknow_event_detect(np.asarray(signal, dtype=np.float64), sample_rate=sampling_freq,
+    events = minknow_event_detect(np.asarray(signal, dtype=float), sample_rate=sampling_freq,
                                   get_peaks=False, window_lengths=window_lengths,
                                   thresholds=thresholds, peak_height=peak_height)
     num_events = len(events)
@@ -86,15 +84,13 @@ def create_minknow_event_table(signal, sampling_freq, start_time,
                                               ('model_state', 'S5'), ('move', '<i4'),
                                               ('raw_start', int), ('raw_length', int),
                                               ('p_model_state', float)])
-    # new_events = segment(events)
-    # print(new_events)
     for i, event in enumerate(events):
         event_table['start'][i] = event["start"] + (start_time / sampling_freq)
         event_table['length'][i] = event["length"]
         event_table['mean'][i] = event["mean"]
         event_table['stdv'][i] = event["stdv"]
-        event_table['raw_start'][i] = event["start"] * sampling_freq
-        event_table['raw_length'][i] = event["length"] * sampling_freq
+        event_table['raw_start'][i] = np.round(event["start"] * sampling_freq)
+        event_table['raw_length'][i] = np.round(event["length"] * sampling_freq)
 
     return event_table
 
@@ -110,56 +106,80 @@ def create_anchor_kmers(new_events, old_events):
     :return New event table
     """
     # remove all stays
+    # print(old_events[:6])
+
     moves = np.asarray(old_events['move'], dtype=bool)
     old_events = old_events[moves]
     test_numpy_table(new_events, req_fields=('start', 'length', 'mean', 'stdv', 'model_state', 'move', 'p_model_state'))
     test_numpy_table(old_events, req_fields=('start', 'length', 'mean', 'stdv', 'model_state', 'move', 'p_model_state'))
     # current kmer
+    print(old_events[:10])
+
+    print(new_events[0:10])
     old_indx = 0
     move = 0
     # indexes to trim events based on information from basecalled events table
     start_index = 0
     end_index = len(new_events)
+    most_events = 0
     for i, event in enumerate(new_events):
         # skip events that occur before labels
-        if old_events[0]["start"] < event["start"] + event["length"]:
-            # if first event or event start is after current old_event start.
-            if old_events[old_indx]["start"] < event["start"] + event["length"]:
-                # if new event moves into next old event
-                try:
-                    if event["start"] + event["length"] < old_events[old_indx + 1]["start"]:
-                        event["p_model_state"] = old_events[old_indx]["p_model_state"]
-                        event["move"] = move * old_events[old_indx]["move"]
-                        event["model_state"] = old_events[old_indx]["model_state"]
-                        move = 0
+        try:
+            if old_events[0]["start"] + old_events[0]["length"] < event["start"]:
+                kmers = defaultdict(int)
+                probs = defaultdict(int)
+                moves = defaultdict(int)
+                print(i, "old start", old_events[old_indx]["start"],  "new_end", event["start"] + event["length"])
+                # if first event or event start is after current old_event start.
+                while round(old_events[old_indx]["start"], 7) < round(event["start"] + event["length"], 7):
+                    print(old_events[old_indx]["start"] < event["start"] + event["length"])
+                    if round(old_events[old_indx+1]["start"], 7) > round(event["start"] + event["length"], 7):
+                        kmers[bytes.decode(old_events[old_indx]["model_state"])] += event["start"] + event["length"] - old_events[old_indx]["start"]
                     else:
-                        time_in_event1 = old_events[old_indx + 1]["start"] - event["start"]
-                        time_in_event2 = event["start"] + event["length"] - old_events[old_indx + 1]["start"]
-                        # overlapping event, assign kmer based on most time spent in the two old_events
-                        if time_in_event1 > time_in_event2:
-                            event["p_model_state"] = old_events[old_indx]["p_model_state"]
-                            event["model_state"] = old_events[old_indx]["model_state"]
-                            event["move"] = move * old_events[old_indx]["move"]
-                            old_indx += 1
-                            move = 1
-                        else:
-                            old_indx += 1
-                            move = 1
-                            event["p_model_state"] = old_events[old_indx]["p_model_state"]
-                            event["model_state"] = old_events[old_indx]["model_state"]
-                            event["move"] = move * old_events[old_indx]["move"]
-                            move = 0
-                except IndexError:
-                    # end of events
-                    end_index = i
-                    break
+                        kmers[bytes.decode(old_events[old_indx]["model_state"])] += old_events[old_indx+1]["start"] - old_events[old_indx]["start"]
+
+                    probs[bytes.decode(old_events[old_indx]["model_state"])] += old_events[old_indx]["p_model_state"]
+                    moves[bytes.decode(old_events[old_indx]["model_state"])] += old_events[old_indx]["move"]
+                    old_indx += 1
+                    print(old_indx, len(kmers), kmers, probs)
+
+                num_kmers = len(kmers.keys())
+
+                if most_events < num_kmers:
+                    most_events = num_kmers
+                    if num_kmers > 50:
+                        pass
+                        # raise SystemExit
+                time_in_event1 = event["start"] + event["length"] - old_events[old_indx]["start"]
+                time_in_event2 = old_events[old_indx + 1]["start"] - (event["start"]+event["length"])
+
+                if num_kmers == 1:
+                    kmer = list(kmers.keys())[0]
+                    prob = probs[kmer]
+                    move = moves[kmer]
+                elif num_kmers > 1:
+                    kmer = max(kmers.keys(), key=lambda k: kmers[k])
+                    prob = probs[kmer]
+                    move = moves[kmer]
+                elif num_kmers == 0:
+                    prob = probs[0]
+                    move = 0
+                    kmer = prev_kmer
+
+                event["p_model_state"] = prob
+                event["move"] = move
+                event["model_state"] = kmer
+
+                prev_kmer = kmer
             else:
-                event["p_model_state"] = old_events[old_indx]["p_model_state"]
-                event["model_state"] = old_events[old_indx - 1]["model_state"]
-                event["move"] = 0
-                move = 1
-        else:
-            start_index = i + 1
+                start_index = i + 1
+
+        except IndexError:
+            # end of events
+            print("most kmers", most_events)
+            end_index = i
+            break
+
     return new_events[start_index:end_index]
 
 
@@ -179,14 +199,14 @@ def resegment_reads(fast5_path, params, speedy=False, overwrite=False, name="ReS
     sampling_freq = f5fh.sample_rate
     start_time = f5fh.raw_attributes['start_time']
     # pick event detection algorithm
+    signal = f5fh.get_read(raw=True, scale=True)
+
     if speedy:
-        signal = f5fh.get_read(raw=True, scale=True)
         event_table = create_speedy_event_table(signal, sampling_freq, start_time, **params)
         params = merge_two_dicts(params, {"event_detection": "speedy_stat_split"})
 
     else:
-        raw_signal = f5fh.get_read(raw=True)
-        event_table = create_minknow_event_table(raw_signal, sampling_freq, start_time, **params)
+        event_table = create_minknow_event_table(signal, sampling_freq, start_time, **params)
         params = merge_two_dicts(params, {"event_detection": "minknow_event_detect"})
 
     keys = ["nanotensor version", "time_stamp"]
@@ -196,8 +216,10 @@ def resegment_reads(fast5_path, params, speedy=False, overwrite=False, name="ReS
     # gather previous event detection
     old_event_table = f5fh.get_basecall_data()
     if f5fh.is_read_rna():
+        old_event_table = change_np_field_type(old_event_table, 'start', float)
+        old_event_table = change_np_field_type(old_event_table, 'length', float)
         old_event_table["start"] = old_event_table["start"] / sampling_freq + (start_time / sampling_freq)
-        old_event_table["length"] = old_event_table["length"] / sampling_freq
+        old_event_table["length"] = old_event_table["length"] / float(sampling_freq)
 
     # set event table
     new_event_table = create_anchor_kmers(new_events=event_table, old_events=old_event_table)
@@ -234,57 +256,21 @@ def sequence_from_events(events):
 def main():
     """Main docstring"""
     start = timer()
-    # label = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/ch467_read35.label"
-    # signal = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/ch467_read35.signal"
-    # outdir = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/"
-    # fh = SignalLabel(signal, label)
-    # sequence = fh.read_signal(normalize=True)
-    # label_data = fh.read_label()
-    # rna_sample_rate = 3012.0
-    # params = dict(window_lengths=[3, 6], thresholds=[1.4, 1.1], peak_height=0.2)
 
-    # events = minknow_event_detect(np.asarray(sequence, dtype=float), sample_rate=rna_sample_rate, get_peaks=False,
-    #                               **params)
-    # print(events[20:40])
-    # fast5_path = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/canonical/miten_PC_20160820_FNFAD20259_MN17223_mux_scan_AMS_158_R9_WGA_Ecoli_08_20_16_83098_ch467_read35_strand.fast5"
-    #
-    # assert os.path.isfile(fast5_path), "fast5_path {} does not exist".format(fast5_path)
-    # f5fh = Fast5(fast5_path, read='r+')
-    # # speedy stat split parameters
-    # sampling_freq = f5fh.sample_rate
-    # signal = f5fh.get_read(raw=True, scale=True)
-    # # print(signal)
-    # # gener = make_basecall_input_multi([fast5_path], )
-    # # print(gener.__next__())
-    #
-    # start_time = f5fh.raw_attributes['start_time']
-    # # print(f5fh.raw_attributes)
-    # # print(start_time)
-    # minknow_params = dict(window_lengths=(5, 10), thresholds=(2.0, 1.1), peak_height=1.2)
-    # event_table = create_minknow_event_table(signal, sampling_freq, start_time,
-    #                                          **minknow_params)
-    #
-    # old_event_table = f5fh.get_basecall_data()
-    # new_event_table = create_anchor_kmers(new_events=event_table, old_events=old_event_table)
-    # f5fh.set_new_event_table("ReSegmentBasecall_000", new_event_table, f5fh.raw_attributes, overwrite=True)
+    dna_reads = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/canonical/"
+    rna_reads = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/rna_reads"
 
+    dna_minknow_params = dict(window_lengths=(5, 10), thresholds=(2.0, 1.1), peak_height=1.2)
+    dna_speedy_params = dict(min_width=5, max_width=80, min_gain_per_sample=0.008, window_width=800)
+    rna_minknow_params = dict(window_lengths=(5, 10), thresholds=(2.0, 1.1), peak_height=1.2)
+    rna_speedy_params = dict(min_width=5, max_width=10, min_gain_per_sample=0.008, window_width=800)
 
-
-
-    fast5_dir = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/canonical/"
-    fast5_dir = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/rna_reads"
-
-    minknow_params = dict(window_lengths=(5, 10), thresholds=(2.0, 1.1), peak_height=1.2)
-    speedy_params = dict(min_width=5, max_width=80, min_gain_per_sample=0.008, window_width=800)
-
-    fast5_files = list_dir(fast5_dir, ext='fast5')
-    for fast5_path in fast5_files:
+    rna_files = list_dir(rna_reads, ext='fast5')
+    dna_files = list_dir(dna_reads, ext='fast5')
+    for fast5_path in rna_files:
+        resegment_reads(fast5_path, rna_speedy_params, speedy=True, overwrite=True)
         print(fast5_path)
-        resegment_reads(fast5_path, minknow_params, speedy=False, overwrite=True)
-        # break
-    # create_speedy_event_table(signal=signal, sampling_freq=sampling_freq, start_time=start_time,
-    #                           min_width=5, max_width=80, min_gain_per_sample=0.008,
-    #                           window_width=800)
+        break
     stop = timer()
     print("Running Time = {} seconds".format(stop - start), file=sys.stderr)
 
