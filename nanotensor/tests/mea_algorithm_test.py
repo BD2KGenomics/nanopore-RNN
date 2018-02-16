@@ -20,11 +20,6 @@ from nanotensor.mea_algorithm import maximum_expected_accuracy_alignment, get_ev
 class Mea(unittest.TestCase):
     """Test the functions in mea_algorithm.py"""
 
-    @classmethod
-    def setUpClass(cls):
-        super(Mea, cls).setUpClass()
-        cls.something = "this"
-
     def test_maximum_expected_accuracy_alignment(self):
         """Test maximum_expected_accuracy_alignment function"""
         # ref x event (opposite of how we have been thinking about the chart)

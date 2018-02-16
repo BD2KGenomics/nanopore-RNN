@@ -21,7 +21,8 @@ import h5py
 import numpy as np
 import numpy.lib.recfunctions as nprf
 from copy import deepcopy
-from py3helpers.utils import test_numpy_table, check_fastq
+from py3helpers.utils import test_numpy_table
+from py3helpers.seq_tools import check_fastq_line
 
 
 def short_names(fname):
@@ -350,7 +351,7 @@ class Fast5(h5py.File):
             else:
                 path = self.check_path(self.__default_resegment_basecall__, latest=True)
             reads = self[path]
-            events = reads['BaseCalled_template/Events']
+            events = reads['BaseCalled_emplate/Events']
         except KeyError:
             raise KeyError('Read does not contain required fields: {}'.format(path))
         return np.asarray(events)
@@ -454,7 +455,7 @@ class Fast5(h5py.File):
         :param data: fastq file
         :param section: name of basecall analysis default (template)
         """
-        check_fastq(data)
+        check_fastq_line(data)
         path = self._join_path(self.__base_analysis__, path, "BaseCalled_{}".format(section))
         path = self.check_path(path, latest=True)
         self._add_string_dataset(data, self._join_path(path, 'Fastq'))

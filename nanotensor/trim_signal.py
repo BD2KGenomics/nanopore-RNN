@@ -19,48 +19,12 @@ from nanotensor.utils import list_dir
 from Bio import pairwise2
 from Bio.pairwise2 import format_alignment
 from collections import defaultdict
+from py3helpers.mappers import read_fasta
 
 raw_labels = collections.namedtuple('raw_labels', ['start', 'length', 'base'])
 
 ALPHABET = ['A', 'C', 'G', 'T', 'E', 'N']
 
-
-def readFasta(fasta):
-    '''
-    Taken from David Bernick but modified slightly to fit my purposes.
-
-    using filename given in init, returns each included FastA record
-    as 2 strings - header and sequence.
-    whitespace is removed, no adjustment is made to sequence contents.
-    The initial '>' is removed from the header.
-    '''
-    # initialize return containers
-    sequence = ''
-    with open(fasta, 'r+') as fasta_f:
-        # skip to first fasta header
-        line = fasta_f.readline()
-        while not line.startswith('>') :
-            line = fasta_f.readline()
-        header = line[1:].rstrip()
-
-        # header is saved, get the rest of the sequence
-        # up until the next header is found
-        # then yield the results and wait for the next call.
-        # next call will resume at the yield point
-        # which is where we have the next header
-        for line in fasta_f:
-            if line.startswith ('>'):
-                yield header, sequence
-                # headerList.append(header)
-                # sequenceList.append(sequence)
-                header = line[1:].rstrip()
-                sequence = ''
-            else:
-                sequence += ''.join(line.rstrip().split()).upper()
-        # final header and sequence will be seen with an end of file
-        # with clause will terminate, so we do the final yield of the data
-
-    yield header, sequence
 
 
 def index2base(read):
@@ -162,6 +126,7 @@ class SignalLabel:
 
     def read_signal(self, normalize):
         return read_signal(self.signal_file, normalize=normalize)
+
 
 def read_label(file_path, skip_start=10, window_n=0, bases=False):
     """Method taken from chiron_input.py https://github.com/haotianteng/chiron"""
@@ -352,7 +317,7 @@ def print_summary_stats_for_base(base_counts_list, char='E'):
 def complement_fasta(fasta, outpath):
     """Write fasta file with complement sequence"""
     with open(outpath, 'w+') as out_fa:
-        for header, sequence in readFasta(fasta):
+        for header, sequence in read_fasta(fasta):
             out_fa.write('>'+header+'\n')
             out_fa.write(sequence[::-1]+'\n')
 
