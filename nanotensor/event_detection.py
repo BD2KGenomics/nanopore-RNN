@@ -21,7 +21,7 @@ from nanonet.eventdetection.filters import minknow_event_detect
 from nanonet.segment import segment
 from nanonet.features import make_basecall_input_multi
 from py3helpers.utils import test_numpy_table, list_dir, merge_two_dicts, TimeStamp, change_np_field_type, merge_dicts
-from py3helpers.seq_tools import create_fastq_line, check_fastq_line
+from py3helpers.seq_tools import create_fastq_line, check_fastq_line, ReverseComplement, pairwise_alignment_accuracy
 
 import traceback
 
@@ -124,6 +124,7 @@ def create_anchor_kmers(new_events, old_events):
     # tracking overlaped events
     selected_overlap = False
     check_overlap = False
+    homopolymer = False
     # keep track of events passed
     last_left_over = 0
     for i, event in enumerate(new_events):
@@ -140,12 +141,25 @@ def create_anchor_kmers(new_events, old_events):
             # if first event or event start is after current old_event start.
             if old_indx != num_old_events:
                 prev_kmer = str()
+                num_loops = 0
+                # print(round(old_events[old_indx]["start"], 7), old_events[old_indx]["length"], current_event_end, round(old_events[old_indx]["start"], 7) < current_event_end)
                 while round(old_events[old_indx]["start"], 7) < current_event_end and old_indx != num_old_events:
-                    old_event_end = round(old_events[old_indx]["start"] + old_events[old_indx]["length"], 7)
+                    # print("INSIDE LOOP", round(old_events[old_indx]["start"], 7), old_events[old_indx]["length"], current_event_end, round(old_events[old_indx]["start"], 7) < current_event_end)
+                    # deal with bad event files and final event
+                    if old_indx == num_old_events-1:
+                        old_event_end = round(old_events[old_indx]["start"] + old_events[old_indx]["length"], 7)
+                    else:
+                        old_event_end = round(old_events[old_indx+1]["start"], 7)
                     old_event_start = round(old_events[old_indx]["start"], 7)
                     old_kmer = bytes.decode(old_events[old_indx]["model_state"])
                     # homopolymers or stays should be tracked together
                     if old_kmer == prev_kmer:
+                        if len(set(old_kmer)) == 1:
+                            if not homopolymer and selected_overlap and num_loops <= 1:
+                                moves[index] = 0
+                            homopolymer = True
+                        else:
+                            homopolymer = False
                         index = kmers.index(old_kmer)
                         probs[index] = max(probs[index], old_events[old_indx]["p_model_state"])
                         moves[index] += old_events[old_indx]["move"]
@@ -156,6 +170,7 @@ def create_anchor_kmers(new_events, old_events):
                         probs.append(old_events[old_indx]["p_model_state"])
                         moves.append(old_events[old_indx]["move"])
                         time.append(0)
+                        homopolymer = False
                     prev_kmer = old_kmer
                     # if old event passes through current event calculate correct time in current event
                     # deal with old events ending after the new event end
@@ -169,8 +184,10 @@ def create_anchor_kmers(new_events, old_events):
                             time[index] += old_event_end - current_event_start
                         else:
                             time[index] += old_event_end - old_event_start
+                        # if old_event_end != current_event_end:
                         old_indx += 1
                         new_check_overlap = False
+                    num_loops += 1
                     # break loop at end of old events
                     if old_indx == num_old_events:
                         break
@@ -185,7 +202,10 @@ def create_anchor_kmers(new_events, old_events):
                 # select on time in new event only
                 best_index = time.index(max(time))
                 # if there are several old events in a new event, track how many
-                left_over = sum(moves[best_index+1:])
+                if new_check_overlap:
+                    left_over = sum(moves[best_index+1:-1])
+                else:
+                    left_over = sum(moves[best_index+1:])
             else:
                 # end of possible alignments
                 end_index = i
@@ -193,12 +213,17 @@ def create_anchor_kmers(new_events, old_events):
             # if previous old event overlapped into current new event
             # check if old event is going to be assigned twice
             if selected_overlap and best_index == 0 and check_overlap:
-                move = 0
+                if homopolymer:
+                    move = moves[best_index]
+                else:
+                    move = 0
+            elif selected_overlap and best_index != 0 and check_overlap:
+                move = min(5, moves[best_index] + last_left_over)
             else:
                 move = min(5, moves[best_index]+sum(moves[:best_index])+last_left_over)
                 if most_moves < moves[best_index]+sum(moves[:best_index])+last_left_over:
                     most_moves = moves[best_index]+sum(moves[:best_index])+last_left_over
-
+            # print(kmers, moves, left_over, moves[best_index], sum(moves[:best_index]), last_left_over, move)
             # if new overlap
             if new_check_overlap:
                 # new overlapped event will be tracked on next new_event so we drop a left_over count
@@ -211,6 +236,8 @@ def create_anchor_kmers(new_events, old_events):
                     selected_overlap = True
                 else:
                     selected_overlap = False
+            else:
+                selected_overlap = False
 
             kmer = kmers[best_index]
             prob = probs[best_index]
@@ -221,14 +248,31 @@ def create_anchor_kmers(new_events, old_events):
             check_overlap = new_check_overlap
             last_left_over = left_over
             new_check_overlap = False
+            homopolymer = False
         else:
             # skip event since the
             start_index = i + 1
-    print(most_moves)
+    # print(most_moves)
     return new_events[start_index:end_index]
 
 
-def resegment_reads(fast5_path, params, speedy=False, overwrite=False, name="ReSegmentBasecall_00{}"):
+def check_event_table_time(event_table):
+    """Check if event table has correct math for start and length timing for each event
+
+    :param event_table: event table with "start" and "length" columns
+    """
+    test_numpy_table(event_table, req_fields=('start', 'length'))
+
+    prev_end = event_table[0]["start"] + event_table[0]["length"]
+    for event in event_table[1:]:
+        if prev_end != event["start"]:
+            return False
+        prev_end = event["start"]+event["length"]
+
+    return True
+
+
+def resegment_reads(fast5_path, params, speedy=False, overwrite=False):
     """Re-segment and create anchor alignment from previously base-called fast5 file
     :param fast5_path: path to fast5 file
     :param params: event detection parameters
@@ -238,9 +282,12 @@ def resegment_reads(fast5_path, params, speedy=False, overwrite=False, name="ReS
     :return True when completed
     """
     assert os.path.isfile(fast5_path), "File does not exist: {}".format(fast5_path)
-    assert name.endswith("{}"), "Name must end in '{}'"
+    name = "ReSegmentBasecall_00{}"
     # create Fast5 object
     f5fh = Fast5(fast5_path, read='r+')
+    # gather previous event detection
+    old_event_table = f5fh.get_basecall_data()
+    # assert check_event_table_time(old_event_table), "Old event is not consistent"
     read_id = bytes.decode(f5fh.raw_attributes['read_id'])
     sampling_freq = f5fh.sample_rate
     start_time = f5fh.raw_attributes['start_time']
@@ -250,7 +297,6 @@ def resegment_reads(fast5_path, params, speedy=False, overwrite=False, name="ReS
     if speedy:
         event_table = create_speedy_event_table(signal, sampling_freq, start_time, **params)
         params = merge_two_dicts(params, {"event_detection": "speedy_stat_split"})
-
     else:
         event_table = create_minknow_event_table(signal, sampling_freq, start_time, **params)
         params = merge_two_dicts(params, {"event_detection": "minknow_event_detect"})
@@ -258,8 +304,6 @@ def resegment_reads(fast5_path, params, speedy=False, overwrite=False, name="ReS
     keys = ["nanotensor version", "time_stamp"]
     values = ["0.2.0", TimeStamp().posix_date()]
     attributes = merge_dicts([params, dict(zip(keys, values)), f5fh.raw_attributes])
-    # gather previous event detection
-    old_event_table = f5fh.get_basecall_data()
     if f5fh.is_read_rna():
         old_event_table = index_to_time_rna_basecall(old_event_table, sampling_freq=sampling_freq, start_time=start_time)
     # set event table
@@ -267,6 +311,9 @@ def resegment_reads(fast5_path, params, speedy=False, overwrite=False, name="ReS
     f5fh.set_new_event_table(name, new_event_table, attributes, overwrite=overwrite)
     # gather new sequence
     sequence = sequence_from_events(new_event_table)
+    if f5fh.is_read_rna():
+        sequence = ReverseComplement().reverse(sequence)
+        sequence = sequence.replace("T", "U")
     quality_scores = '!'*len(sequence)
     fastq = create_fastq_line(read_id+" :", sequence, quality_scores)
     # set fastq
@@ -289,7 +336,7 @@ def index_to_time_rna_basecall(basecall_events, sampling_freq=0, start_time=0):
 
     event_table = change_np_field_type(basecall_events, 'start', float)
     event_table = change_np_field_type(event_table, 'length', float)
-    event_table["start"] = event_table["start"] / sampling_freq + (start_time / sampling_freq)
+    event_table["start"] = (event_table["start"] / sampling_freq) + (start_time / sampling_freq)
     event_table["length"] = event_table["length"] / float(sampling_freq)
     return event_table
 
@@ -314,6 +361,24 @@ def sequence_from_events(events):
     return sequence
 
 
+def get_resegment_accuracy(fast5handle, section="template"):
+    """Get accuracy comparison between original sequence and resegmented generated sequence
+
+    :param fast5handle: Fast5 object with re-segemented read
+    """
+    assert isinstance(fast5handle, Fast5), "fast5handle needs to be a Fast5 instance"
+    # get fastqs
+    resegment_fastq = fast5handle.get_fastq(analysis="ReSegmentBasecall", section=section)
+    original_fastq = bytes.decode(fast5handle.get_fastq(analysis="Basecall_1D", section=section))[:-1]
+    # make sure the underlying assumption that we can split on newline is ok
+    check_fastq_line(resegment_fastq)
+    check_fastq_line(original_fastq)
+    # get sequence
+    resegment_seq = resegment_fastq.split('\n')[1]
+    original_seq = original_fastq.split('\n')[1]
+    return pairwise_alignment_accuracy(original_seq, resegment_seq, soft_clip=True)
+
+
 def main():
     """Main docstring"""
     start = timer()
@@ -336,17 +401,26 @@ def main():
     dna_files = list_dir(dna_reads, ext='fast5')
     print("MAX RNA SKIPS: Speedy")
     for fast5_path in rna_files:
-        resegment_reads(fast5_path, rna_speedy_params, speedy=True, overwrite=True)
+        print(fast5_path)
+        f5fh = resegment_reads(fast5_path, rna_speedy_params, speedy=True, overwrite=True)
+        print(get_resegment_accuracy(f5fh))
+        # f5fh = resegment_reads(fast5_path, rna_minknow_params, speedy=False, overwrite=True)
+        # print(test_resegment_accuracy(f5fh))
+
     print("MAX RNA SKIPS: Minknow")
     for fast5_path in rna_files:
-        resegment_reads(fast5_path, rna_minknow_params, speedy=False, overwrite=True)
+        f5fh = resegment_reads(fast5_path, rna_minknow_params, speedy=False, overwrite=True)
+        print(get_resegment_accuracy(f5fh))
+
     print("MAX DNA SKIPS: speedy")
     for fast5_path in dna_files:
-        resegment_reads(fast5_path, dna_speedy_params, speedy=True, overwrite=True)
-
+            print(fast5_path)
+            f5fh = resegment_reads(fast5_path, dna_speedy_params, speedy=True, overwrite=True)
+            print(get_resegment_accuracy(f5fh))
     print("MAX DNA SKIPS:Minknow")
     for fast5_path in dna_files:
-        resegment_reads(fast5_path, dna_minknow_params, speedy=False, overwrite=True)
+        f5fh = resegment_reads(fast5_path, dna_minknow_params, speedy=False, overwrite=True)
+        print(get_resegment_accuracy(f5fh))
 
         # print(fast5_path)
     stop = timer()

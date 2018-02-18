@@ -24,15 +24,13 @@ class EventDetectTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         super(EventDetectTests, cls).setUpClass()
-        cls.HOME = '/'.join(os.path.abspath(__file__).split("/")[:-3])
+        cls.HOME = '/'.join(os.path.abspath(__file__).split("/")[:-1])
         cls.dna_file = os.path.join(cls.HOME,
                                     "test_files/minion-reads/canonical/miten_PC_20160820_FNFAD20259_MN17223_sequencing_run_AMS_158_R9_WGA_Ecoli_08_20_16_43623_ch100_read280_strand.fast5")
         cls.rna_file = os.path.join(cls.HOME,
                                     "test_files/minion-reads/rna_reads/DEAMERNANOPORE_20170922_FAH26525_MN16450_sequencing_run_MA_821_R94_NA12878_mRNA_09_22_17_67136_read_61_ch_151_strand.fast5")
-
         dna_handle = Fast5(cls.dna_file, 'r+')
         rna_handle = Fast5(cls.rna_file, 'r+')
-
         cls.dna_handle = dna_handle.create_copy("test_dna.fast5")
         cls.rna_handle = rna_handle.create_copy("test_rna.fast5")
 
@@ -104,15 +102,15 @@ class EventDetectTests(unittest.TestCase):
     def test_create_anchor_kmers1(self):
         """Test create anchor kmers method with direct matching"""
         new = np.empty(3, dtype=[('start', float), ('length', float),
-                                                  ('mean', float), ('stdv', float),
-                                                  ('model_state', 'S5'), ('move', '<i4'),
-                                                  ('raw_start', int), ('raw_length', int),
-                                                  ('p_model_state', float)])
+                                 ('mean', float), ('stdv', float),
+                                 ('model_state', 'S5'), ('move', '<i4'),
+                                 ('raw_start', int), ('raw_length', int),
+                                 ('p_model_state', float)])
         old = np.empty(3, dtype=[('start', float), ('length', float),
-                                                ('mean', float), ('stdv', float),
-                                                ('model_state', 'S5'), ('move', '<i4'),
-                                                ('raw_start', int), ('raw_length', int),
-                                                ('p_model_state', float)])
+                                 ('mean', float), ('stdv', float),
+                                 ('model_state', 'S5'), ('move', '<i4'),
+                                 ('raw_start', int), ('raw_length', int),
+                                 ('p_model_state', float)])
         old["start"] = [0, 1, 2]
         old["length"] = [1, 1, 1]
         old["model_state"] = ["AAAAA", "AAAAT", "AAATT"]
@@ -246,7 +244,8 @@ class EventDetectTests(unittest.TestCase):
 
         realignment = create_anchor_kmers(new_events=new, old_events=old)
         self.assertSequenceEqual(realignment['p_model_state'].tolist(), [0.4, 0.5, 0.5, 0.5, 0.5])
-        self.assertSequenceEqual(realignment['model_state'].tolist(), [b"AATAA", b"AATAA", b"AATAA", b"AATAA", b"AATAA"])
+        self.assertSequenceEqual(realignment['model_state'].tolist(),
+                                 [b"AATAA", b"AATAA", b"AATAA", b"AATAA", b"AATAA"])
         self.assertSequenceEqual(realignment['move'].tolist(), [4, 0, 0, 0, 0])
         self.assertSequenceEqual(realignment['start'].tolist(), new['start'].tolist())
         self.assertSequenceEqual(realignment['length'].tolist(), new['length'].tolist())
@@ -290,10 +289,10 @@ class EventDetectTests(unittest.TestCase):
                                  ('raw_start', int), ('raw_length', int),
                                  ('p_model_state', float)])
         old = np.empty(12, dtype=[('start', float), ('length', float),
-                                 ('mean', float), ('stdv', float),
-                                 ('model_state', 'S5'), ('move', '<i4'),
-                                 ('raw_start', int), ('raw_length', int),
-                                 ('p_model_state', float)])
+                                  ('mean', float), ('stdv', float),
+                                  ('model_state', 'S5'), ('move', '<i4'),
+                                  ('raw_start', int), ('raw_length', int),
+                                  ('p_model_state', float)])
 
         old["start"] = [0, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2]
         old["length"] = [1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
@@ -320,21 +319,96 @@ class EventDetectTests(unittest.TestCase):
             create_anchor_kmers(new_events=np.array(range(10)), old_events=old)
             create_anchor_kmers(new_events=mean_table, old_events=old)
 
+    def test_create_anchor_kmers8(self):
+        """Test create anchor kmers method for old event spanning across a new event"""
+
+        new = np.empty(3, dtype=[('start', float), ('length', float),
+                                 ('mean', float), ('stdv', float),
+                                 ('model_state', 'S5'), ('move', '<i4'),
+                                 ('raw_start', int), ('raw_length', int),
+                                 ('p_model_state', float)])
+        old = np.empty(3, dtype=[('start', float), ('length', float),
+                                 ('mean', float), ('stdv', float),
+                                 ('model_state', 'S5'), ('move', '<i4'),
+                                 ('raw_start', int), ('raw_length', int),
+                                 ('p_model_state', float)])
+
+        old["start"] = [0, 1, 2]
+        old["length"] = [1, 1, 1]
+        old["model_state"] = ["AAAAA", "AAAAA", "AAAAT"]
+        old["move"] = [0, 1, 1]
+        old["p_model_state"] = [0.1, 0.1, 0.1]
+
+        new["start"] = [0, 1.1, 1.9]
+        new["length"] = [1.1, 0.8, 1.1]
+
+        realignment = create_anchor_kmers(new_events=new, old_events=old)
+        # print(realignment)
+        self.assertSequenceEqual(realignment['p_model_state'].tolist(), [0.1, 0.1, 0.1])
+        self.assertSequenceEqual(realignment['model_state'].tolist(), [b"AAAAA", b"AAAAA", b"AAAAT"])
+        self.assertSequenceEqual(realignment['move'].tolist(), [1, 0, 1])
+        self.assertSequenceEqual(realignment['start'].tolist(), new['start'].tolist())
+        self.assertSequenceEqual(realignment['length'].tolist(), new['length'].tolist())
+
+        with self.assertRaises(TypeError):
+            create_anchor_kmers(new_events=1, old_events=old)
+        with self.assertRaises(KeyError):
+            mean_table = new["mean"]
+            create_anchor_kmers(new_events=np.array(range(10)), old_events=old)
+            create_anchor_kmers(new_events=mean_table, old_events=old)
+
+    def test_create_anchor_kmers9(self):
+        """Test create anchor kmers method for homopolymers"""
+
+        new = np.empty(3, dtype=[('start', float), ('length', float),
+                                 ('mean', float), ('stdv', float),
+                                 ('model_state', 'S5'), ('move', '<i4'),
+                                 ('raw_start', int), ('raw_length', int),
+                                 ('p_model_state', float)])
+        old = np.empty(5, dtype=[('start', float), ('length', float),
+                                 ('mean', float), ('stdv', float),
+                                 ('model_state', 'S5'), ('move', '<i4'),
+                                 ('raw_start', int), ('raw_length', int),
+                                 ('p_model_state', float)])
+
+        old["start"] = [0, 1, 2, 3, 4]
+        old["length"] = [1, 1, 1, 1, 1]
+        old["model_state"] = ["AAAAA", "AAAAA", "AAAAA", "AAAAA", "AAAAA"]
+        old["move"] = [0, 1, 1, 0, 1]
+        old["p_model_state"] = [0.1, 0.1, 0.1, 0.1, 0.1]
+
+        new["start"] = [0, 1.1, 4.5]
+        new["length"] = [1.1, 3.4, 1]
+
+        realignment = create_anchor_kmers(new_events=new, old_events=old)
+        # print(realignment)
+        self.assertSequenceEqual(realignment['p_model_state'].tolist(), [0.1, 0.1, 0.1])
+        self.assertSequenceEqual(realignment['model_state'].tolist(), [b"AAAAA", b"AAAAA", b"AAAAA"])
+        self.assertSequenceEqual(realignment['move'].tolist(), [1, 2, 0])
+        self.assertSequenceEqual(realignment['start'].tolist(), new['start'].tolist())
+        self.assertSequenceEqual(realignment['length'].tolist(), new['length'].tolist())
+
+        with self.assertRaises(TypeError):
+            create_anchor_kmers(new_events=1, old_events=old)
+        with self.assertRaises(KeyError):
+            mean_table = new["mean"]
+            create_anchor_kmers(new_events=np.array(range(10)), old_events=old)
+            create_anchor_kmers(new_events=mean_table, old_events=old)
+
     def test_resegment_reads(self):
         """Test resegment_reads method"""
         minknow_params = dict(window_lengths=(5, 10), thresholds=(2.0, 1.1), peak_height=1.2)
         speedy_params = dict(min_width=5, max_width=80, min_gain_per_sample=0.008, window_width=800)
         with self.assertRaises(AssertionError):
             resegment_reads("fakepath/path", speedy_params, speedy=True, overwrite=True)
-            resegment_reads(self.dna_file, speedy_params, speedy=True, overwrite=False, name="asdfasdf")
-
         with self.assertRaises(TypeError):
             resegment_reads(self.dna_file, speedy_params, speedy=False, overwrite=True)
 
         for fast5_file in [self.dna_file, self.rna_file]:
-            resegment_reads(fast5_file, minknow_params, speedy=False, overwrite=True, name="FakeAnalysis_00{}")
-            fasthandle = resegment_reads(fast5_file, speedy_params, speedy=True, overwrite=True, name="FakeAnalysis_00{}")
-            fasthandle.delete("Analyses/FakeAnalysis_000")
+            resegment_reads(fast5_file, minknow_params, speedy=False, overwrite=True)
+            fasthandle = resegment_reads(fast5_file, speedy_params, speedy=True, overwrite=True)
+            # TODO make sure this is working with test files
+            fasthandle.delete("Analyses/ReSegmentBasecall_000")
 
     def test_sequence_from_events(self):
         """Test sequence from events method"""
@@ -372,15 +446,31 @@ class EventDetectTests(unittest.TestCase):
             index_to_time_rna_basecall(event_table, start_time=start_time)
             index_to_time_rna_basecall(event_table, sampling_freq=sampling_freq)
             index_to_time_rna_basecall("Numpy", sampling_freq=sampling_freq, start_time=start_time)
-            index_to_time_rna_basecall(np.array([1,2,3]), sampling_freq=sampling_freq, start_time=start_time)
+            index_to_time_rna_basecall(np.array([1, 2, 3]), sampling_freq=sampling_freq, start_time=start_time)
             event_table = self.dna_handle.get_basecall_data()
             # make sure it can determine differences between dna and rna basecalled tables
             index_to_time_rna_basecall(event_table, sampling_freq=sampling_freq, start_time=start_time)
 
+    def test_check_event_table_time(self):
+        """test check_event_table_time"""
+        events = np.empty(3, dtype=[('start', float), ('length', float)])
+        events["start"] = [0, 1, 2]
+        events["length"] = [1, 1, 1]
+        self.assertTrue(check_event_table_time(events))
+        events = np.empty(3, dtype=[('start', float), ('length', float)])
+        events["start"] = [0, 2, 2]
+        events["length"] = [1, 1, 1]
+        self.assertFalse(check_event_table_time(events))
+
+    def test_get_resegment_accuracy(self):
+        """Test get_resegment_accuracy"""
+        minknow_params = dict(window_lengths=(5, 10), thresholds=(2.0, 1.1), peak_height=1.2)
+        f5fh = resegment_reads("test_rna.fast5", minknow_params, speedy=False, overwrite=True)
+        self.assertAlmostEqual(get_resegment_accuracy(f5fh), 1.0)
+
     @classmethod
     def tearDownClass(cls):
         """Remove test fast5 file"""
-        # TODO make sure these get deleted correctly
         os.remove("test_rna.fast5")
         os.remove("test_dna.fast5")
 
