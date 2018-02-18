@@ -14,7 +14,7 @@ import numpy as np
 import unittest
 from collections import defaultdict
 from scipy import sparse
-from nanotensor.mea_algorithm import maximum_expected_accuracy_alignment, get_events_from_best_path_sparse
+from nanotensor.mea_algorithm import *
 
 
 class Mea(unittest.TestCase):
@@ -31,7 +31,7 @@ class Mea(unittest.TestCase):
                             ]
 
         # correct input
-        shortest_ref_per_event = [0, 0, 1, 3, 3]
+        shortest_ref_per_event = [0, 0, 0, 3, 3]
         forward_edges = maximum_expected_accuracy_alignment(posterior_matrix, shortest_ref_per_event, return_all=True)
         # trim unnecessary edges
         self.assertEqual(3, len(forward_edges))
@@ -39,21 +39,34 @@ class Mea(unittest.TestCase):
         self.assertAlmostEqual(self.sum_forward_edge_accuracy(forward_edges[0]), forward_edges[0][3])
         self.assertAlmostEqual(0.6, forward_edges[0][3])
         # 0.2->0.5->0.1->0.4->0.2 = 1.1 (Don't count last horizontal move and move from 0.5 to 0.1)
-        self.assertAlmostEqual(self.sum_forward_edge_accuracy(forward_edges[1])-0.2-0.1, forward_edges[1][3])
+        self.assertAlmostEqual(self.sum_forward_edge_accuracy(forward_edges[1]) - 0.2 - 0.1, forward_edges[1][3])
         self.assertAlmostEqual(1.1, forward_edges[1][3])
         # 0.2->0.5->0.1->0.4->0.5 = 1.6 (Don't count horizontal move from 0.5 to 0.1)
-        self.assertAlmostEqual(self.sum_forward_edge_accuracy(forward_edges[2])-0.1, forward_edges[2][3])
+        self.assertAlmostEqual(self.sum_forward_edge_accuracy(forward_edges[2]) - 0.1, forward_edges[2][3])
         self.assertAlmostEqual(1.6, forward_edges[2][3])
         # test if mae returns most probable edge
         most_probable_edge = maximum_expected_accuracy_alignment(posterior_matrix, shortest_ref_per_event)
         self.assertEqual(forward_edges[2], most_probable_edge)
+
+        # test passing through a sparse matrix
+        forward_edges = maximum_expected_accuracy_alignment(sparse.coo_matrix(posterior_matrix), shortest_ref_per_event,
+                                                            sparse_posterior_matrix=True,
+                                                            return_all=True)
+        self.assertEqual(3, len(forward_edges))
+        # 0.3->0.3->0.0->0.0->0.0 = 0.6 Keep horizontal moves through gaps
+        self.assertAlmostEqual(self.sum_forward_edge_accuracy(forward_edges[0]), forward_edges[0][3])
+        self.assertAlmostEqual(0.6, forward_edges[0][3])
+        # 0.2->0.5->0.1->0.4->0.2 = 1.1 (Don't count last horizontal move and move from 0.5 to 0.1)
+        self.assertAlmostEqual(self.sum_forward_edge_accuracy(forward_edges[1]) - 0.2 - 0.1, forward_edges[1][3])
+        self.assertAlmostEqual(1.1, forward_edges[1][3])
+        # 0.2->0.5->0.1->0.4->0.5 = 1.6 (Don't count horizontal move from 0.5 to 0.1)
+        self.assertAlmostEqual(self.sum_forward_edge_accuracy(forward_edges[2]) - 0.1, forward_edges[2][3])
+        self.assertAlmostEqual(1.6, forward_edges[2][3])
+
         # incorrect min ref lengths
         shortest_ref_per_event = [0, 1, 1, 1, 1]
         forward_edges = maximum_expected_accuracy_alignment(posterior_matrix, shortest_ref_per_event, return_all=True)
         self.assertEqual(5, len(forward_edges))
-        # test data type inputs
-        self.assertRaises(AssertionError, maximum_expected_accuracy_alignment, posterior_matrix, "string")
-        self.assertRaises(AssertionError, maximum_expected_accuracy_alignment, "string", shortest_ref_per_event)
 
     @staticmethod
     def sum_forward_edge_accuracy(forward_edge):
@@ -123,7 +136,8 @@ class Mea(unittest.TestCase):
 
         Computes a very slow but thorough search through the matrix
 
-        :param posterior_matrix: matrix of posterior probabilities with reference along x axis and events along y.
+        :param posterior_matrix: matrix of posterior probabilities with reference along x axis and events along y
+        :param return_all: return all forward edges
         """
         ref_len = len(posterior_matrix[0])
         events_len = len(posterior_matrix)
@@ -153,7 +167,7 @@ class Mea(unittest.TestCase):
                         if forward_edge[0] < ref_index:
                             # track which probabilities with prev edge
                             inxs.append(j)
-                            probs.append(posterior+forward_edge[3])
+                            probs.append(posterior + forward_edge[3])
                             # if needed, keep edges aligned to ref positions previous than the current ref position
                         elif forward_edge[0] == ref_index:
                             # stay at reference position
@@ -182,6 +196,91 @@ class Mea(unittest.TestCase):
                     best_forward_edge = x
             return best_forward_edge
 
+    # def test_get_mea_alignment_path(self):
+    #     """test get_mea_alignment_path"""
+    #     # fake events
+    #     new = np.empty(3, dtype=[('reference_index', int), ('event_index', int),
+    #                              ('posterior_probability', float)])
+    #     new["reference_index"] = [1, 2, 3]
+    #     new["posterior_probability"] = [0.1, 0.1, 0.1]
+    #     new["event_index"] = [1, 2, 3]
+    #     # TODO this should be returning event table
+    #     alignment = get_mea_alignment_path(None, events=new)
+    #     self.assertEqual(alignment, [[2, 2], [1, 1], [0, 0]])
+    #     fake = np.empty(3, dtype=[('start', float)])
+    #     with self.assertRaises(KeyError):
+    #         get_mea_alignment_path(None, events=fake)
+    #         get_mea_alignment_path("fake/path", events=fake)
+    #     with self.assertRaises(AssertionError):
+    #         get_mea_alignment_path("fake/path", events=None)
+
+    def test_get_indexes_from_best_path(self):
+        """test get_get_indexes_from_best_path"""
+        fake_mea = [4, 4, 1, 0.1, [3, 3, 0.9, 0.1, [2, 2, 0.8, 0.1, [1, 1, 0.7, 0.1, [0, 0, 0.6, 0.6, None]]]]]
+        alignment = get_indexes_from_best_path(fake_mea)
+        self.assertEqual(alignment, [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]])
+        fake_mea = [0.1, [3, 3, 0.9, 0.1, [2, 2, 0.8, 0.1, [1, 1, 0.7, 0.1, [0, 0, 0.6, 0.6, None]]]]]
+        with self.assertRaises(IndexError):
+            get_indexes_from_best_path(fake_mea)
+
+    def test_get_events_from_path(self):
+        """Test get_events_from_path"""
+        path = [[0, 0], [1, 1], [2, 2], [3, 3]]
+        event1 = np.zeros(4, dtype=[('contig', 'S10'), ('reference_index', '<i8'), ('reference_kmer', 'S5'),
+                                    ('strand', 'S1'),
+                                    ('event_index', '<i8'), ('event_mean', '<f8'), ('event_noise', '<f8'),
+                                    ('event_duration', '<f8'), ('aligned_kmer', 'S5'),
+                                    ('scaled_mean_current', '<f8'), ('scaled_noise', '<f8'),
+                                    ('posterior_probability', '<f8'), ('descaled_event_mean', '<f8'),
+                                    ('ont_model_mean', '<f8'), ('path_kmer', 'S5')])
+        event_matrix = [[event1[0], 0, 0, 0],
+                        [0, event1[0], 0, 0],
+                        [0, 0, event1[0], 0],
+                        [0, 0, 0, event1[0]]]
+        events = get_events_from_path(event_matrix, path)
+        self.assertSequenceEqual(events.tolist(), event1.tolist())
+
+        with self.assertRaises(TypeError):
+            event_matrix = [[0, 0, 0, 0],
+                            [0, 0, 0, 0],
+                            [0, 0, 0, 0],
+                            [0, 0, 0, 0]]
+
+            get_events_from_path(event_matrix, path)
+
+    def test_get_mea_params_from_events(self):
+        """Test get_mea_params_from_events"""
+        events = np.zeros(4, dtype=[('contig', 'S10'), ('reference_index', '<i8'), ('reference_kmer', 'S5'),
+                                    ('strand', 'S1'),
+                                    ('event_index', '<i8'), ('event_mean', '<f8'), ('event_noise', '<f8'),
+                                    ('event_duration', '<f8'), ('aligned_kmer', 'S5'),
+                                    ('scaled_mean_current', '<f8'), ('scaled_noise', '<f8'),
+                                    ('posterior_probability', '<f8'), ('descaled_event_mean', '<f8'),
+                                    ('ont_model_mean', '<f8'), ('path_kmer', 'S5')])
+        events["posterior_probability"] = [0.1, 0.2, 0.3, 0.4]
+        events["event_index"] = [0, 1, 2, 3]
+        events["reference_index"] = [0, 1, 2, 3]
+        test_event_matrix = [[events[0], 0, 0, 0],
+                             [0, events[1], 0, 0],
+                             [0, 0, events[2], 0],
+                             [0, 0, 0, events[3]]]
+
+        posterior_matrix, shortest_ref, event_matrix = get_mea_params_from_events(events)
+        self.assertSequenceEqual(posterior_matrix.tolist(), [[0.1, 0, 0, 0],
+                                                             [0, 0.2, 0, 0],
+                                                             [0, 0, 0.3, 0],
+                                                             [0, 0, 0, 0.4]])
+        self.assertSequenceEqual(shortest_ref, [0, 1, 2, 3])
+        self.assertSequenceEqual(event_matrix, test_event_matrix)
+        with self.assertRaises(KeyError):
+            events = np.zeros(4, dtype=[('reference_index', '<i8'), ('reference_kmer', 'S5'),
+                                        ('strand', 'S1'),
+                                        ('event_index', '<i8'), ('event_mean', '<f8'), ('event_noise', '<f8'),
+                                        ('event_duration', '<f8'), ('aligned_kmer', 'S5'),
+                                        ('scaled_mean_current', '<f8'), ('scaled_noise', '<f8'),
+                                        ('posterior_probability', '<f8'), ('descaled_event_mean', '<f8'),
+                                        ('ont_model_mean', '<f8'), ('path_kmer', 'S5')])
+            get_mea_params_from_events(events)
 
 
 if __name__ == '__main__':

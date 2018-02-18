@@ -13,6 +13,7 @@ import os
 import collections
 import re
 import numpy as np
+import traceback
 from collections import defaultdict
 from timeit import default_timer as timer
 from PyPore.parsers import SpeedyStatSplit
@@ -20,10 +21,8 @@ from nanotensor.fast5 import Fast5
 from nanonet.eventdetection.filters import minknow_event_detect
 from nanonet.segment import segment
 from nanonet.features import make_basecall_input_multi
-from py3helpers.utils import test_numpy_table, list_dir, merge_two_dicts, TimeStamp, change_np_field_type, merge_dicts
+from py3helpers.utils import test_numpy_table, list_dir, TimeStamp, change_np_field_type, merge_dicts
 from py3helpers.seq_tools import create_fastq_line, check_fastq_line, ReverseComplement, pairwise_alignment_accuracy
-
-import traceback
 
 
 def create_speedy_event_table(signal, sampling_freq, start_time, min_width=5, max_width=80, min_gain_per_sample=0.008,
@@ -296,10 +295,10 @@ def resegment_reads(fast5_path, params, speedy=False, overwrite=False):
 
     if speedy:
         event_table = create_speedy_event_table(signal, sampling_freq, start_time, **params)
-        params = merge_two_dicts(params, {"event_detection": "speedy_stat_split"})
+        params = merge_dicts([params, {"event_detection": "speedy_stat_split"}])
     else:
         event_table = create_minknow_event_table(signal, sampling_freq, start_time, **params)
-        params = merge_two_dicts(params, {"event_detection": "minknow_event_detect"})
+        params = merge_dicts([params, {"event_detection": "minknow_event_detect"}])
 
     keys = ["nanotensor version", "time_stamp"]
     values = ["0.2.0", TimeStamp().posix_date()]
