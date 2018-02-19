@@ -4,9 +4,10 @@
 # File: fast5.py
 #  executable: fast5.py
 #
-# Authors: Almost all of the work for this class was completed by the people at Nanonet
-#  https://github.com/nanoporetech/nanonet. Further additions done by Andrew Bailey
+# Authors: Most of the initial work for this class was completed by the people at Nanonet
+#  https://github.com/nanoporetech/nanonet.
 #
+# Further additions done by Andrew Bailey
 #
 # History: 12/19/17
 ########################################################################
@@ -80,7 +81,7 @@ class Fast5(h5py.File):
     __default_basecall_alignment_summary__ = '/Summary/genome_mapping_{}/'  # under Alignment analysis
 
     __default_corrected_genome__ = '/Analyses/RawGenomeCorrected_000/BaseCalled_template'  # nanoraw
-    __default_signalalign_events__ = 'Analyses/SignalAlign_000'  # signalalign events
+    __default_signalalign_events__ = '/Analyses/SignalAlign_00{}'  # signalalign events
     __default_resegment_basecall__ = '/Analyses/ReSegmentBasecall_00{}'
 
     __default_event_table_fields__ = ('start', 'length', 'mean', 'stdv')
@@ -333,10 +334,11 @@ class Fast5(h5py.File):
 
     def get_signalalign_events(self):
         try:
-            reads = self[self.__default_signalalign_events__]
-            events = reads['Events']
+            path = self.check_path(self.__default_signalalign_events__, latest=True)
+            reads = self[path]
+            events = reads['full']
         except KeyError:
-            raise KeyError('Read does not contain required fields: {}'.format(self.__default_signalalign_events__))
+            raise KeyError('Read does not contain required fields: {}'.format(path))
         return np.asarray(events)
 
     def get_resegment_basecall(self, number=None):
@@ -351,7 +353,7 @@ class Fast5(h5py.File):
             else:
                 path = self.check_path(self.__default_resegment_basecall__, latest=True)
             reads = self[path]
-            events = reads['BaseCalled_emplate/Events']
+            events = reads['BaseCalled_template/Events']
         except KeyError:
             raise KeyError('Read does not contain required fields: {}'.format(path))
         return np.asarray(events)
@@ -912,7 +914,7 @@ class Fast5(h5py.File):
             rc = '_rc'
             is_rc = genome.endswith(rc)
             attrs['ref_name'] = genome[:-len(rc)] if is_rc else genome
-            attrs['direction'] =  '-' if is_rc else '+'
+            attrs['direction'] = '-' if is_rc else '+'
 
         # Trim any other fields, the allowed are those produced by
         #   squiggle_mapping. We allow strand_score but do not require

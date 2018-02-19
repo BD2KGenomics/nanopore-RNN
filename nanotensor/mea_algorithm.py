@@ -213,7 +213,7 @@ def mea_alignment_from_signal_align(fast5_path, events=None):
         events = fileh.get_signalalign_events()
 
     posterior_matrix, shortest_ref_per_event, event_matrix = get_mea_params_from_events(events)
-    # TODO add in the start and stop of the raw events
+    # get mea alignment
     mea_alignments = maximum_expected_accuracy_alignment(posterior_matrix, shortest_ref_per_event)
     # get raw index values from alignment data structure
     best_path = get_indexes_from_best_path(mea_alignments)
@@ -246,6 +246,24 @@ def get_events_from_path(event_matrix, path):
             traceback.print_exc(file=sys.stderr)
             raise TypeError("Selected non event location in event matrix. Check path for correct indexes")
     return events
+
+
+def match_events_with_mea(mea_events, event_detections):
+    """Match event index with event detection data to label segments of signal for each kmer
+
+    :param mea_events: mea events table
+    :param event_detections: event detection event table
+    """
+    prev_index = 0
+    for event in mea_events:
+        index = event["event_index"]
+        if prev_index == index:
+            continue
+        else:
+            raw_start = event_detections[index]["raw_start"]
+            raw_length = event_detections[index]["raw_length"]
+
+
 
 
 def main():

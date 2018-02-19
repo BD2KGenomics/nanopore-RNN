@@ -221,3 +221,15 @@ PyPore/cparsers.c
 PyPore/database.py.bak
 PyPore/hmm.py.bak
 PyPore/parsers.py.bak
+!/signalAlign/src/signalalign/nanoporeRead.py
+rence-sequences/fake_rna.fa
+test_files/reference-sequences/fake_rna.fa.amb
+test_files/reference-sequences/fake_rna.fa.ann
+test_files/reference-sequences/fake_rna.fa.bwt
+test_files/reference-sequences/fake_rna.fa.pac
+test_files/reference-sequences/fake_rna.fa.sa
+test_files/test_log_files/test.canonical.log.txt
+test_files/*
+nanotensor/dataset.py
+nanotensor/fast5.pyc
+test_files/reference-sequences/fake_rna.fa
