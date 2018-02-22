@@ -20,6 +20,196 @@ from collections import defaultdict
 import traceback
 
 
+def maximum_expected_accuracy_alignment_edits(posterior_matrix, shortest_ref_per_event, return_all=False,
+                                              sparse_posterior_matrix=None):
+    """Computes the maximum expected accuracy alignment along a reference with given events and probabilities
+
+    :param posterior_matrix: matrix of posterior probabilities with reference along x axis (col) and
+                            events along y axis (row).
+    :param shortest_ref_per_event: list of the highest possible reference position for all future events at a
+                                    given index
+    :param return_all: option to return all the paths through the matrix
+    :param sparse_posterior_matrix: bool sparse matrix option
+
+    :return best_path: a nested list of lists-> last_event = [ref_index, event_index, prob, sum_prob, [prev_event]]
+    """
+    # optional convert to sparse matrix
+    if sparse_posterior_matrix:
+        sparse_posterior_matrix = posterior_matrix
+    else:
+        sparse_posterior_matrix = sparse.coo_matrix(posterior_matrix)
+    forward_edges = list()
+    # get the index of the largest probability for the first event
+    smallest_event = min(sparse_posterior_matrix.row)
+    first_events = sparse_posterior_matrix.row == smallest_event
+    num_first_event = sum(first_events)
+    max_prob = 0
+    largest_start_index = np.argmax(sparse_posterior_matrix.data[first_events])
+    # gather leading edges for all references above max
+    for x in range(int(largest_start_index) + 1):
+        event_index = sparse_posterior_matrix.row[x]
+        posterior = sparse_posterior_matrix.data[x]
+        ref_index = sparse_posterior_matrix.col[x]
+        event_data = [ref_index, event_index,
+                      posterior, posterior, None]
+        if posterior >= max_prob:
+            forward_edges.append(event_data)
+            max_prob = posterior
+    # skip the inner loop for finding new events by setting prev_event to the next event
+    prev_event = sparse_posterior_matrix.row[num_first_event]
+    new_edges = list()
+    first_pass = True
+    prev_ref_pos = 0
+    max_prob = 0
+    i = 0
+    # go through rest of events
+    num_events = len(sparse_posterior_matrix.row)
+    print("NEW CALL")
+    for j in range(num_first_event, num_events):
+        event_index = sparse_posterior_matrix.row[j]
+        posterior = sparse_posterior_matrix.data[j]
+        ref_index = sparse_posterior_matrix.col[j]
+        print("NEW REF", ref_index, event_index, posterior)
+
+        # update forward edges if new event
+        if prev_event != event_index:
+            print("NEW EVENT", ref_index, event_index, new_edges)
+            prev_event = event_index
+            # capture edges that are further along than the previous last event
+            if i != len(forward_edges):
+                while forward_edges[i][0] > prev_ref_pos and forward_edges[i][3] > max_prob:
+                    new_edges.append(forward_edges[i])
+                    i += 1
+                    if i == len(forward_edges):
+                        break
+            # reset edges
+            print("NEW FORWARD EGES", new_edges)
+            forward_edges = new_edges
+            new_edges = list()
+            first_pass = True
+            i = 0
+            max_prob = 0
+        # keep edge to capture shortest ref position after current event
+        if first_pass:
+            edge_found = False
+            print("i", i, forward_edges, max_prob)
+            while forward_edges[i][0] <= shortest_ref_per_event[event_index] and forward_edges[i][0] != ref_index:
+                i += 1
+                edge_found = True
+                if i == len(forward_edges):
+                    break
+            # make sure we don't double dip on assigning events for shortest event refs
+            if edge_found:
+                print("EDGE FOUND")
+                if ref_index != shortest_ref_per_event[event_index]:
+                    edge = forward_edges[i-1]
+                else:
+                    # add edge for first ref index if occurred before forward edges
+                    edge = [ref_index, event_index, posterior, forward_edges[i-1][3]+posterior, forward_edges[i-1]]
+                print("FIRST PASS EDGE", edge)
+                new_edges.append(edge)
+                max_prob = edge[3]
+            print("i", i)
+        else:
+            # fill gaps between reference positions
+            if prev_ref_pos + 1 != ref_index:
+                print("GAPS", prev_ref_pos, ref_index, i, ref_index)
+                if i != len(forward_edges):
+                    while prev_ref_pos < forward_edges[i][0] < ref_index:
+                        if forward_edges[i][3] >= max_prob:
+                            new_edges.append(forward_edges[i])
+                            max_prob = forward_edges[i][3]
+                        i += 1
+                        if i == len(forward_edges):
+                            break
+            # event_data = [ref_index, event_index, prob, sum_prob, None]
+            # print(max_prob)
+            # print(forward_edges, ref_index, event_index, posterior)
+        if forward_edges[0][0] > ref_index:
+            print("NEW REF INDEX, ADDING EDGE", posterior, max_prob)
+            edge = [ref_index, event_index, posterior, posterior, None]
+        else:
+            print("BINARY SEARCH", forward_edges, ref_index, event_index, posterior)
+            edge = binary_search_for_edge(forward_edges, ref_index, event_index, posterior)
+        print("EDGE", edge, max_prob)
+        if edge[3] >= max_prob:
+            print("ADDED EDGE", edge)
+            new_edges.append(edge)
+            max_prob = edge[3]
+        print("i", i)
+        # reset trackers
+        first_pass = False
+        prev_ref_pos = ref_index
+
+    # add back last edges which may not have been connected
+    if i != len(forward_edges):
+        while prev_ref_pos < forward_edges[i][0]:
+            new_edges.append(forward_edges[i])
+            i += 1
+            if i == len(forward_edges):
+                break
+    forward_edges = new_edges
+    # grab and return the highest probability edge
+    if return_all:
+        return forward_edges
+    else:
+        highest_prob = 0
+        best_forward_edge = 0
+        for x in forward_edges:
+            if x[3] > highest_prob:
+                highest_prob = x[3]
+                best_forward_edge = x
+        return best_forward_edge
+
+
+def binary_search_for_edge(forward_edges, ref_index, event_index, posterior):
+    """Search the forward edges list for best ref index comparison
+    :param forward_edges: list of forward edges to search
+    :param ref_index: index to match with forward edges list
+    :param event_index: information to be passed into new forward edge link
+    :param posterior: posterior probability of event for a kmer at ref_index
+    :return: new forward edge
+    """
+    assert forward_edges[0][0] <= ref_index, "Ref index cannot be smaller than smallest forward edge"
+    searching = True
+    last_index = len(forward_edges) - 1
+    r = last_index
+    l = 0
+    i = ((r+l) // 2)
+
+    while searching:
+        # check events above ref index
+        edge = forward_edges[i]
+        edge_ref = edge[0]
+        # print(i, edge, edge_ref, ref_index, l)
+        if edge_ref <= ref_index:
+            if edge_ref == ref_index:
+                # if first edge
+                if i == 0:
+                    return [ref_index, event_index, posterior, edge[3], edge]
+                else:
+                    earlier_edge = forward_edges[i - 1]
+                    if edge[3] > earlier_edge[3] + posterior:
+                        return [ref_index, event_index, posterior, edge[3], edge]
+                    else:
+                        return [ref_index, event_index, posterior, earlier_edge[3]+posterior, earlier_edge]
+            # if before last index
+            else:
+                if i == last_index:
+                    # last event is only one above ref index
+                    return [ref_index, event_index, posterior, edge[3]+posterior, edge]
+                # check if next edge is after ref index
+                elif forward_edges[i + 1][0] > ref_index:
+                    return [ref_index, event_index, posterior, edge[3]+posterior, edge]
+                # next event is either before ref or equal to it
+                else:
+                    l = i + 1
+                    i = (l+r) // 2
+        else:
+            r = i - 1
+            i = (l+r) // 2
+
+
 def maximum_expected_accuracy_alignment(posterior_matrix, shortest_ref_per_event, return_all=False,
                                         sparse_posterior_matrix=None):
     """Computes the maximum expected accuracy alignment along a reference with given events and probabilities
@@ -248,37 +438,106 @@ def get_events_from_path(event_matrix, path):
     return events
 
 
-def match_events_with_mea(mea_events, event_detections):
+def match_events_with_mea(mea_events=None, event_detections=None):
     """Match event index with event detection data to label segments of signal for each kmer
 
     :param mea_events: mea events table
     :param event_detections: event detection event table
     """
-    prev_index = 0
-    for event in mea_events:
+    assert mea_events is not None, "Must pass MEA alignment events"
+    assert event_detections is not None, "Must pass event_detections events"
+
+    test_numpy_table(mea_events, req_fields=('reference_index', 'event_index',
+                                             'reference_kmer', 'posterior_probability'))
+
+    test_numpy_table(event_detections, req_fields=('raw_start', 'raw_length'))
+    label = np.zeros(0, dtype=[('kmer', 'S5'), ('raw_start', int), ('raw_length', int),
+                               ('posterior_probability', float)])
+    label_dtype = label.dtype
+    prev_index = mea_events[0]['reference_index']
+    probs = [mea_events[0]['posterior_probability']]
+    kmer = mea_events[0]['reference_kmer']
+    raw_start = event_detections[mea_events[0]["event_index"]]["raw_start"]
+    max_moves = 0
+    for event in mea_events[1:]:
         index = event["event_index"]
-        if prev_index == index:
-            continue
+        new_kmer = event["reference_kmer"]
+        new_prob = event["posterior_probability"]
+        ref_index = event["reference_index"]
+        if prev_index == ref_index:
+            probs.append(new_prob)
         else:
-            raw_start = event_detections[index]["raw_start"]
-            raw_length = event_detections[index]["raw_length"]
+            moves = ref_index - prev_index
+            # new ref position means end of prev label
+            end = event_detections[index]["raw_start"]
+            raw_length = end - raw_start
+            prob = max(probs)
+            if max_moves < np.abs(moves):
+                max_moves = np.abs(moves)
+                print(ref_index, index, raw_length)
+                print(max_moves)
 
+            label = np.append(label, np.array((kmer, raw_start, raw_length, prob), dtype=label_dtype))
+            # get ready for new events
 
+            raw_start = end
+            prev_index = ref_index
+            probs = [new_prob]
+            kmer = new_kmer
+    return label
 
 
 def main():
     """Main docstring"""
     start1 = timer()
-    fast5_path = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/canonical"
-    files = list_dir(fast5_path, ext='fast5')
-    for file1 in files:
-        start = timer()
-        print(file1)
-        events = mea_alignment_from_signal_align(file1)
-        print(events)
-        break
-        stop = timer()
-        print("Total Time = {} seconds".format(stop - start), file=sys.stderr)
+
+    posterior_matrix = [[0.2, 0.3, 0.2, 0.2, 0.1],
+                        [0.2, 0.5, 0.3, 0.0, 0.0],
+                        [0.3, 0.1, 0.0, 0.3, 0.3],
+                        [0.0, 0.0, 0.0, 0.4, 0.1],
+                        [0.0, 0.0, 0.0, 0.2, 0.5],
+                        ]
+
+    # correct input
+    shortest_ref_per_event = [0, 0, 0, 3, 3]
+    # best_edge = binary_search_for_edge([[0, 1, .1, .1], [1, 1, .1, .1], [2, 1, .1, .1], [3, 1, .1, .1], [4, 1, .1, .1], [5, 1, .1, .1], [6, 1, .1, .1]], 6.1, 2, 0.1)
+    # print(best_edge)
+
+    forward_edges = maximum_expected_accuracy_alignment_edits(posterior_matrix, shortest_ref_per_event, return_all=True)
+    # print(forward_edges)
+    forward_edges2 = maximum_expected_accuracy_alignment(posterior_matrix, shortest_ref_per_event, return_all=True)
+    print("COMPARE")
+
+    for x, y in zip(forward_edges, forward_edges2):
+        print(x)
+        print(y)
+        print("NEW PAIR")
+    # fast5_path = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/canonical"
+    # files = list_dir(fast5_path, ext='fast5')
+    # for file1 in files:
+    #     start = timer()
+    #     print(file1)
+    #     f5fh = Fast5(file1)
+    #     mae_events = f5fh.get_signalalign_events(mae=True)
+    #     event_detection = f5fh.get_resegment_basecall()
+    #     # events = mea_alignment_from_signal_align(file1)
+    #     label = match_events_with_mea(mae_events, event_detection)
+    #     print(label)
+    #     event1 = 0
+    #     for event in label:
+    #         if type(event1) is int:
+    #             event1 = event
+    #         else:
+    #             if event1["raw_start"]+event1["raw_length"] == event["raw_start"]:
+    #                 pass
+    #             else:
+    #                 print(event1["raw_start"]+event1["raw_length"])
+    #                 print(event["raw_start"])
+    #                 print("error")
+    #             event1 = event
+    #     # break
+    #     stop = timer()
+    #     print("Total Time = {} seconds".format(stop - start), file=sys.stderr)
 
     stop = timer()
     print("Running Time = {} seconds".format(stop - start1), file=sys.stderr)
