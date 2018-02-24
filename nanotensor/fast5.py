@@ -332,11 +332,15 @@ class Fast5(h5py.File):
             raise KeyError('Read does not contain required fields: {}'.format(self.__default_corrected_genome__))
         return np.asarray(events), corr_start_rel_to_raw
 
-    def get_signalalign_events(self):
+    def get_signalalign_events(self, mae=False):
         try:
             path = self.check_path(self.__default_signalalign_events__, latest=True)
             reads = self[path]
-            events = reads['full']
+            if mae:
+                events = reads['MEA_alignment']
+            else:
+                events = reads['full']
+
         except KeyError:
             raise KeyError('Read does not contain required fields: {}'.format(path))
         return np.asarray(events)
@@ -501,7 +505,7 @@ class Fast5(h5py.File):
 
         :param path: path to fast5 object. Needs to have a field where string.format can work! """
         highest = 0
-        while highest < 10:
+        while highest < 20:
             if path.format(highest) in self:
                 highest += 1
                 continue

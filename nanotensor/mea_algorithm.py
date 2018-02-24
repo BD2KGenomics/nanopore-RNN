@@ -20,12 +20,12 @@ from collections import defaultdict
 import traceback
 
 
-def maximum_expected_accuracy_alignment_edits(posterior_matrix, shortest_ref_per_event, return_all=False,
+def maximum_expected_accuracy_alignment(posterior_matrix, shortest_ref_per_event, return_all=False,
                                               sparse_posterior_matrix=None):
     """Computes the maximum expected accuracy alignment along a reference with given events and probabilities
 
-    :param posterior_matrix: matrix of posterior probabilities with reference along x axis (col) and
-                            events along y axis (row).
+    :param posterior_matrix: matrix of posterior probabilities with reference as columns and
+                            events as rows.
     :param shortest_ref_per_event: list of the highest possible reference position for all future events at a
                                     given index
     :param return_all: option to return all the paths through the matrix
@@ -59,96 +59,127 @@ def maximum_expected_accuracy_alignment_edits(posterior_matrix, shortest_ref_per
     prev_event = sparse_posterior_matrix.row[num_first_event]
     new_edges = list()
     first_pass = True
-    prev_ref_pos = 0
     max_prob = 0
     i = 0
     # go through rest of events
     num_events = len(sparse_posterior_matrix.row)
-    print("NEW CALL")
+    # print("NEW CALL")
     for j in range(num_first_event, num_events):
         event_index = sparse_posterior_matrix.row[j]
         posterior = sparse_posterior_matrix.data[j]
         ref_index = sparse_posterior_matrix.col[j]
-        print("NEW REF", ref_index, event_index, posterior)
-
+        # print("NEW REF", ref_index, event_index, posterior)
+        # print("new edges ----", new_edges)
         # update forward edges if new event
         if prev_event != event_index:
-            print("NEW EVENT", ref_index, event_index, new_edges)
+            # print("NEW EVENT - OLD EDGES", forward_edges)
             prev_event = event_index
             # capture edges that are further along than the previous last event
-            if i != len(forward_edges):
-                while forward_edges[i][0] > prev_ref_pos and forward_edges[i][3] > max_prob:
+            # [forward_edges.pop(x) for x in pop]
+            while i < len(forward_edges):
+                # print(i)
+                if forward_edges[i][3] > max_prob:
                     new_edges.append(forward_edges[i])
-                    i += 1
-                    if i == len(forward_edges):
-                        break
+                    max_prob = forward_edges[i][3]
+                i += 1
+                # print(i)
+
+            # forward_edges = forward_edges[:i]
+
             # reset edges
-            print("NEW FORWARD EGES", new_edges)
-            forward_edges = new_edges
-            new_edges = list()
             first_pass = True
+            forward_edges = new_edges
+            # print("NEW FORWARD EDGES", forward_edges)
+
+        if first_pass:
+            first_pass = False
+            max_i = -1
+            new_edges = list()
             i = 0
             max_prob = 0
-        # keep edge to capture shortest ref position after current event
-        if first_pass:
+            # keep edge to capture shortest ref position after current event
             edge_found = False
-            print("i", i, forward_edges, max_prob)
-            while forward_edges[i][0] <= shortest_ref_per_event[event_index] and forward_edges[i][0] != ref_index:
+            # print("FIRST pass", i, forward_edges)
+            while forward_edges[i][0] < shortest_ref_per_event[event_index]:
                 i += 1
                 edge_found = True
                 if i == len(forward_edges):
                     break
             # make sure we don't double dip on assigning events for shortest event refs
             if edge_found:
-                print("EDGE FOUND")
-                if ref_index != shortest_ref_per_event[event_index]:
-                    edge = forward_edges[i-1]
-                else:
-                    # add edge for first ref index if occurred before forward edges
-                    edge = [ref_index, event_index, posterior, forward_edges[i-1][3]+posterior, forward_edges[i-1]]
-                print("FIRST PASS EDGE", edge)
-                new_edges.append(edge)
-                max_prob = edge[3]
-            print("i", i)
-        else:
-            # fill gaps between reference positions
-            if prev_ref_pos + 1 != ref_index:
-                print("GAPS", prev_ref_pos, ref_index, i, ref_index)
-                if i != len(forward_edges):
-                    while prev_ref_pos < forward_edges[i][0] < ref_index:
-                        if forward_edges[i][3] >= max_prob:
+                # print("EDGE FOUND")
+                test_edge = forward_edges[i-1]
+                new_edges.append(test_edge)
+                max_prob = test_edge[3]
+
+                # forward_edges = forward_edges[i-1:]
+                # max_prob = forward_edges[0][3]
+                assert max_prob == test_edge[3]
+            i = 0
+        # else:
+        assigning = True
+        while assigning:
+            # print("Another_loop", i)
+            if i < len(forward_edges):
+                if forward_edges[i][0] < ref_index:
+                    if i > max_i:
+                        if max_prob < forward_edges[i][3]:
                             new_edges.append(forward_edges[i])
                             max_prob = forward_edges[i][3]
-                        i += 1
-                        if i == len(forward_edges):
-                            break
-            # event_data = [ref_index, event_index, prob, sum_prob, None]
-            # print(max_prob)
-            # print(forward_edges, ref_index, event_index, posterior)
-        if forward_edges[0][0] > ref_index:
-            print("NEW REF INDEX, ADDING EDGE", posterior, max_prob)
-            edge = [ref_index, event_index, posterior, posterior, None]
-        else:
-            print("BINARY SEARCH", forward_edges, ref_index, event_index, posterior)
-            edge = binary_search_for_edge(forward_edges, ref_index, event_index, posterior)
-        print("EDGE", edge, max_prob)
-        if edge[3] >= max_prob:
-            print("ADDED EDGE", edge)
-            new_edges.append(edge)
-            max_prob = edge[3]
-        print("i", i)
-        # reset trackers
-        first_pass = False
-        prev_ref_pos = ref_index
+                            max_i = i
+                    i += 1
+                elif forward_edges[i][0] == ref_index:
+                    if i == 0:
+                        if forward_edges[i][3] > max_prob:
+                            new_edges.append([ref_index, event_index, posterior, forward_edges[i][3], forward_edges[i]])
+                            max_prob = forward_edges[i][3]
+                    # compare with prev_edge
+                    elif forward_edges[i][3] > forward_edges[i-1][3]+posterior:
+                        if forward_edges[i][3] > max_prob:
+                            new_edges.append([ref_index, event_index, posterior, forward_edges[i][3], forward_edges[i]])
+                            max_prob = forward_edges[i][3]
+                    # assign move
+                    elif forward_edges[i-1][3]+posterior > max_prob:
+                        new_edges.append([ref_index, event_index, posterior, forward_edges[i-1][3]+posterior, forward_edges[i-1]])
+                        max_prob = forward_edges[i-1][3]+posterior
+                    assigning = False
+                    # print("Assigned", new_edges)
+                    max_i = i
+                else:
+                    if i == 0:
+                        if posterior > max_prob:
+                            new_edges.append([ref_index, event_index, posterior, posterior, None])
+                            max_prob = posterior
+                    elif forward_edges[i-1][3]+posterior > max_prob:
+                        new_edges.append([ref_index, event_index, posterior,
+                                          forward_edges[i-1][3]+posterior, forward_edges[i-1]])
+                        max_prob = forward_edges[i-1][3]+posterior
+                    assigning = False
+                    # print("Assigned", new_edges)
 
-    # add back last edges which may not have been connected
-    if i != len(forward_edges):
-        while prev_ref_pos < forward_edges[i][0]:
+            # ref past all edges
+            elif forward_edges[i-1][3]+posterior > max_prob:
+                new_edges.append([ref_index, event_index, posterior, forward_edges[i-1][3]+posterior, forward_edges[i-1]])
+                max_prob = forward_edges[i-1][3]+posterior
+                assigning = False
+                # print("Assigned", new_edges)
+            else:
+                # print("Didnt Assign")
+                assigning = False
+        # print("?????_new_edges", new_edges)
+
+    # catch trailing edges
+    while i < len(forward_edges):
+        # print(i)
+        if forward_edges[i][3] > max_prob:
             new_edges.append(forward_edges[i])
-            i += 1
-            if i == len(forward_edges):
-                break
+        i += 1
+
     forward_edges = new_edges
+    # print('\n')
+    # print("FINAL EDGES", forward_edges)
+    # print('\n')
+
     # grab and return the highest probability edge
     if return_all:
         return forward_edges
@@ -210,115 +241,6 @@ def binary_search_for_edge(forward_edges, ref_index, event_index, posterior):
             i = (l+r) // 2
 
 
-def maximum_expected_accuracy_alignment(posterior_matrix, shortest_ref_per_event, return_all=False,
-                                        sparse_posterior_matrix=None):
-    """Computes the maximum expected accuracy alignment along a reference with given events and probabilities
-
-    :param posterior_matrix: matrix of posterior probabilities with reference along x axis (col) and
-                            events along y axis (row).
-    :param shortest_ref_per_event: list of the highest possible reference position for all future events at a
-                                    given index
-    :param return_all: option to return all the paths through the matrix
-    :param sparse_posterior_matrix: bool sparse matrix option
-
-    :return best_path: a nested list of lists-> last_event = [ref_index, event_index, prob, sum_prob, [prev_event]]
-    """
-    # optional convert to sparse matrix
-    if sparse_posterior_matrix:
-        sparse_posterior_matrix = posterior_matrix
-    else:
-        sparse_posterior_matrix = sparse.coo_matrix(posterior_matrix)
-
-    forward_edges = list()
-    # get the index of the largest probability for the first event
-    smallest_event = min(sparse_posterior_matrix.row)
-    first_events = sparse_posterior_matrix.row == smallest_event
-    num_first_event = sum(first_events)
-
-    largest_start_prob = np.argmax(sparse_posterior_matrix.data[first_events])
-    # gather leading edges for all references above max
-    for x in range(int(largest_start_prob) + 1):
-        event_data = [sparse_posterior_matrix.col[x], sparse_posterior_matrix.row[x],
-                      sparse_posterior_matrix.data[x], sparse_posterior_matrix.data[x], None]
-        forward_edges.append(event_data)
-    # number of values for first event
-    prev_event = sparse_posterior_matrix.row[num_first_event]
-    new_edges = list()
-    first_pass = True
-    prev_ref_pos = 0
-    fill_gap = False
-    # go through rest of events
-    num_events = len(sparse_posterior_matrix.row)
-    for i in range(num_first_event, num_events):
-        event_index = sparse_posterior_matrix.row[i]
-        posterior = sparse_posterior_matrix.data[i]
-        ref_index = sparse_posterior_matrix.col[i]
-        # update forward edges if new event
-        if prev_event != event_index:
-            prev_event = event_index
-            # capture edges that are further along than the current event
-            for forward_edge in forward_edges:
-                if forward_edge[0] > prev_ref_pos:
-                    new_edges.append(forward_edge)
-            forward_edges = new_edges
-            new_edges = list()
-            first_pass = True
-        # check if there is a gap between reference
-        if prev_ref_pos + 1 != ref_index and not first_pass:
-            fill_gap = True
-            gap_indicies = [x for x in range(prev_ref_pos + 1, ref_index)]
-        # keep track of probabilities to select best connecting edge to new node
-        inxs = []
-        probs = []
-        # event_data = [ref_index, event_index, prob, sum_prob, None]
-        for j, forward_edge in enumerate(forward_edges):
-            if forward_edge[0] < ref_index:
-                # track which probabilities with prev edge
-                inxs.append(j)
-                probs.append(posterior + forward_edge[3])
-                # if needed, keep edges aligned to ref positions previous than the current ref position
-                if first_pass and shortest_ref_per_event[event_index] < forward_edge[0] + 2:
-                    new_edges.append(forward_edge)
-            elif forward_edge[0] == ref_index:
-                # stay at reference position
-                # add probability of event if we want to promote sideways movement
-                inxs.append(j)
-                probs.append(forward_edge[3])
-            if fill_gap:
-                if forward_edge[0] in gap_indicies:
-                    # add edges that pass through gaps in the called events
-                    new_edges.append(forward_edge)
-        # add most probable connecting edge if better than creating an new edge
-        if probs and max(probs) > posterior:
-            connecting_edge = forward_edges[inxs[int(np.argmax(probs))]]
-            new_edges.append([ref_index, event_index, posterior, max(probs), connecting_edge])
-        else:
-            # no possible connecting edges or connecting edges decrease probability, create a new one
-            new_edges.append([ref_index, event_index, posterior, posterior, None])
-
-        # reset trackers
-        first_pass = False
-        prev_ref_pos = ref_index
-        fill_gap = False
-
-    # add back last edges which may not have been connected
-    for forward_edge in forward_edges:
-        if forward_edge[0] > prev_ref_pos:
-            new_edges.append(forward_edge)
-    forward_edges = new_edges
-    # grab and return the highest probability edge
-    if return_all:
-        return forward_edges
-    else:
-        highest_prob = 0
-        best_forward_edge = 0
-        for x in forward_edges:
-            if x[3] > highest_prob:
-                highest_prob = x[3]
-                best_forward_edge = x
-        return best_forward_edge
-
-
 def get_indexes_from_best_path(best_path):
     """Grab the reference and event index of the best path from the maximum_expected_accuracy_alignment function.
     :param best_path: output from maximum_expected_accuracy_alignment
@@ -359,6 +281,8 @@ def get_mea_params_from_events(events):
     minus_strand = False
     if events[0]["reference_index"] > events[-1]["reference_index"]:
         minus_strand = True
+    # print("minus_strand", minus_strand)
+
     ref_length = int(ref_end - ref_start + 1)
     event_length = int(event_end - event_start + 1)
 
@@ -367,7 +291,7 @@ def get_mea_params_from_events(events):
     posterior_matrix = np.zeros([event_length, ref_length])
     shortest_ref_per_event = [np.inf for _ in range(event_length)]
 
-    max_shortest_ref = np.inf
+    min_shortest_ref = np.inf
     # print(ref_start, ref_end)
     # go through events backward to make sure the shortest ref per event is calculated at the same time
     for i in range(1, len(events) + 1):
@@ -384,9 +308,10 @@ def get_mea_params_from_events(events):
         event_matrix[event_indx][ref_indx] = event
         # edit shortest ref per event list
         if shortest_ref_per_event[event_indx] > ref_indx:
-            shortest_ref_per_event[event_indx] = min(max_shortest_ref, ref_indx)
-            if max_shortest_ref < ref_indx:
-                max_shortest_ref = ref_indx
+            if min_shortest_ref > ref_indx:
+                min_shortest_ref = ref_indx
+            # print(event_indx, ref_indx, min_shortest_ref)
+            shortest_ref_per_event[event_indx] = min_shortest_ref
 
     return posterior_matrix, shortest_ref_per_event, event_matrix
 
@@ -491,27 +416,30 @@ def main():
     """Main docstring"""
     start1 = timer()
 
-    posterior_matrix = [[0.2, 0.3, 0.2, 0.2, 0.1],
-                        [0.2, 0.5, 0.3, 0.0, 0.0],
-                        [0.3, 0.1, 0.0, 0.3, 0.3],
-                        [0.0, 0.0, 0.0, 0.4, 0.1],
-                        [0.0, 0.0, 0.0, 0.2, 0.5],
-                        ]
+    # m, l = create_random_prob_matrix(row=3, col=3)
+    # print(m.shape)
 
-    # correct input
-    shortest_ref_per_event = [0, 0, 0, 3, 3]
-    # best_edge = binary_search_for_edge([[0, 1, .1, .1], [1, 1, .1, .1], [2, 1, .1, .1], [3, 1, .1, .1], [4, 1, .1, .1], [5, 1, .1, .1], [6, 1, .1, .1]], 6.1, 2, 0.1)
-    # print(best_edge)
-
-    forward_edges = maximum_expected_accuracy_alignment_edits(posterior_matrix, shortest_ref_per_event, return_all=True)
-    # print(forward_edges)
-    forward_edges2 = maximum_expected_accuracy_alignment(posterior_matrix, shortest_ref_per_event, return_all=True)
-    print("COMPARE")
-
-    for x, y in zip(forward_edges, forward_edges2):
-        print(x)
-        print(y)
-        print("NEW PAIR")
+    # posterior_matrix = [[0.2, 0.3, 0.2, 0.2, 0.1],
+    #                     [0.2, 0.5, 0.3, 0.0, 0.0],
+    #                     [0.3, 0.1, 0.0, 0.3, 0.3],
+    #                     [0.0, 0.0, 0.0, 0.4, 0.1],
+    #                     [0.0, 0.0, 0.0, 0.2, 0.5],
+    #                     ]
+    #
+    # # correct input
+    # shortest_ref_per_event = [0, 0, 0, 3, 3]
+    # # best_edge = binary_search_for_edge([[0, 1, .1, .1], [1, 1, .1, .1], [2, 1, .1, .1], [3, 1, .1, .1], [4, 1, .1, .1], [5, 1, .1, .1], [6, 1, .1, .1]], 6.1, 2, 0.1)
+    # # print(best_edge)
+    #
+    # forward_edges = maximum_expected_accuracy_alignment_edits(posterior_matrix, shortest_ref_per_event, return_all=True)
+    # # print(forward_edges)
+    # forward_edges2 = maximum_expected_accuracy_alignment(posterior_matrix, shortest_ref_per_event, return_all=True)
+    # print("COMPARE")
+    #
+    # for x, y in zip(forward_edges, forward_edges2):
+    #     print(x)
+    #     print(y)
+    #     print("NEW PAIR")
     # fast5_path = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/canonical"
     # files = list_dir(fast5_path, ext='fast5')
     # for file1 in files:
