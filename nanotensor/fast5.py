@@ -332,18 +332,22 @@ class Fast5(h5py.File):
             raise KeyError('Read does not contain required fields: {}'.format(self.__default_corrected_genome__))
         return np.asarray(events), corr_start_rel_to_raw
 
-    def get_signalalign_events(self, mae=False):
+    def get_signalalign_events(self, mea=False, sam=False):
+        """Get signal align events, sam or mea alignment"""
+        assert (not mea or not sam), "Both mea and sam cannot be set to True"
         try:
             path = self.check_path(self.__default_signalalign_events__, latest=True)
             reads = self[path]
-            if mae:
-                events = reads['MEA_alignment']
+            if mea:
+                events = np.asarray(reads['MEA_alignment_labels'])
+            elif sam:
+                events = str(np.asarray(reads['sam']))
             else:
-                events = reads['full']
+                events = np.asarray(reads['full'])
 
         except KeyError:
             raise KeyError('Read does not contain required fields: {}'.format(path))
-        return np.asarray(events)
+        return events
 
     def get_resegment_basecall(self, number=None):
         """Get most recent resegmented basecall events table

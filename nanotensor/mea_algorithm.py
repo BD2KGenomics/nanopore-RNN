@@ -363,53 +363,389 @@ def get_events_from_path(event_matrix, path):
     return events
 
 
-def match_events_with_mea(mea_events=None, event_detections=None):
+def match_events_with_signalalign(sa_events=None, event_detections=None):
     """Match event index with event detection data to label segments of signal for each kmer
 
-    :param mea_events: mea events table
+    :param sa_events: events table reference_index', 'event_index', 'aligned_kmer', 'posterior_probability
     :param event_detections: event detection event table
     """
-    assert mea_events is not None, "Must pass MEA alignment events"
+    assert sa_events is not None, "Must pass MEA alignment events"
     assert event_detections is not None, "Must pass event_detections events"
 
-    test_numpy_table(mea_events, req_fields=('reference_index', 'event_index',
-                                             'reference_kmer', 'posterior_probability'))
+    test_numpy_table(sa_events, req_fields=('reference_index', 'event_index',
+                                             'aligned_kmer', 'posterior_probability'))
 
     test_numpy_table(event_detections, req_fields=('raw_start', 'raw_length'))
-    label = np.zeros(0, dtype=[('kmer', 'S5'), ('raw_start', int), ('raw_length', int),
-                               ('posterior_probability', float)])
-    label_dtype = label.dtype
-    prev_index = mea_events[0]['reference_index']
-    probs = [mea_events[0]['posterior_probability']]
-    kmer = mea_events[0]['reference_kmer']
-    raw_start = event_detections[mea_events[0]["event_index"]]["raw_start"]
-    max_moves = 0
-    for event in mea_events[1:]:
-        index = event["event_index"]
-        new_kmer = event["reference_kmer"]
-        new_prob = event["posterior_probability"]
-        ref_index = event["reference_index"]
-        if prev_index == ref_index:
-            probs.append(new_prob)
-        else:
-            moves = ref_index - prev_index
-            # new ref position means end of prev label
-            end = event_detections[index]["raw_start"]
-            raw_length = end - raw_start
-            prob = max(probs)
-            if max_moves < np.abs(moves):
-                max_moves = np.abs(moves)
-                print(ref_index, index, raw_length)
-                print(max_moves)
 
-            label = np.append(label, np.array((kmer, raw_start, raw_length, prob), dtype=label_dtype))
-            # get ready for new events
+    label = np.zeros(len(sa_events), dtype=[('raw_start', int), ('raw_length', int), ('reference_index', int),
+                                             ('posterior_probability', float), ('kmer', 'S5')])
 
-            raw_start = end
-            prev_index = ref_index
-            probs = [new_prob]
-            kmer = new_kmer
+    label['raw_start'] = [event_detections[x]["raw_start"] for x in sa_events["event_index"]]
+    label['raw_length'] = [event_detections[x]["raw_length"] for x in sa_events["event_index"]]
+    label['reference_index'] = sa_events["reference_index"]
+    label['kmer'] = sa_events["aligned_kmer"]
+    label['posterior_probability'] = sa_events["posterior_probability"]
+    np.sort(label, order='raw_start', kind='mergesort')
+
     return label
+
+
+def slow_search_for_edge(forward_edges, ref_index, event_index, posterior):
+    """Search the forward edges list for best ref index comparison
+    :param forward_edges: list of forward edges to search
+    :param ref_index: index to match with forward edges list
+    :param event_index: information to be passed into new forward edge link
+    :param posterior: posterior probability of event for a kmer at ref_index
+    :return: new forward edge
+    """
+    assert forward_edges[0][0] <= ref_index, "Ref index cannot be smaller than smallest forward edge"
+
+    inxs = []
+    probs = []
+    for j, forward_edge in enumerate(forward_edges):
+        if forward_edge[0] < ref_index:
+            # track which probabilities with prev edge
+            inxs.append(j)
+            probs.append(posterior + forward_edge[3])
+        elif forward_edge[0] == ref_index:
+            # stay at reference position
+            # add probability of event if we want to promote sideways movement
+            inxs.append(j)
+            probs.append(forward_edge[3])
+    # add most probable connecting edge if better than creating an new edge
+    # deal with multiple edges with equal probabilty
+    probs = probs[::-1]
+    inxs = inxs[::-1]
+    connecting_edge = forward_edges[inxs[int(np.argmax(probs))]]
+    return [ref_index, event_index, posterior, max(probs), connecting_edge]
+
+
+def sum_forward_edge_accuracy(forward_edge):
+    """Add up all probabilities from a forward edge"""
+    sum_prob = 0
+
+    def get_probability_info(forward_edge):
+        """Get event information from maximum_expected_accuracy_alignment"""
+        nonlocal sum_prob
+        sum_prob = sum_prob + forward_edge[2]
+        if forward_edge[4] is not None:
+            get_probability_info(forward_edge[4])
+        else:
+            pass
+
+    get_probability_info(forward_edge)
+
+    return sum_prob
+
+
+def create_random_prob_matrix(row=None, col=None, gaps=True):
+    """Create a matrix of random probability distributions along each row
+
+    :param row: number of rows
+    :param col: number of columns
+    :param gaps: if have start gap, middle gaps or end gap
+    """
+    assert row is not None, "Must set row option"
+    assert col is not None, "Must set col option"
+    prob_matrix = np.zeros([row, col])
+    shortest_future_col_per_row = np.zeros(row)
+    shortest_col = col
+    start = np.random.randint(0, 3)
+    skip = 0
+    if not gaps:
+        start = 0
+        skip = 1
+    col_indexes = [x for x in range(col)]
+    for row_i in range(row-1, start-1, -1):
+        a = np.random.random(np.random.randint(skip, col))
+        a /= a.sum()
+        # go through events backward to make sure the shortest ref per event is calculated at the same time
+        a = np.sort(a)
+        np.random.shuffle(col_indexes)
+        # make sure we dont have gaps at ends of columns
+        if not gaps and row_i == row-1:
+            col_indexes.remove(col-1)
+            col_indexes.insert(0, col-1)
+        if not gaps and row_i == 0:
+            col_indexes.remove(0)
+            col_indexes.insert(0, 0)
+
+        for prob, col_i in zip(a, col_indexes):
+            # using full event so we can use the same matrix to assemble the training data later
+            prob_matrix[row_i][col_i] = prob
+            if col_i <= shortest_col:
+                shortest_col = col_i
+        shortest_future_col_per_row[row_i] = shortest_col
+    # check with naive NxM algorithm
+    prob_matrix = np.asanyarray(prob_matrix)
+    assert matrix_event_length_pairs_test(prob_matrix, shortest_future_col_per_row), \
+        "Did not create accurate prob matrix and shortest_future_col_per_row"
+    return prob_matrix, shortest_future_col_per_row
+
+
+def matrix_event_length_pairs_test(posterior_matrix, shortest_events):
+    """Test if the shortest events list matches what is in the posterior matrix"""
+    # posterior matrix is events x ref
+    current_min = np.inf
+    shortest_events = shortest_events[::-1]
+    for i, row in enumerate(posterior_matrix[::-1]):
+        if sum(row) > 0:
+            min_event_in_row = min(np.nonzero(row)[0])
+            if min_event_in_row < current_min:
+                current_min = min_event_in_row
+            if shortest_events[i] != current_min:
+                return False
+    return True
+
+
+def generate_events_from_probability_matrix(matrix):
+    """Create events from probability matrix for testing get_mea_params_from_events"""
+    event_indexs = []
+    probs = []
+    ref_indexs = []
+
+    for row_index, row in enumerate(matrix):
+        for col_index, prob in enumerate(row):
+            if prob != 0:
+                probs.append(prob)
+                event_indexs.append(row_index)
+                ref_indexs.append(col_index)
+
+    ref_indexs = np.asanyarray(ref_indexs)
+    event_indexs = np.asanyarray(event_indexs)
+    # create events table
+    n_events = len(probs)
+    events = np.zeros(n_events, dtype=[('contig', 'S10'), ('reference_index', '<i8'), ('reference_kmer', 'S5'),
+                                       ('strand', 'S1'),
+                                       ('event_index', '<i8'), ('event_mean', '<f8'), ('event_noise', '<f8'),
+                                       ('event_duration', '<f8'), ('aligned_kmer', 'S5'),
+                                       ('scaled_mean_current', '<f8'), ('scaled_noise', '<f8'),
+                                       ('posterior_probability', '<f8'), ('descaled_event_mean', '<f8'),
+                                       ('ont_model_mean', '<f8'), ('path_kmer', 'S5')])
+
+    #  add to ref and event starts
+    ref_start = np.random.randint(0, 10000)
+    event_start = np.random.randint(0, 10000)
+
+    events["reference_index"] = ref_indexs + ref_start
+    events["posterior_probability"] = probs
+    events["event_index"] = event_indexs + event_start
+
+    # create comparison event matrix
+    event_matrix = np.zeros(matrix.shape).tolist()
+
+    for i in range(n_events):
+        event_matrix[event_indexs[i]][ref_indexs[i]] = events[i]
+        assert events[i]["reference_index"] == ref_indexs[i] + ref_start
+        assert events[i]["event_index"] == event_indexs[i] + event_start
+
+    return events, event_matrix
+
+
+def mea_slower(posterior_matrix, shortest_ref_per_event, return_all=False,
+                                         sparse_posterior_matrix=None):
+    """Computes the maximum expected accuracy alignment along a reference with given events and probabilities
+
+    NOTE: Slower than other version
+
+    :param posterior_matrix: matrix of posterior probabilities with reference along x axis (col) and
+                            events along y axis (row).
+    :param shortest_ref_per_event: list of the highest possible reference position for all future events at a
+                                    given index
+    :param return_all: option to return all the paths through the matrix
+    :param sparse_posterior_matrix: bool sparse matrix option
+
+    :return best_path: a nested list of lists-> last_event = [ref_index, event_index, prob, sum_prob, [prev_event]]
+    """
+    # optional convert to sparse matrix
+    if sparse_posterior_matrix:
+        sparse_posterior_matrix = posterior_matrix
+    else:
+        sparse_posterior_matrix = sparse.coo_matrix(posterior_matrix)
+
+    forward_edges = list()
+    # get the index of the largest probability for the first event
+    smallest_event = min(sparse_posterior_matrix.row)
+    first_events = sparse_posterior_matrix.row == smallest_event
+    num_first_event = sum(first_events)
+
+    largest_start_prob = np.argmax(sparse_posterior_matrix.data[first_events])
+    # gather leading edges for all references above max
+    for x in range(int(largest_start_prob) + 1):
+        event_data = [sparse_posterior_matrix.col[x], sparse_posterior_matrix.row[x],
+                      sparse_posterior_matrix.data[x], sparse_posterior_matrix.data[x], None]
+        forward_edges.append(event_data)
+    # number of values for first event
+    prev_event = sparse_posterior_matrix.row[num_first_event]
+    new_edges = list()
+    first_pass = True
+    prev_ref_pos = 0
+    fill_gap = False
+    # go through rest of events
+    num_events = len(sparse_posterior_matrix.row)
+    for i in range(num_first_event, num_events):
+        event_index = sparse_posterior_matrix.row[i]
+        posterior = sparse_posterior_matrix.data[i]
+        ref_index = sparse_posterior_matrix.col[i]
+        # update forward edges if new event
+        if prev_event != event_index:
+            prev_event = event_index
+            # capture edges that are further along than the current event
+            for forward_edge in forward_edges:
+                if forward_edge[0] > prev_ref_pos:
+                    new_edges.append(forward_edge)
+            forward_edges = new_edges
+            new_edges = list()
+            first_pass = True
+        # check if there is a gap between reference
+        if prev_ref_pos + 1 != ref_index and not first_pass:
+            fill_gap = True
+            gap_indicies = [x for x in range(prev_ref_pos + 1, ref_index)]
+        # keep track of probabilities to select best connecting edge to new node
+        inxs = []
+        probs = []
+        # event_data = [ref_index, event_index, prob, sum_prob, None]
+        for j, forward_edge in enumerate(forward_edges):
+            if forward_edge[0] < ref_index:
+                # track which probabilities with prev edge
+                inxs.append(j)
+                probs.append(posterior + forward_edge[3])
+                # if needed, keep edges aligned to ref positions previous than the current ref position
+                if first_pass and shortest_ref_per_event[event_index] < forward_edge[0] + 2:
+                    new_edges.append(forward_edge)
+            elif forward_edge[0] == ref_index:
+                # stay at reference position
+                # add probability of event if we want to promote sideways movement
+                inxs.append(j)
+                probs.append(forward_edge[3])
+            if fill_gap:
+                if forward_edge[0] in gap_indicies:
+                    # add edges that pass through gaps in the called events
+                    new_edges.append(forward_edge)
+        # add most probable connecting edge if better than creating an new edge
+        if probs:
+            connecting_edge = forward_edges[inxs[int(np.argmax(probs))]]
+            new_edges.append([ref_index, event_index, posterior, max(probs), connecting_edge])
+        else:
+            # no possible connecting edges or connecting edges decrease probability, create a new one
+            new_edges.append([ref_index, event_index, posterior, posterior, None])
+
+        # reset trackers
+        first_pass = False
+        prev_ref_pos = ref_index
+        fill_gap = False
+
+    # add back last edges which may not have been connected
+    for forward_edge in forward_edges:
+        if forward_edge[0] > prev_ref_pos:
+            new_edges.append(forward_edge)
+    forward_edges = new_edges
+    # grab and return the highest probability edge
+    if return_all:
+        return forward_edges
+    else:
+        highest_prob = 0
+        best_forward_edge = 0
+        for x in forward_edges:
+            if x[3] > highest_prob:
+                highest_prob = x[3]
+                best_forward_edge = x
+        return best_forward_edge
+
+
+def mea_slow(posterior_matrix, shortest_ref_per_event, return_all=False):
+    """Computes the maximum expected accuracy alignment along a reference with given events and probabilities.
+
+    Computes a very slow but thorough search through the matrix
+
+    :param posterior_matrix: matrix of posterior probabilities with reference along x axis and events along y
+    :param shortest_ref_per_event: shortest ref position per event
+    :param return_all: return all forward edges
+    """
+    ref_len = len(posterior_matrix[0])
+    events_len = len(posterior_matrix)
+    initialize = True
+    forward_edges = list()
+    new_edges = list()
+    # step through all events
+    for event_index in range(events_len):
+        max_prob = 0
+        if initialize:
+            ref_index = 0
+            while ref_index < ref_len:
+                # intitialize forward edges with first event alignments
+                # if type(posterior_matrix[ref_index][event_index]) is not int:
+                posterior = posterior_matrix[event_index][ref_index]
+                event_data = [ref_index, event_index, posterior, posterior, None]
+                if 0 < posterior >= max_prob:
+                    # print("True", posterior, max_prob)
+                    new_edges.append(event_data)
+                    max_prob = posterior
+                ref_index += 1
+            # print("INITIALIZE", new_edges, max_prob)
+            if len(new_edges) != 0:
+                forward_edges = new_edges
+                new_edges = list()
+                initialize = False
+        else:
+            # print(forward_edges)
+            ref_index = 0
+            top_edge = []
+            while ref_index < ref_len:
+                posterior = posterior_matrix[event_index][ref_index]
+                if posterior >= max_prob:
+                    # no possible connecting edges and is needed for other other events create a new one
+                    if ref_index < shortest_ref_per_event[event_index]:
+                        top_edge.append([ref_index, event_index, posterior, posterior, None])
+                        max_prob = posterior
+                ref_index += 1
+            # add top edge if needed
+            if top_edge:
+                new_edges.append(top_edge[-1])
+            ref_index = 0
+            while ref_index < ref_len:
+                inxs = []
+                probs = []
+                posterior = posterior_matrix[event_index][ref_index]
+                for j, forward_edge in enumerate(forward_edges):
+                    if forward_edge[0] < ref_index:
+                        # track which probabilities with prev edge
+                        inxs.append(j)
+                        probs.append(posterior + forward_edge[3])
+                        # if needed, keep edges aligned to ref positions previous than the current ref position
+                    elif forward_edge[0] == ref_index:
+                        # stay at reference position
+                        # add probability of event if we want to promote sideways movement
+                        inxs.append(j)
+                        probs.append(forward_edge[3])
+
+                # add new edge
+                inxs = inxs[::-1]
+                probs = probs[::-1]
+                if len(probs) != 0:
+                    if max(probs) > max_prob:
+                        connecting_edge = forward_edges[inxs[int(np.argmax(probs))]]
+                        new_edges.append([ref_index, event_index, posterior, max(probs), connecting_edge])
+                        max_prob = max(probs)
+                else:
+                    if forward_edges[0][0] > ref_index and posterior > max_prob:
+                        new_edges.append([ref_index, event_index, posterior, posterior, None])
+                        max_prob = posterior
+                ref_index += 1
+            # print("END_NEW_EDGES", new_edges)
+            forward_edges = new_edges
+            new_edges = list()
+    # grab and return the highest probability edge
+    if return_all:
+        return forward_edges
+    else:
+        highest_prob = 0
+        best_forward_edge = 0
+        for x in forward_edges:
+            if x[3] > highest_prob:
+                highest_prob = x[3]
+                best_forward_edge = x
+        return best_forward_edge
 
 
 def main():
@@ -449,7 +785,7 @@ def main():
     #     mae_events = f5fh.get_signalalign_events(mae=True)
     #     event_detection = f5fh.get_resegment_basecall()
     #     # events = mea_alignment_from_signal_align(file1)
-    #     label = match_events_with_mea(mae_events, event_detection)
+    #     label = match_events_with_signalalign(mae_events, event_detection)
     #     print(label)
     #     event1 = 0
     #     for event in label:
