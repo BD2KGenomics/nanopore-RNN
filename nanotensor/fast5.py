@@ -22,7 +22,7 @@ import h5py
 import numpy as np
 import numpy.lib.recfunctions as nprf
 from copy import deepcopy
-from py3helpers.utils import test_numpy_table
+from py3helpers.utils import check_numpy_table
 from py3helpers.seq_tools import check_fastq_line
 
 
@@ -217,7 +217,7 @@ class Fast5(h5py.File):
         )
         to_delete = ('read_number', 'scaling_used')
 
-        data = deepcopy(self.attributes)
+        data = deepcopy(self.event_attributes)
         data['filename'] = os.path.basename(self.filename)
         data['run_id'] = self.tracking_id['run_id']
         data['channel'] = self.channel_meta['channel_number']
@@ -587,7 +587,7 @@ class Fast5(h5py.File):
         """Wrapper function to test if event tables have required fields
         :param data: numpy array
         :param req_fields: required fields for event table """
-        return test_numpy_table(data, req_fields)
+        return check_numpy_table(data, req_fields)
 
     ###
     # Raw Data
@@ -1179,24 +1179,10 @@ def iterate_fast5(path, strand_list=None, paths=False, mode='r', limit=None, fil
 
 
 def main():
-    fast5_file = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/canonical/miten_PC_20160820_FNFAD20259_MN17223_mux_scan_AMS_158_R9_WGA_Ecoli_08_20_16_83098_ch467_read35_strand.fast5"
+    fast5_file = "/Users/andrewbailey/CLionProjects/nanopore-RNN/nanotensor/tests/test_files/minion-reads/canonical/miten_PC_20160820_FNFAD20259_MN17223_sequencing_run_AMS_158_R9_WGA_Ecoli_08_20_16_43623_ch100_read214_strand.fast5"
     f5fh = Fast5(fast5_file, read='r+')
-    f5fh.get_fastq()
-    events = f5fh.get_read(raw=False, scale=False)
-    # events, start_rel_to_raw = f5fh.get_corrected_events()
-    # print(f5fh.get_analysis_new("RawGenomeCorrected_000"))
-    # print(f5fh.set_new_event_table(name="test_events_2", data=events, meta={"attrbute": 10}))
-    # a = f5fh.delete("/Analysds/test_events_2/")
-    f5 = f5fh.create_copy("test.fast5")
-    a = f5["UniqueGlobalKey/channel_id"].attrs
-    f5.delete("UniqueGlobalKey/channel_id")
-    try:
-        a = f5["UniqueGlobalKey/channel_id"].attrs
-    except KeyError as e:
-        print(e)
-    # finally:
-        # f5._add_attrs(a, "UniqueGlobalKey/channel_id", convert=None)
-
+    print(f5fh.raw_attributes)
+    print(f5fh.get_read_stats())
 
 if __name__ == '__main__':
     main()

@@ -23,8 +23,8 @@ class Fast5Test(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         super(Fast5Test, cls).setUpClass()
-        cls.HOME = '/'.join(os.path.abspath(__file__).split("/")[:-3])
-        fast5_file = os.path.join(cls.HOME, "test_files/minion-reads/canonical/miten_PC_20160820_FNFAD20259_MN17223_sequencing_run_AMS_158_R9_WGA_Ecoli_08_20_16_43623_ch100_read104_strand.fast5")
+        cls.HOME = '/'.join(os.path.abspath(__file__).split("/")[:-1])
+        fast5_file = os.path.join(cls.HOME, "test_files/minion-reads/canonical/miten_PC_20160820_FNFAD20259_MN17223_sequencing_run_AMS_158_R9_WGA_Ecoli_08_20_16_43623_ch100_read214_strand.fast5")
         fast5handle = Fast5(fast5_file, 'r+')
         cls.fast5handle = fast5handle.create_copy("test.fast5")
 

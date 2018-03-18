@@ -15,7 +15,7 @@ import numpy as np
 from scipy import sparse
 from timeit import default_timer as timer
 from nanotensor.fast5 import Fast5
-from py3helpers.utils import list_dir, test_numpy_table
+from py3helpers.utils import list_dir, check_numpy_table
 from py3helpers.seq_tools import ReverseComplement
 from collections import defaultdict
 import traceback
@@ -267,7 +267,7 @@ def get_mea_params_from_events(events):
     """Get the posterior matrix, shortest_ref_per_event and event matrix from events table
 
     :param events: events table with required fields"""
-    test_numpy_table(events, req_fields=('contig', 'reference_index', 'reference_kmer', 'strand', 'event_index',
+    check_numpy_table(events, req_fields=('contig', 'reference_index', 'reference_kmer', 'strand', 'event_index',
                                          'event_mean', 'event_noise', 'event_duration', 'aligned_kmer',
                                          'scaled_mean_current', 'scaled_noise', 'posterior_probability',
                                          'descaled_event_mean', 'ont_model_mean', 'path_kmer'))
@@ -386,10 +386,10 @@ def match_events_with_signalalign(sa_events=None, event_detections=None, minus=F
     assert sa_events is not None, "Must pass signal alignment events"
     assert event_detections is not None, "Must pass event_detections events"
 
-    test_numpy_table(sa_events, req_fields=('reference_index', 'event_index',
+    check_numpy_table(sa_events, req_fields=('reference_index', 'event_index',
                                             'reference_kmer', 'posterior_probability'))
 
-    test_numpy_table(event_detections, req_fields=('raw_start', 'raw_length'))
+    check_numpy_table(event_detections, req_fields=('raw_start', 'raw_length'))
 
     label = np.zeros(len(sa_events), dtype=[('raw_start', int), ('raw_length', int), ('reference_index', int),
                                             ('posterior_probability', float), ('kmer', 'S5')])

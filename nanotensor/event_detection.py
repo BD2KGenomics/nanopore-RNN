@@ -21,7 +21,7 @@ from nanotensor.fast5 import Fast5
 from nanonet.eventdetection.filters import minknow_event_detect
 from nanonet.segment import segment
 from nanonet.features import make_basecall_input_multi
-from py3helpers.utils import test_numpy_table, list_dir, TimeStamp, change_np_field_type, merge_dicts
+from py3helpers.utils import check_numpy_table, list_dir, TimeStamp, change_np_field_type, merge_dicts
 from py3helpers.seq_tools import create_fastq_line, check_fastq_line, ReverseComplement, pairwise_alignment_accuracy
 
 
@@ -111,8 +111,8 @@ def create_anchor_kmers(new_events, old_events):
     :return New event table
     """
     num_old_events = len(old_events)
-    test_numpy_table(new_events, req_fields=('start', 'length', 'mean', 'stdv', 'model_state', 'move', 'p_model_state'))
-    test_numpy_table(old_events, req_fields=('start', 'length', 'mean', 'stdv', 'model_state', 'move', 'p_model_state'))
+    check_numpy_table(new_events, req_fields=('start', 'length', 'mean', 'stdv', 'model_state', 'move', 'p_model_state'))
+    check_numpy_table(old_events, req_fields=('start', 'length', 'mean', 'stdv', 'model_state', 'move', 'p_model_state'))
     # index of old events
     old_indx = 0
     # start index to trim new_events for those with data from old_events
@@ -260,7 +260,7 @@ def check_event_table_time(event_table):
 
     :param event_table: event table with "start" and "length" columns
     """
-    test_numpy_table(event_table, req_fields=('start', 'length'))
+    check_numpy_table(event_table, req_fields=('start', 'length'))
 
     prev_end = event_table[0]["start"] + event_table[0]["length"]
     for event in event_table[1:]:
@@ -327,7 +327,7 @@ def index_to_time(basecall_events, sampling_freq=0, start_time=0):
     :param sampling_freq: sampling frequency of experiment
     :param start_time: start time of experiment via fasta5 file
     """
-    test_numpy_table(basecall_events, req_fields=('start', 'length'))
+    check_numpy_table(basecall_events, req_fields=('start', 'length'))
     assert basecall_events["start"].dtype is np.dtype('uint64'), "Event start should be np.int32 type: {}"\
         .format(basecall_events["start"].dtype)
     assert sampling_freq != 0, "Must set sampling frequency"
@@ -347,7 +347,7 @@ def time_to_index(event_table, sampling_freq=0, start_time=0):
     :param sampling_freq: sampling frequency of experiment
     :param start_time: start time of experiment via fasta5 file
     """
-    test_numpy_table(event_table, req_fields=('start', 'length'))
+    check_numpy_table(event_table, req_fields=('start', 'length'))
     assert event_table["start"].dtype is not np.dtype('uint64'), "Event start should not be np.int32 type: {}" \
         .format(event_table["start"].dtype)
     assert sampling_freq != 0, "Must set sampling frequency"
@@ -368,7 +368,7 @@ def sequence_from_events(events):
     :param events: event table with 'model_state' and 'move' fields
 
     """
-    test_numpy_table(events, req_fields=("model_state", "move"))
+    check_numpy_table(events, req_fields=("model_state", "move"))
     bases = []
     for i, event in enumerate(events):
         if i == 0:

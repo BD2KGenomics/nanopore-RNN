@@ -33,7 +33,7 @@ class CreateLabelsTest(unittest.TestCase):
     # TODO
     def test_initialize(self):
         """Test initialize function in CreateLabels"""
-        handle = CreateLabels(self.dna_file)
+        # handle = CreateLabels(self.dna_file)
 
     # TODO
     def test_add_signal_align_predictions(self):
@@ -43,12 +43,14 @@ class CreateLabelsTest(unittest.TestCase):
     # TODO
     def test_add_mea_labels(self):
         """Test add mea labels"""
+        pass
 
     # TODO
     def test_add_guide_alignment(self):
         """Test add guide alignemnt """
-        handle = CreateLabels(self.dna_file)
-        handle.add_guide_alignment()
+        pass
+        # handle = CreateLabels(self.dna_file)
+        # handle.add_guide_alignment()
 
     def test_create_labels_from_guide_alignment(self):
         """Test create_labels_from_guide_alignment"""

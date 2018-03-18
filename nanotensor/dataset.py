@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 """Create inputs to a tensorflow graph using tf operations and queues"""
 ########################################################################
-# File: queue.py
-#  executable: queue.py
+# File: dataset.py
+#  executable: dataset.py
 
 # Author: Andrew Bailey
 # History: 06/05/17 Created

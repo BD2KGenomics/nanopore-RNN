@@ -14,7 +14,7 @@ import subprocess
 import numpy as np
 from timeit import default_timer as timer
 from collections import defaultdict, namedtuple
-from py3helpers.utils import test_numpy_table
+from py3helpers.utils import check_numpy_table
 from py3helpers.seq_tools import ReferenceHandler, initialize_pysam_wrapper, ReverseComplement, get_minimap_alignment
 
 from nanotensor.fast5 import Fast5
@@ -74,7 +74,7 @@ class AlignedSignal(object):
         """
         assert label_type in ['label', 'prediction', 'guide'], \
             "{} not in ['label', 'prediction', 'guide']: Must select an acceptable type".format(label_type)
-        test_numpy_table(label, req_fields=('raw_start', 'raw_length', 'reference_index',
+        check_numpy_table(label, req_fields=('raw_start', 'raw_length', 'reference_index',
                                             'kmer', 'posterior_probability'))
 
         # label.sort(order=['raw_start'], kind='mergesort')
@@ -251,7 +251,7 @@ def create_labels_from_guide_alignment(events, sam_string, rna=False, reference_
     :param one_ref_indexing: boolean zero or 1 based indexing for reference
     """
     # test if the required fields are in structured numpy array
-    test_numpy_table(events, req_fields=('raw_start', 'model_state', 'p_model_state', 'raw_length', 'move'))
+    check_numpy_table(events, req_fields=('raw_start', 'model_state', 'p_model_state', 'raw_length', 'move'))
     assert type(one_ref_indexing) is bool, "one_ref_indexing must be a boolean"
 
     psam_h = initialize_pysam_wrapper(sam_string, reference_path=reference_path)
@@ -332,7 +332,7 @@ def index_bases_from_events(events, kmer_index=2):
     :param events: original base-called events with required fields
     """
 
-    test_numpy_table(events, req_fields=('raw_start', 'model_state', 'p_model_state', 'raw_length', 'move'))
+    check_numpy_table(events, req_fields=('raw_start', 'model_state', 'p_model_state', 'raw_length', 'move'))
     assert len(events[0]['model_state']) > kmer_index, \
         "Selected too big of a kmer_index len(kmer) !> kmer_index, {} !> {} ".format(len(events[0]['model_state']),
                                                                                      kmer_index)
@@ -471,10 +471,10 @@ def match_events_with_eventalign(events=None, event_detections=None, minus=False
     assert events is not None, "Must pass signal alignment events"
     assert event_detections is not None, "Must pass event_detections events"
 
-    test_numpy_table(events, req_fields=('position', 'event_index',
+    check_numpy_table(events, req_fields=('position', 'event_index',
                                             'reference_kmer'))
 
-    test_numpy_table(event_detections, req_fields=('start', 'length'))
+    check_numpy_table(event_detections, req_fields=('start', 'length'))
 
     label = np.zeros(len(events), dtype=[('raw_start', int), ('raw_length', int), ('reference_index', int),
                                             ('posterior_probability', float), ('kmer', 'S6')])
