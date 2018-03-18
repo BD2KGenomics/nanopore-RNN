@@ -304,7 +304,7 @@ def resegment_reads(fast5_path, params, speedy=False, overwrite=False):
     values = ["0.2.0", TimeStamp().posix_date()]
     attributes = merge_dicts([params, dict(zip(keys, values)), f5fh.raw_attributes])
     if f5fh.is_read_rna():
-        old_event_table = index_to_time_rna_basecall(old_event_table, sampling_freq=sampling_freq, start_time=start_time)
+        old_event_table = index_to_time(old_event_table, sampling_freq=sampling_freq, start_time=start_time)
     # set event table
     new_event_table = create_anchor_kmers(new_events=event_table, old_events=old_event_table)
     f5fh.set_new_event_table(name, new_event_table, attributes, overwrite=overwrite)
@@ -320,7 +320,7 @@ def resegment_reads(fast5_path, params, speedy=False, overwrite=False):
     return f5fh
 
 
-def index_to_time_rna_basecall(basecall_events, sampling_freq=0, start_time=0):
+def index_to_time(basecall_events, sampling_freq=0, start_time=0):
     """Convert RNA basecall read start and length from indexes to time stamps
 
     :param basecall_events: basecall events from albacore/metricore basecalled event table
@@ -338,6 +338,28 @@ def index_to_time_rna_basecall(basecall_events, sampling_freq=0, start_time=0):
     event_table["start"] = (event_table["start"] / sampling_freq) + (start_time / sampling_freq)
     event_table["length"] = event_table["length"] / float(sampling_freq)
     return event_table
+
+
+def time_to_index(event_table, sampling_freq=0, start_time=0):
+    """Convert start and lengths from time to raw signal indexes
+
+    :param event_table: basecall events from albacore/metricore basecalled event table
+    :param sampling_freq: sampling frequency of experiment
+    :param start_time: start time of experiment via fasta5 file
+    """
+    test_numpy_table(event_table, req_fields=('start', 'length'))
+    assert event_table["start"].dtype is not np.dtype('uint64'), "Event start should not be np.int32 type: {}" \
+        .format(event_table["start"].dtype)
+    assert sampling_freq != 0, "Must set sampling frequency"
+    assert start_time != 0, "Must set start time"
+
+    event_table["start"] = np.round((event_table["start"] - (start_time / float(sampling_freq))) * sampling_freq)
+    event_table["length"] = np.round(event_table["length"] * sampling_freq)
+    event_table = change_np_field_type(event_table, 'start', int)
+    event_table = change_np_field_type(event_table, 'length', int)
+
+    return event_table
+
 
 
 def sequence_from_events(events):

@@ -16,12 +16,13 @@ from scipy import sparse
 from timeit import default_timer as timer
 from nanotensor.fast5 import Fast5
 from py3helpers.utils import list_dir, test_numpy_table
+from py3helpers.seq_tools import ReverseComplement
 from collections import defaultdict
 import traceback
 
 
 def maximum_expected_accuracy_alignment(posterior_matrix, shortest_ref_per_event, return_all=False,
-                                              sparse_posterior_matrix=None):
+                                        sparse_posterior_matrix=None):
     """Computes the maximum expected accuracy alignment along a reference with given events and probabilities
 
     :param posterior_matrix: matrix of posterior probabilities with reference as columns and
@@ -108,7 +109,7 @@ def maximum_expected_accuracy_alignment(posterior_matrix, shortest_ref_per_event
             # make sure we don't double dip on assigning events for shortest event refs
             if edge_found:
                 # print("EDGE FOUND")
-                test_edge = forward_edges[i-1]
+                test_edge = forward_edges[i - 1]
                 new_edges.append(test_edge)
                 max_prob = test_edge[3]
 
@@ -134,14 +135,15 @@ def maximum_expected_accuracy_alignment(posterior_matrix, shortest_ref_per_event
                             new_edges.append([ref_index, event_index, posterior, forward_edges[i][3], forward_edges[i]])
                             max_prob = forward_edges[i][3]
                     # compare with prev_edge
-                    elif forward_edges[i][3] > forward_edges[i-1][3]+posterior:
+                    elif forward_edges[i][3] > forward_edges[i - 1][3] + posterior:
                         if forward_edges[i][3] > max_prob:
                             new_edges.append([ref_index, event_index, posterior, forward_edges[i][3], forward_edges[i]])
                             max_prob = forward_edges[i][3]
                     # assign move
-                    elif forward_edges[i-1][3]+posterior > max_prob:
-                        new_edges.append([ref_index, event_index, posterior, forward_edges[i-1][3]+posterior, forward_edges[i-1]])
-                        max_prob = forward_edges[i-1][3]+posterior
+                    elif forward_edges[i - 1][3] + posterior > max_prob:
+                        new_edges.append([ref_index, event_index, posterior, forward_edges[i - 1][3] + posterior,
+                                          forward_edges[i - 1]])
+                        max_prob = forward_edges[i - 1][3] + posterior
                     assigning = False
                     # print("Assigned", new_edges)
                     max_i = i
@@ -150,17 +152,18 @@ def maximum_expected_accuracy_alignment(posterior_matrix, shortest_ref_per_event
                         if posterior > max_prob:
                             new_edges.append([ref_index, event_index, posterior, posterior, None])
                             max_prob = posterior
-                    elif forward_edges[i-1][3]+posterior > max_prob:
+                    elif forward_edges[i - 1][3] + posterior > max_prob:
                         new_edges.append([ref_index, event_index, posterior,
-                                          forward_edges[i-1][3]+posterior, forward_edges[i-1]])
-                        max_prob = forward_edges[i-1][3]+posterior
+                                          forward_edges[i - 1][3] + posterior, forward_edges[i - 1]])
+                        max_prob = forward_edges[i - 1][3] + posterior
                     assigning = False
                     # print("Assigned", new_edges)
 
             # ref past all edges
-            elif forward_edges[i-1][3]+posterior > max_prob:
-                new_edges.append([ref_index, event_index, posterior, forward_edges[i-1][3]+posterior, forward_edges[i-1]])
-                max_prob = forward_edges[i-1][3]+posterior
+            elif forward_edges[i - 1][3] + posterior > max_prob:
+                new_edges.append(
+                    [ref_index, event_index, posterior, forward_edges[i - 1][3] + posterior, forward_edges[i - 1]])
+                max_prob = forward_edges[i - 1][3] + posterior
                 assigning = False
                 # print("Assigned", new_edges)
             else:
@@ -206,7 +209,7 @@ def binary_search_for_edge(forward_edges, ref_index, event_index, posterior):
     last_index = len(forward_edges) - 1
     r = last_index
     l = 0
-    i = ((r+l) // 2)
+    i = ((r + l) // 2)
 
     while searching:
         # check events above ref index
@@ -223,22 +226,22 @@ def binary_search_for_edge(forward_edges, ref_index, event_index, posterior):
                     if edge[3] > earlier_edge[3] + posterior:
                         return [ref_index, event_index, posterior, edge[3], edge]
                     else:
-                        return [ref_index, event_index, posterior, earlier_edge[3]+posterior, earlier_edge]
+                        return [ref_index, event_index, posterior, earlier_edge[3] + posterior, earlier_edge]
             # if before last index
             else:
                 if i == last_index:
                     # last event is only one above ref index
-                    return [ref_index, event_index, posterior, edge[3]+posterior, edge]
+                    return [ref_index, event_index, posterior, edge[3] + posterior, edge]
                 # check if next edge is after ref index
                 elif forward_edges[i + 1][0] > ref_index:
-                    return [ref_index, event_index, posterior, edge[3]+posterior, edge]
+                    return [ref_index, event_index, posterior, edge[3] + posterior, edge]
                 # next event is either before ref or equal to it
                 else:
                     l = i + 1
-                    i = (l+r) // 2
+                    i = (l + r) // 2
         else:
             r = i - 1
-            i = (l+r) // 2
+            i = (l + r) // 2
 
 
 def get_indexes_from_best_path(best_path):
@@ -363,27 +366,57 @@ def get_events_from_path(event_matrix, path):
     return events
 
 
-def match_events_with_signalalign(sa_events=None, event_detections=None):
+def match_events_with_signalalign(sa_events=None, event_detections=None, minus=False, rna=False):
     """Match event index with event detection data to label segments of signal for each kmer
+
+    # RNA is sequenced 3'-5'
+    # reversed for fasta/q sequence
+    # if mapped to reverse strand
+    # reverse reverse complement = complement
+
+    # DNA is sequenced 5'-3'
+    # if mapped to reverse strand
+    # reverse complement
 
     :param sa_events: events table reference_index', 'event_index', 'aligned_kmer', 'posterior_probability
     :param event_detections: event detection event table
+    :param minus: boolean option to for minus strand mapping
+    :param rna: boolean for RNA read
     """
-    assert sa_events is not None, "Must pass MEA alignment events"
+    assert sa_events is not None, "Must pass signal alignment events"
     assert event_detections is not None, "Must pass event_detections events"
 
     test_numpy_table(sa_events, req_fields=('reference_index', 'event_index',
-                                             'aligned_kmer', 'posterior_probability'))
+                                            'reference_kmer', 'posterior_probability'))
 
     test_numpy_table(event_detections, req_fields=('raw_start', 'raw_length'))
 
     label = np.zeros(len(sa_events), dtype=[('raw_start', int), ('raw_length', int), ('reference_index', int),
-                                             ('posterior_probability', float), ('kmer', 'S5')])
+                                            ('posterior_probability', float), ('kmer', 'S5')])
 
     label['raw_start'] = [event_detections[x]["raw_start"] for x in sa_events["event_index"]]
     label['raw_length'] = [event_detections[x]["raw_length"] for x in sa_events["event_index"]]
     label['reference_index'] = sa_events["reference_index"]
-    label['kmer'] = sa_events["aligned_kmer"]
+
+    def convert_to_str(string):
+        """Helper function to catch bytes as strings"""
+        if type(string) is str:
+            return string
+        else:
+            return bytes.decode(string)
+
+    flip = ReverseComplement()
+    if minus:
+        if rna:
+            kmers = [flip.complement(convert_to_str(x)) for x in sa_events["reference_kmer"]]
+        else:
+            kmers = [flip.reverse_complement(convert_to_str(x)) for x in sa_events["reference_kmer"]]
+    else:
+        if rna:
+            kmers = [flip.reverse(convert_to_str(x)) for x in sa_events["reference_kmer"]]
+        else:
+            kmers = sa_events["reference_kmer"]
+    label['kmer'] = kmers
     label['posterior_probability'] = sa_events["posterior_probability"]
     np.sort(label, order='raw_start', kind='mergesort')
 
@@ -456,16 +489,16 @@ def create_random_prob_matrix(row=None, col=None, gaps=True):
         start = 0
         skip = 1
     col_indexes = [x for x in range(col)]
-    for row_i in range(row-1, start-1, -1):
+    for row_i in range(row - 1, start - 1, -1):
         a = np.random.random(np.random.randint(skip, col))
         a /= a.sum()
         # go through events backward to make sure the shortest ref per event is calculated at the same time
         a = np.sort(a)
         np.random.shuffle(col_indexes)
         # make sure we dont have gaps at ends of columns
-        if not gaps and row_i == row-1:
-            col_indexes.remove(col-1)
-            col_indexes.insert(0, col-1)
+        if not gaps and row_i == row - 1:
+            col_indexes.remove(col - 1)
+            col_indexes.insert(0, col - 1)
         if not gaps and row_i == 0:
             col_indexes.remove(0)
             col_indexes.insert(0, 0)
@@ -543,7 +576,7 @@ def generate_events_from_probability_matrix(matrix):
 
 
 def mea_slower(posterior_matrix, shortest_ref_per_event, return_all=False,
-                                         sparse_posterior_matrix=None):
+               sparse_posterior_matrix=None):
     """Computes the maximum expected accuracy alignment along a reference with given events and probabilities
 
     NOTE: Slower than other version

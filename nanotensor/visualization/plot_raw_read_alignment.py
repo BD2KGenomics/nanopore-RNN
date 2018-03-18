@@ -119,7 +119,7 @@ def plot_raw_reads(current, old_events, resegment=None, dna=False, sampling_freq
             color = [.082, 0.282, 0.776]
             handle1, = panel.plot([x0, x1], [mean, mean], color=color, lw=0.8)
             panel.plot([x0, x0], [prevMean, mean], color=color, lw=0.5)  # <-- uncomment for pretty square wave
-            panel.text(x0, mean - 2, bytes.decode(kmer), fontsize=5)
+            # panel.text(x0, mean - 2, bytes.decode(kmer), fontsize=5)
             prevMean = mean
 
     handles.append(handle1)
@@ -167,7 +167,7 @@ def plot_segmented_comparison(fast5_handle, window_size=None):
     else:
         start_time = fast5_handle.raw_attributes["start_time"]
         sampling_freq = fast5_handle.sample_rate
-        plot_raw_reads(signal, events, resegment=resegment_events, dna=True, sampling_freq=sampling_freq,
+        plot_raw_reads(signal, events, resegment=None, dna=True, sampling_freq=sampling_freq,
                        start_time=start_time, window_size=window_size)
 
 
@@ -180,10 +180,11 @@ def main():
     dna_reads = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/canonical/"
     files = list_dir(dna_reads, ext='fast5')
     rna_reads = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/rna_reads"
-    files = list_dir(rna_reads, ext='fast5')
+    # files = list_dir(rna_reads, ext='fast5')
 
-    print(files[1])
-    f5fh = resegment_reads(files[1], minknow_params, speedy=False, overwrite=True)
+    print(files[0])
+    f5fh = Fast5(files[0])
+    # f5fh = resegment_reads(files[0], minknow_params, speedy=False, overwrite=True)
     plot_segmented_comparison(f5fh, window_size=3000)
 
     stop = timer()

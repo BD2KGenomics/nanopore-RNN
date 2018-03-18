@@ -83,6 +83,7 @@ class Fast5(h5py.File):
     __default_corrected_genome__ = '/Analyses/RawGenomeCorrected_000/BaseCalled_template'  # nanoraw
     __default_signalalign_events__ = '/Analyses/SignalAlign_00{}'  # signalalign events
     __default_resegment_basecall__ = '/Analyses/ReSegmentBasecall_00{}'
+    __default_eventalign_events__ = '/Analyses/EventAlign_00{}'
 
     __default_event_table_fields__ = ('start', 'length', 'mean', 'stdv')
 
@@ -349,6 +350,20 @@ class Fast5(h5py.File):
             raise KeyError('Read does not contain required fields: {}'.format(path))
         return events
 
+    def get_eventalign_events(self, section='template'):
+        """Get signal align events, sam or mea alignment"""
+        assert section == 'template' or section == 'complement', \
+            "Section must be template or complement: {}".format(section)
+        try:
+            path = self.check_path(self.__default_eventalign_events__, latest=True)
+            print(path)
+            reads = self[path]
+            events = np.asarray(reads['BaseCalled_{}/Events'.format(section)])
+
+        except KeyError:
+            raise KeyError('Read does not contain required fields: {}'.format(path))
+        return events
+
     def get_resegment_basecall(self, number=None):
         """Get most recent resegmented basecall events table
 
@@ -498,11 +513,42 @@ class Fast5(h5py.File):
         path = self.check_path(path, latest=overwrite)
         if overwrite:
             self.delete(path, ignore=True)
-        self._add_attrs(meta, path)
+        if meta:
+            self._add_attrs(meta, path)
         if scale:
             data['start'] *= self.sample_rate
             data['length'] *= self.sample_rate
         self._add_event_table(data, self._join_path(path, "BaseCalled_{}".format(section), 'Events'))
+
+    def set_eventalign_table(self, template, complement, meta, overwrite=False):
+        """Write eventalign table to fast5 file
+
+        :param template: template dataset
+        :param complement: complement dataset
+        :param meta: meta data to attach to read
+        :param overwrite: overwrite most recent path
+        """
+        assert template is not None or template is not None, "Must set template and/or complement dataset"
+
+        self.assert_writable()
+        path = "EventAlign_00{}"
+        path = self._join_path(self.__base_analysis__, path)
+        path = self.check_path(path, latest=overwrite)
+        if overwrite:
+            self.delete(path, ignore=True)
+        if meta:
+            self._add_attrs(meta, path)
+        if not isinstance(template, np.ndarray):
+            raise TypeError('Table is not a ndarray.')
+        if not isinstance(complement, np.ndarray):
+            raise TypeError('Table is not a ndarray.')
+
+        if template is not None:
+            self._add_numpy_table(template, self._join_path(path, "BaseCalled_{}".format("template"), 'Events'))
+        if complement is not None:
+            self._add_numpy_table(complement, self._join_path(path, "BaseCalled_{}".format("complement"), 'Events'))
+
+        return True
 
     def check_path(self, path, latest=False):
         """Check if path exists, if it does increment numbering

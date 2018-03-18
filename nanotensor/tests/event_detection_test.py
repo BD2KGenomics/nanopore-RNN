@@ -428,14 +428,14 @@ class EventDetectTests(unittest.TestCase):
             events = np.empty(9, dtype=[('model_state', 'S5')])
             sequence_from_events(events)
 
-    def test_index_to_time_rna_basecall(self):
-        """test index_to_time_rna_basecall method"""
+    def test_index_to_time(self):
+        """test index_to_time method"""
         # get input data
         sampling_freq = self.rna_handle.sample_rate
         start_time = self.rna_handle.raw_attributes['start_time']
         event_table = self.rna_handle.get_basecall_data()
         # run method
-        new_table = index_to_time_rna_basecall(event_table, sampling_freq=sampling_freq, start_time=start_time)
+        new_table = index_to_time(event_table, sampling_freq=sampling_freq, start_time=start_time)
         start = event_table["start"] / sampling_freq + (start_time / sampling_freq)
         length = event_table["length"] / float(sampling_freq)
         # compare elementwise
@@ -443,13 +443,45 @@ class EventDetectTests(unittest.TestCase):
         self.assertSequenceEqual(new_table["length"].tolist(), length.tolist())
 
         with self.assertRaises(AssertionError):
-            index_to_time_rna_basecall(event_table, start_time=start_time)
-            index_to_time_rna_basecall(event_table, sampling_freq=sampling_freq)
-            index_to_time_rna_basecall("Numpy", sampling_freq=sampling_freq, start_time=start_time)
-            index_to_time_rna_basecall(np.array([1, 2, 3]), sampling_freq=sampling_freq, start_time=start_time)
+            index_to_time(event_table, start_time=start_time)
+        with self.assertRaises(AssertionError):
+            index_to_time(event_table, sampling_freq=sampling_freq)
+        with self.assertRaises(KeyError):
+            index_to_time(np.array([1, 2, 3]), sampling_freq=sampling_freq, start_time=start_time)
+        with self.assertRaises(TypeError):
+            index_to_time("Numpy", sampling_freq=sampling_freq, start_time=start_time)
+        with self.assertRaises(AssertionError):
             event_table = self.dna_handle.get_basecall_data()
-            # make sure it can determine differences between dna and rna basecalled tables
-            index_to_time_rna_basecall(event_table, sampling_freq=sampling_freq, start_time=start_time)
+            index_to_time(event_table, sampling_freq=sampling_freq, start_time=start_time)
+
+    def test_time_to_index(self):
+        """test time_to_index method"""
+        # get input data
+
+        sampling_freq = self.dna_handle.sample_rate
+        start_time = self.dna_handle.raw_attributes['start_time']
+        event_table = self.dna_handle.get_basecall_data()
+        # run method
+        start = np.round((event_table["start"] - (start_time / float(sampling_freq))) * sampling_freq)
+        length = np.round(event_table["length"] * sampling_freq)
+
+        new_table = time_to_index(event_table, sampling_freq=sampling_freq, start_time=start_time)
+        # compare elementwise
+        self.assertSequenceEqual(new_table["start"][0:100].tolist(), start[0:100].tolist())
+        self.assertSequenceEqual(new_table["length"][0:100].tolist(), length[0:100].tolist())
+
+        with self.assertRaises(AssertionError):
+            time_to_index(event_table, start_time=start_time)
+        with self.assertRaises(AssertionError):
+            time_to_index(event_table, sampling_freq=sampling_freq)
+        with self.assertRaises(KeyError):
+            time_to_index(np.array([1, 2, 3]), sampling_freq=sampling_freq, start_time=start_time)
+        with self.assertRaises(TypeError):
+            time_to_index("Numpy", sampling_freq=sampling_freq, start_time=start_time)
+        with self.assertRaises(AssertionError):
+            event_table = self.rna_handle.get_basecall_data()
+            time_to_index(event_table, sampling_freq=sampling_freq, start_time=start_time)
+
 
     def test_check_event_table_time(self):
         """test check_event_table_time"""

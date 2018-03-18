@@ -183,9 +183,61 @@ class Mea(unittest.TestCase):
                                         ('ont_model_mean', '<f8'), ('path_kmer', 'S5')])
             get_mea_params_from_events(events)
 
-    # def test_match_events_with_signalalign(self):
-    #     """Test match_events_with_signalalign"""
+    def test_match_events_with_signalalign(self):
+        """Test match_events_with_signalalign"""
+        # RNA is sequenced 3'-5'
+        # reversed for fasta/q sequence
+        # if mapped to reverse strand
+        # reverse reverse complement = complement
+        # DNA is sequenced 5'-3'
+        # if mapped to reverse strand
+        # reverse complement
 
+        alignment = np.zeros(4, dtype=[('reference_index', int), ('event_index', int), ('posterior_probability', float),
+                                       ('reference_kmer', 'S5')])
+
+        alignment["reference_index"] = [0, 1, 2, 3]
+        alignment["event_index"] = [0, 1, 2, 3]
+        alignment["posterior_probability"] = [1, 1, 1, 1]
+        alignment["reference_kmer"] = ["AAGG", "AGGC", "AGGC", "GGCT"]
+
+        event_detects = np.zeros(4, dtype=[('raw_start', int), ('raw_length', int)])
+        event_detects["raw_start"] = [10, 11, 12, 13]
+        event_detects["raw_length"] = [1, 1, 1, 1]
+
+        labels = match_events_with_signalalign(sa_events=alignment,
+                                               event_detections=event_detects,
+                                               minus=False,
+                                               rna=False)
+        # DNA, plus strand
+        self.assertSequenceEqual([bytes.decode(x) for x in labels["kmer"]], ["AAGG", "AGGC", "AGGC", "GGCT"])
+        self.assertSequenceEqual(labels["raw_start"].tolist(), [10, 11, 12, 13])
+
+        # DNA, minus strand
+        labels = match_events_with_signalalign(sa_events=alignment,
+                                               event_detections=event_detects,
+                                               minus=True,
+                                               rna=False)
+
+        self.assertSequenceEqual([bytes.decode(x) for x in labels["kmer"]], ["CCTT", "GCCT", "GCCT", "AGCC"])
+        self.assertSequenceEqual(labels["raw_start"].tolist(), [10, 11, 12, 13])
+
+        labels = match_events_with_signalalign(sa_events=alignment,
+                                               event_detections=event_detects,
+                                               minus=False,
+                                               rna=True)
+        # RNA, plus strand
+        self.assertSequenceEqual([bytes.decode(x) for x in labels["kmer"]], ["GGAA", "CGGA", "CGGA", "TCGG"])
+        self.assertSequenceEqual(labels["raw_start"].tolist(), [10, 11, 12, 13])
+
+        labels = match_events_with_signalalign(sa_events=alignment,
+                                               event_detections=event_detects,
+                                               minus=True,
+                                               rna=True)
+        # RNA, minus strand # just complement
+        self.assertSequenceEqual([bytes.decode(x) for x in labels["kmer"]], ["TTCC", "TCCG", "TCCG", "CCGA"])
+        self.assertSequenceEqual(labels["raw_start"].tolist(), [10, 11, 12, 13])
+        self.assertTrue(True)
 
 
 if __name__ == '__main__':
