@@ -16,7 +16,6 @@ signalalign:
 python_utils:
 	cd python_utils && python setup.py install
 
-
 PyPore:
 	cd PyPore && python setup.py install
 
@@ -37,4 +36,4 @@ test:
 	cd nanotensor && pytest
 	cd python_utils && pytest
 
-.PHONY: nanonet nanotensor signalalign python-recs marginAlign
+.PHONY: nanonet nanotensor signalalign python-recs marginAlign python_utils
