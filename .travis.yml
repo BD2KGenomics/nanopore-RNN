@@ -52,6 +52,7 @@ install:
 - git submodule update --remote
 - conda env create -f requirements35.yml
 - source activate nanotensor3.5
+- pip install google-compute-engine
 - make
 #- cd nanonet
 #- python setup.py install
@@ -62,6 +63,7 @@ install:
 #- cd marginAlign
 #- make test
 - export PATH=$PATH:$PWD/signalAlign/bin
+- export BOTO_CONFIG=/dev/null
 - make test
 #- pip install -U numpy
 #- pip install -U h5py

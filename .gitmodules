@@ -22,3 +22,6 @@
 [submodule "PyPore"]
 	path = PyPore
 	url = https://github.com/UCSC-nanopore-cgl/PyPore
+[submodule "BaseTensor"]
+	path = BaseTensor
+	url = https://github.com/adbailey4/BaseTensor.git
