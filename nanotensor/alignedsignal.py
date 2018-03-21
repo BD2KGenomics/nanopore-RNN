@@ -224,7 +224,6 @@ class CreateLabels(Fast5):
         """Add eventalign labels"""
         section = "template"
         # TODO call eventalign from here
-
         ea_events = self.get_eventalign_events(section=section)
         events = self.get_basecall_data(section=section)
         sampling_freq = self.sample_rate
@@ -418,8 +417,7 @@ def get_eventalign_events(fast5_dir, reference, output_dir, threads=1, overwrite
             # print(int(data[3]), read_number)
         t = np.array(eventalign_data_template, dtype=dtype)
         c = np.array(eventalign_data_complement, dtype=dtype)
-        print(read_number)
-        print(len(fast5_files))
+        assert t or c, "Check reference genome, no alignment generated for any read: {}".format(reference)
         yield t, c, fast5_files[read_number]
 
 
@@ -445,9 +443,12 @@ def embed_eventalign_events(fast5_dir, reference, output_dir, threads=1, overwri
     #TODO add attributes to event table
     for template, complement, fast5path in event_generator:
         print(fast5path)
-        handle = Fast5(fast5path, read='r+')
-        handle.set_eventalign_table(template=template, complement=complement, meta=attributes, overwrite=False)
-
+        print("template", template)
+        if template or complement:
+            handle = Fast5(fast5path, read='r+')
+            handle.set_eventalign_table(template=template, complement=complement, meta=attributes, overwrite=True)
+        else:
+            print("{} did not align".format(fast5path))
     return True
 
 
@@ -518,7 +519,7 @@ def main():
     dna_read = "/Users/andrewbailey/CLionProjects/nanopore-RNN/nanotensor/tests/test_files/minion-reads/canonical/miten_PC_20160820_FNFAD20259_MN17223_sequencing_run_AMS_158_R9_WGA_Ecoli_08_20_16_43623_ch100_read280_strand.fast5"
     dna_read2 = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/canonical/miten_PC_20160820_FNFAD20259_MN17223_mux_scan_AMS_158_R9_WGA_Ecoli_08_20_16_83098_ch138_read23_strand.fast5"
     # dna_read3 = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/canonical/over_run/miten_PC_20160820_FNFAD20259_MN17223_mux_scan_AMS_158_R9_WGA_Ecoli_08_20_16_83098_ch138_read23_strand.fast5"
-
+    dna_read4 = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/canonical/consortium_r94_human_dna/rel3-fast5-chr1.part04/DEAMERNANOPORE_20161206_FNFAB49164_MN16450_sequencing_run_MA_821_R9_4_NA12878_12_06_16_71094_ch190_read404_strand.fast5"
     reference = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/reference-sequences/ecoli_k12_mg1655.fa"
     reference2 = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/reference-sequences/fake_rna.fa"
     out_ref = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/reference-sequences/fake_rna_reversed.fa"
@@ -539,12 +540,15 @@ def main():
 
     fast5_dir = "/Users/andrewbailey/CLionProjects/nanopore-RNN/nanotensor/tests/test_files/minion-reads/canonical/"
     output_dir = "/Users/andrewbailey/data/test_event_align_output"
-    # embed_eventalign_events(fast5_dir, reference, output_dir, threads=1, overwrite=False)
-    f5handle = Fast5(dna_read)
+    fast5_dir2 = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/canonical/consortium_r94_human_dna/rel3-fast5-chr1.part04/"
+
+    embed_eventalign_events(fast5_dir2, reference, output_dir, threads=1, overwrite=True)
+
+    f5handle = Fast5(dna_read4)
     section = "template"
     ea_events = f5handle.get_eventalign_events(section=section)
     print(ea_events.dtype)
-    print(ea_events[1])
+    print(ea_events)
     # TODO  match labels with events and raw signal
 
     events = f5handle.get_basecall_data(section=section)
@@ -552,7 +556,7 @@ def main():
     start_time = f5handle.raw_attributes['start_time']
 
     events = time_to_index(events, sampling_freq=sampling_freq, start_time=start_time)
-    lables = match_events_with_eventalign(events=ea_events, event_detections=events, )
+    lables = match_events_with_eventalign(events=ea_events, event_detections=events)
     # handle = Fast5(dna_read2)
     # events, corr_start_rel_to_raw = handle.get_corrected_events()
     # events["start"] += corr_start_rel_to_raw

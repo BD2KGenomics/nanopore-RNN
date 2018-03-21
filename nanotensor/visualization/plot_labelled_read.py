@@ -12,23 +12,10 @@ from __future__ import print_function
 import sys
 import os
 from timeit import default_timer as timer
-import pysam
 import matplotlib.pyplot as plt
 import matplotlib.patches as mplpatches
 import numpy as np
-from collections import defaultdict
-import scipy.stats as stats
-from py3helpers.utils import list_dir, time_it, test_numpy_table
-from nanotensor.fast5 import Fast5
-import tempfile
-from scipy import sparse
-from py3helpers.seq_tools import ReferenceHandler, initialize_pysam_wrapper, ReverseComplement
-from nanotensor.mea_algorithm import maximum_expected_accuracy_alignment, mea_slow, \
-    mea_slower, create_random_prob_matrix, get_mea_params_from_events, match_events_with_signalalign
-import unittest
-from signalalign.signalAlignment import SignalAlignment
 from nanotensor.alignedsignal import AlignedSignal, CreateLabels
-from nanotensor.event_detection import resegment_reads
 
 class PlotSignal(object):
     """Handles alignments between nanopore signals, events and reference sequences"""
@@ -124,7 +111,7 @@ class PlotSignal(object):
 def main():
     """Main docstring"""
     start = timer()
-    # sam = "/Users/andrewbailey/CLionProjects/nanopore-RNN/signalAlign/bin/test_output/tempFiles_alignment/tempFiles_miten_PC_20160820_FNFAD20259_MN17223_mux_scan_AMS_158_R9_WGA_Ecoli_08_20_16_83098_ch138_read23_strand/temp_sam_file_5048dffc-a463-4d84-bd3b-90ca183f488a.sam"\
+    # sam = "/Users/andrewbailey/CLionProjects/nanopore-RNN/signalAlign/bin/`output/tempFiles_alignment/tempFiles_miten_PC_20160820_FNFAD20259_MN17223_mux_scan_AMS_158_R9_WGA_Ecoli_08_20_16_83098_ch138_read23_strand/temp_sam_file_5048dffc-a463-4d84-bd3b-90ca183f488a.sam"\
 
     # rna_read = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/rna_reads/DEAMERNANOPORE_20170922_FAH26525_MN16450_sequencing_run_MA_821_R94_NA12878_mRNA_09_22_17_67136_read_36_ch_218_strand.fast5"
     # dna_read = "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/minion-reads/canonical/miten_PC_20160820_FNFAD20259_MN17223_sequencing_run_AMS_158_R9_WGA_Ecoli_08_20_16_43623_ch100_read280_strand.fast5"
@@ -137,8 +124,8 @@ def main():
     # rh = ReferenceHandler(reference)
     # seq = rh.get_sequence(chromosome_name="Chromosome", start=623566, stop=623572)
     # print(seq)
-    MINKNOW = dict(window_lengths=(5, 10), thresholds=(2.0, 1.1), peak_height=1.2)
-    resegment_reads(dna_read2, MINKNOW, speedy=False, overwrite=True)
+    # MINKNOW = dict(window_lengths=(5, 10), thresholds=(2.0, 1.1), peak_height=1.2)
+    # resegment_reads(dna_read2, MINKNOW, speedy=False, overwrite=True)
 
     test = CreateLabels(dna_read2)
     test.add_guide_alignment()

@@ -356,7 +356,6 @@ class Fast5(h5py.File):
             "Section must be template or complement: {}".format(section)
         try:
             path = self.check_path(self.__default_eventalign_events__, latest=True)
-            print(path)
             reads = self[path]
             events = np.asarray(reads['BaseCalled_{}/Events'.format(section)])
 
@@ -528,8 +527,7 @@ class Fast5(h5py.File):
         :param meta: meta data to attach to read
         :param overwrite: overwrite most recent path
         """
-        assert template is not None or template is not None, "Must set template and/or complement dataset"
-
+        assert template or complement, "Must set template and/or complement dataset"
         self.assert_writable()
         path = "EventAlign_00{}"
         path = self._join_path(self.__base_analysis__, path)
@@ -1134,7 +1132,6 @@ class Fast5(h5py.File):
                 (exp_kit is not None and re.search('rna', exp_kit) is not None))
 
         return rna
-
 
 
 def iterate_fast5(path, strand_list=None, paths=False, mode='r', limit=None, files_group_pattern=None, sort_by_size=None):
