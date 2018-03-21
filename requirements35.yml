@@ -76,7 +76,6 @@ dependencies:
   - oauthlib==2.0.6
   - pluggy==0.6.0
   - protobuf==3.5.0.post1
-  - pythonic-porin==0.2.0
   - requests-oauthlib==0.8.0
   - tensorflow==1.4.0
   - tensorflow-tensorboard==0.4.0rc3
