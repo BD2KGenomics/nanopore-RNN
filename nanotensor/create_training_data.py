@@ -164,18 +164,17 @@ class CommandLine(object):
         assert os.path.isfile(args.log_file), "Log file does not exist: {}".format(args.log_file)
         assert type(args.prob) is bool, "Prob must be boolean: {}".format(args.prob)
         assert type(args.kmer_len) is int, "kmer-len must be integer: {}".format(args.kmer_len)
-        assert type(args.alphabet) is unicode or type(args.alphabet) is str, "alphabet must be string: {}".format(
+        assert type(args.alphabet) is str, "alphabet must be string: {}".format(
             args.alphabet)
         assert type(args.nanonet) is bool, "nanonet-features option must be boolean: {}".format(args.nanonet)
         assert type(args.num_cpu) is int, "num-cpu must be integer: {}".format(args.num_cpu)
         assert type(args.deepnano) is bool, "deepnano must be integer: {}".format(args.deepnano)
-        assert type(args.file_prefix) is unicode or type(
-            args.file_prefix) is str, "file-prefix must be string: {}".format(args.file_prefix)
+        assert type(args.file_prefix) is str, "file-prefix must be string: {}".format(args.file_prefix)
         assert type(args.verbose) is bool, "verbose option must be a boolean: {}".format(args.verbose)
         assert type(args.debug) is bool, "debug option must be a boolean: {}".format(args.debug)
         assert type(args.save2s3) is bool, "save2s3 option must be a bool: {}".format(args.save2s3)
         assert type(args.tar) is bool, "tar option must be a boolean: {}".format(args.tar)
-        assert type(args.bucket) is unicode or type(args.bucket) is str, "bucket option must be a string: {}".format(
+        assert type(args.bucket) is str, "bucket option must be a string: {}".format(
             args.bucket)
 
         return args
@@ -197,7 +196,7 @@ def create_training_data(args):
 def create_training_data_args(log_file, prefix, args, exception=AssertionError):
     """Create generator of specific arguments for create_training_data"""
     assert os.path.exists(log_file), "Log file does not exist: {}".format(log_file)
-    assert type(prefix) is str or type(prefix) is unicode
+    assert type(prefix) is str
     counter = 0
     with open(log_file, 'r') as log:
         for line in log:
