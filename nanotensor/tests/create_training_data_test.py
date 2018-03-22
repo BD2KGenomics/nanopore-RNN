@@ -28,7 +28,7 @@ class CreateTrainingDataTest(unittest.TestCase):
         cls.HOME = '/'.join(os.path.abspath(__file__).split("/")[:-3])
         cls.test_files = '/'.join(os.path.abspath(__file__).split("/")[:-1])
 
-        cls.TEST_DIR = os.path.join(cls.test_files, "test_files/create_training_files")
+        cls.TEST_DIR = os.path.join(cls.test_files, "test_files/")
         cls.old_log_file = os.path.join(cls.test_files, "test_files/test_log_files/canonical.log.txt")
         new_log_path = os.path.join(cls.test_files, "test_files/test_log_files/real.canonical.log.txt")
         cls.template_model = os.path.join(cls.HOME, "signalAlign/models/testModelR9p4_acegt_template.model")
@@ -144,7 +144,8 @@ class CreateTrainingDataTest(unittest.TestCase):
         prefix = "file"
         log_file = self.old_log_file
         arg_generator = create_training_data_args(log_file, prefix, self.args)
-        self.assertRaises(StopIteration, next, arg_generator)
+        if os.getcwd().split('/')[-1] != 'tests':
+            self.assertRaises(StopIteration, next, arg_generator)
         # passes
         prefix = "file"
         log_file = self.args["log_file"]
@@ -219,7 +220,7 @@ class CreateTrainingDataTest(unittest.TestCase):
     def test_main(self):
         """Test main function of create_training_data"""
         log_dir_path = main(in_opts=self.args)
-        print(log_dir_path)
+        # print(log_dir_path.split("/")[:-3])
         shutil.rmtree(log_dir_path)
 
 
