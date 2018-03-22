@@ -47,8 +47,7 @@ class TrainingData(object):
         if deepnano:
             assert not prob, "Proabability vector is not an option when using deepnano data preparation"
             output = subprocess.check_output("estimateNanoporeParams;  exit 0", shell=True, stderr=subprocess.STDOUT)
-            print(output)
-            assert "Could not" == str(output)[:9], "estimateNanoporeParams is not in path"
+            assert "Could not" == bytes.decode(output)[:9], "estimateNanoporeParams is not in path"
             assert os.path.isfile(template_model), "Template model file does not exist"
             assert os.path.isfile(complement_model), "Complement model file does not exist"
             self.params = estimate_params(self.fast5_file, binary_path="estimateNanoporeParams",
