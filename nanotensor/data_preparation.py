@@ -47,6 +47,7 @@ class TrainingData(object):
         if deepnano:
             assert not prob, "Proabability vector is not an option when using deepnano data preparation"
             output = subprocess.check_output("estimateNanoporeParams;  exit 0", shell=True, stderr=subprocess.STDOUT)
+            print(output)
             assert "Could not" == str(output)[:9], "estimateNanoporeParams is not in path"
             assert os.path.isfile(template_model), "Template model file does not exist"
             assert os.path.isfile(complement_model), "Complement model file does not exist"
@@ -455,6 +456,9 @@ class TrainingData(object):
     def interpolate(self):
         """Guess a distribution of data"""
         return "from scipy.interpolate import interp1d"
+
+
+
 
 
 def main():

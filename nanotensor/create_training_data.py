@@ -19,6 +19,8 @@ from nanotensor.data_preparation import TrainingData
 from nanotensor.error import Usage
 from nanotensor.utils import merge_two_dicts, load_json, DotDict, multiprocess_data, create_time_directory, \
     save_config_file, tarball_files, list_dir, upload_file_to_s3
+from nanotensor.chiron_data_prep import create_label_chiron_data_args, label_chiron_data_multiprocess_wrapper, \
+    call_nanoraw
 
 
 class CommandLine(object):
@@ -129,6 +131,10 @@ class CommandLine(object):
                                         help='use deepnano feature and and label definitions', action="store_true",
                                         dest='deepnano')
 
+        exclusive_labeling.add_argument('--chiron',
+                                        help='Create data for chiron', action="store_true",
+                                        dest='chiron')
+
         # allow optional arguments not passed by the command line
         if in_opts is None:
             self.args = vars(self.parser.parse_args())
@@ -233,14 +239,16 @@ def get_arguments(command_line):
     return args
 
 
-def get_tar_name(name, time_dir, nanonet_bool, deepnano_bool):
+def get_tar_name(name, time_dir, nanonet_bool, deepnano_bool, chiron_bool):
     """Get name for tar file from directory and nanonet or deepnano"""
     time = time_dir.split('/')[-1]
-    assert nanonet_bool != deepnano_bool, "Nanonet or Deepnano must be True"
+    assert (nanonet_bool != deepnano_bool) != chiron_bool, "Nanonet or Deepnano or Chiron must be True"
     if nanonet_bool:
         name = name + '.' + time + ".nanonet"
     elif deepnano_bool:
         name = name + '.' + time + ".deepnano"
+    elif chiron_bool:
+        name = name + '.' + time + ".chiron"
     return name
 
 
@@ -267,22 +275,29 @@ def main(in_opts=None):
         save_config_file(args, log_dir_path)
         # reset output directory to new log directory so files are written to correct location
         args.output_dir = log_dir_path
+        if args.chiron:
+            call_nanoraw(args.fast5_dir, args.reference, args.num_cpu, overwrite=args.overwrite)
+            arg_generator = create_label_chiron_data_args(args.fast5_dir, args.output_dir, output_name=args.file_prefix,
+                                                          verbose=args.verbose)
+            target = label_chiron_data_multiprocess_wrapper
 
-        log_file = args.log_file
-        print("Using log file {}".format(log_file), file=sys.stderr)
-        # define number of workers and create queues
-        arg_generator = create_training_data_args(log_file, args.file_prefix, args)
+        else:
+            log_file = args.log_file
+            print("Using log file {}".format(log_file), file=sys.stderr)
+            # define number of workers and create queues
+            arg_generator = create_training_data_args(log_file, args.file_prefix, args)
+            target = create_training_data
+
         if args.debug:
             for arg in arg_generator:
-                create_training_data(arg)
+                target(arg)
         else:
             num_workers = args.num_cpu
-            target = create_training_data
             multiprocess_data(num_workers, target, arg_generator)
 
         # if tar or save files create tar archive
-        if args.save2s3 or args.tar:
-            tar_name = get_tar_name("training_data", args.output_dir, args.nanonet, args.deepnano)
+        if args.tar:
+            tar_name = get_tar_name("training_data", args.output_dir, args.nanonet, args.deepnano, args.chiron)
             file_paths = list_dir(args.output_dir)
             print("Creating tarball file\n", file=sys.stderr)
             tar_path = tarball_files(tar_name, file_paths, output_dir=args.output_dir)
@@ -302,6 +317,7 @@ def main(in_opts=None):
         command_line.do_usage_and_die(err.msg)
 
     return log_dir_path
+
 
 if __name__ == "__main__":
     main()

@@ -8,8 +8,8 @@ then use's tensorflow to train a mulit layer BLSTM-RNN"""
 # Author: Andrew Bailey
 # History: 05/28/17 Created
 ########################################################################
-
 from __future__ import print_function
+import logging as log
 import sys
 import os
 import re
@@ -20,13 +20,17 @@ import argparse
 from datetime import datetime
 import numpy as np
 import time
-from nanotensor.utils import project_folder, list_dir, DotDict, upload_model, load_json, save_config_file, test_aws_connection
+from itertools import izip
+from nanotensor.utils import project_folder, list_dir, DotDict, upload_model, load_json, save_config_file, \
+    test_aws_connection, merge_two_dicts, time_it, debug
 from nanotensor.error import Usage
-from nanotensor.queue import DataQueue
-from nanotensor.network import BuildGraph
-from nanotensor.data_preparation import TrainingData
+from nanotensor.queue import FullSignalSequence, MotifSequence, NumpyEventData
+from nanotensor.network import CtcLoss, CrossEntropy
+from textGan.tweet_data import PostProcessGlove, LastLSTMOutput, CharacterEmbedding, Seq2SeqGenerator, RandomZInput
 import tensorflow as tf
 from tensorflow.python.client import timeline
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 
 class CommandLine(object):
@@ -50,8 +54,8 @@ class CommandLine(object):
         argparse.
         """
         # define program description, usage and epilog
-        self.parser = argparse.ArgumentParser(description='This program \ takes a config file with network '
-                                                          'configurations and paths to data directories.',
+        self.parser = argparse.ArgumentParser(description='This program takes two config files one with the network '
+                                                          'configurations and one with the paths to data directories.',
                                               epilog="Dont forget to tar the files",
                                               usage='%(prog)s use "-h" for help')
 
@@ -63,9 +67,9 @@ class CommandLine(object):
                                     help='path to a json config file with all \
                                     required arguments defined')
 
-        self.parser.add_argument('-v', '--verbose', action='store_true',
-                                 help='print out more information')
-
+        # self.parser.add_argument('-v', '--verbose', action='store_true',
+        #                          help='print out more information')
+        #
         # allow optional arguments not passed by the command line
         if in_opts is None:
             self.args = vars(self.parser.parse_args())
@@ -86,121 +90,178 @@ class CommandLine(object):
         self.parser.print_help(file=sys.stderr)
         return 2
 
-    def debug(self, string):
-        """
-        Controls debugging messages.
-        """
-        if not self.args['verbose']:
-            pass
-        elif self.args['verbose']:
-            sys.stdout.write('{}\n'.format(string))
-
     @staticmethod
-    def check_args(args):
+    def check_args(args, config):
         """Check arguments, save config file in new folder if correct"""
         # make sure output dir exists
-        assert os.path.isdir(args["training_dir"])
-        assert os.path.isdir(args["testing_dir"])
+        assert os.path.isdir(args["CreateDataset"]["training_dir"]), \
+            "{} does not exist".format(args["CreateDataset"]["training_dir"])
+        assert os.path.isdir(args["CreateDataset"]["validation_dir"]), \
+            "{} does not exist".format(args["CreateDataset"]["validation_dir"])
+        assert int(args["train"]) + int(args["inference"]) + int(args["test"]) == 1, "Must select either train, " \
+                                                                                     "inference or test."
         # create new output dir
         if args["train"] and not args["load_trained_model"]:
             logfolder_path = os.path.join(args["output_dir"],
                                           datetime.now().strftime("%m%b-%d-%Hh-%Mm"))
-            os.makedirs(logfolder_path)
-            config_path = save_config_file(args, logfolder_path, name="run_nanotensor.config.json")
+            try:
+                os.makedirs(logfolder_path)
+            except OSError:
+                pass
+            config_path = save_config_file(args, logfolder_path, name=os.path.basename(config))
             # define log file dir
             args["output_dir"] = logfolder_path
             args["config_path"] = config_path
         args = DotDict(args)
+        args.CreateDataset = DotDict(args.CreateDataset)
+        args.CreateDataset.dataset_args = DotDict(args.CreateDataset.dataset_args)
+        args.BuildGraph = DotDict(args.BuildGraph)
+        args.BuildGraph.graph_args = DotDict(args.BuildGraph.graph_args)
         return args
 
 
-class TrainModel(object):
+class RunTensorflow(object):
     """Class for running a tensorflow model."""
 
     def __init__(self, args):
-        super(TrainModel, self).__init__()
         self.args = args
-        self.training_files = list_dir(self.args.training_dir, ext="npy")
-        self.testing_files = list_dir(self.args.testing_dir, ext="npy")
-        self.testing_bool = tf.placeholder(dtype=bool, shape=[], name='testing_bool')
-        self.n_input = int()
-        self.n_classes = int()
-        self.training = "DataQueue"
-        self.testing = "DataQueue"
-        self.start = datetime.now()
+        # get correct data input pipeline
+        dataset_options = {"FullSignalSequence": FullSignalSequence, "MotifSequence": MotifSequence,
+                           "NumpyEventData": NumpyEventData, "PostProcessGlove": PostProcessGlove,
+                           "CharacterEmbedding": CharacterEmbedding, "RandomZInput": RandomZInput}
+        self.Dataset = dataset_options[self.args.CreateDataset.dataset]
+        # pick graph
+        graph_options = {"CtcLoss": CtcLoss, "CrossEntropy": CrossEntropy, "LastLSTMOutput": LastLSTMOutput,
+                         "Seq2SeqGenerator": Seq2SeqGenerator}
+        self.Graph = graph_options[self.args.BuildGraph.graph]
+
         self.global_step = tf.get_variable(
             'global_step', [],
             initializer=tf.constant_initializer(0), trainable=False)
-        # self.save_model_path = os.path.join(self.args.output_dir, self.args.model_name)
-        self.train_op = "train_op"
-        self.model = self.initialize_model()
 
+        if self.args.train:
+            self.training_files = list_dir(self.args.CreateDataset.training_dir)
+            self.validation_files = list_dir(self.args.CreateDataset.validation_dir)
+            self.training = "CreateDataset"
+            self.validation = "CreateDataset"
+            self.train_op = "train_op"
+            self.training_model = "BuildGraph"
+            self.validation_model = "BuildGraph"
+            self.cost_diff_summary = None
+            self.tower_grads = []
+            learning_rate = tf.train.exponential_decay(self.args.learning_rate, self.global_step,
+                                                       100000, 0.96, staircase=True)
+            self.opt = tf.train.AdamOptimizer(learning_rate=learning_rate)
+
+        elif self.args.test:
+            self.test_files = list_dir(self.args.CreateDataset.test_dir)
+            self.testing = "CreateDataset"
+            self.testing_model = "BuildGraph"
+            self.testing_opts = []
+
+        elif self.args.inference:
+            self.inference_files = list_dir(self.args.CreateDataset.inference_dir, ext=self.args.file_ext)
+            self.inference = "CreateDataset"
+            self.inference_model = "BuildGraph"
+            self.inference_opts = []
+
+        # load data
+        log.info("Data Loading Started")
+        speed = time_it(self.load_data)
+        log.info("Data Loading took {} seconds to complete".format(speed))
+
+        # look for GPU's
+        self.gpu_indexes = test_for_nvidia_gpu(self.args.num_gpu)
+
+        # initialize model
+        log.info("Initializing Model")
+        speed = time_it(self.initialize_model)
+        log.info("Model Initialization took {} seconds to complete".format(speed))
+
+        self.summaries = tf.summary.merge_all()
+        self.start = datetime.now()
         if self.args.use_checkpoint:
-            self.trained_model_path = tf.train.latest_checkpoint(self.args.trained_model)
+            self.model_path = tf.train.latest_checkpoint(self.args.trained_model)
         else:
-            self.trained_model_path = self.args.trained_model_path
+            self.model_path = self.args.trained_model_path
 
     def initialize_model(self):
         """Initialize the model with multi-gpu options"""
-        tower_grads = []
-        self.load_data()
-        gpu_indexes = test_for_nvidia_gpu(self.args.num_gpu)
-        reuse = None
-        opt = tf.train.AdamOptimizer(learning_rate=self.args.learning_rate)
-        if gpu_indexes and self.args.train:
-            print("Using GPU's {}".format(gpu_indexes), file=sys.stderr)
-            with tf.variable_scope(tf.get_variable_scope()):
-                for i in list(gpu_indexes):
-                    events, labels = self.training.get_inputs()
+        with tf.variable_scope(self.args.model_name, reuse=tf.AUTO_REUSE):
+            # if gpus are availiable
+            if self.gpu_indexes:
+                log.info("Using GPU's {}".format(self.gpu_indexes))
+                for count, i in enumerate(self.gpu_indexes):
                     with tf.device('/gpu:%d' % i):
-                        model = BuildGraph(self.n_input, self.n_classes, self.args.learning_rate,
-                                           n_steps=self.args.n_steps,
-                                           network=self.args.network, x=events, y=labels,
-                                           binary_cost=self.args.binary_cost,
-                                           reuse=reuse)
-                        tf.get_variable_scope().reuse_variables()
-                        reuse = True
-                        gradients = opt.compute_gradients(model.cost)
-                        tower_grads.append(gradients)
-                        # print(gradients)
-                        # print(len(gradients))
-            grads = average_gradients(tower_grads)
-        else:
-            print("No GPU's available, using CPU for computation", file=sys.stderr)
-            if self.args.train:
-                events, labels = self.training.get_inputs()
+                        # create graph
+                        graph_type = self.create_model()
+                        log.info("Created {} graph on gpu:{}".format(graph_type, i))
             else:
-                events, labels = self.testing.get_inputs()
+                log.info("No GPU's available, using CPU for computation")
+                graph_type = self.create_model()
+                log.info("Created {} graph on /cpu:0".format(graph_type))
 
-            model = BuildGraph(self.n_input, self.n_classes, self.args.learning_rate, n_steps=self.args.n_steps,
-                               network=self.args.network, x=events, y=labels, binary_cost=self.args.binary_cost,
-                               reuse=reuse)
-            # self.train_op = model.optimizer
-            grads = opt.compute_gradients(model.cost)
-        with tf.variable_scope("apply_gradients"):
-            self.train_op = opt.apply_gradients(grads, global_step=self.global_step)
-        # variable_averages = tf.train.ExponentialMovingAverage(
-        # cifar10.MOVING_AVERAGE_DECAY, global_step)
-        # variables_averages_op = variable_averages.apply(tf.trainable_variables())
+            if self.args.train:
+                with tf.device('/cpu:0'):
+                    self.validation_model = self.Graph(network=self.args.network, dataset=self.validation,
+                                                       summary_name="Validation")
+                    log.info("Created Validation graph on /cpu:0")
 
-        return model
+                # update graph with new weights after backprop
+                if self.gpu_indexes:
+                    grads = average_gradients(self.tower_grads)
+                else:
+                    grads = self.tower_grads[0]
+                with tf.variable_scope("apply_gradients", reuse=tf.AUTO_REUSE):
+                    self.train_op = self.opt.apply_gradients(grads, global_step=self.global_step)
+
+                self.cost_diff_summary = tf.summary.scalar('cost_diff',
+                                                           (self.training_model.cost - self.validation_model.cost))
+
+                # variable_averages = tf.train.ExponentialMovingAverage(
+                # cifar10.MOVING_AVERAGE_DECAY, global_step)
+                # variables_averages_op = variable_averages.apply(tf.trainable_variables())
+
+    def create_model(self, validation=False, gpu=False):
+        """Create inference, test or training model"""
+        if self.args.inference:
+            self.inference_model = self.Graph(network=self.args.network, dataset=self.inference,
+                                              summary_name="Inference")
+            self.inference_opts.append(self.inference_model.prediction)
+            graph_type = "Inference"
+        elif self.args.test:
+            self.testing_model = self.Graph(network=self.args.network, dataset=self.testing,
+                                            summary_name="Testing")
+            self.testing_opts.append(self.testing_model.accuracy)
+            self.testing_opts.append(self.testing_model.batch_size)
+            graph_type = "Testing"
+        elif self.args.train:
+            self.training_model = self.Graph(network=self.args.network, dataset=self.training, summary_name="Training")
+            # compute gradients
+            gradients = self.opt.compute_gradients(self.training_model.cost)
+            self.tower_grads.append(gradients)
+            graph_type = "Training"
+        return graph_type
 
     def load_data(self):
         """Create training and testing queues from training and testing files"""
-        self.training = DataQueue(self.training_files, self.args.batch_size,
-                                  queue_size=self.args.queue_size, verbose=False, pad=0, trim=True,
-                                  n_steps=self.args.n_steps)
-        self.testing = DataQueue(self.testing_files, self.args.batch_size,
-                                 queue_size=self.args.queue_size, verbose=False, pad=0, trim=True,
-                                 n_steps=self.args.n_steps)
-        assert self.training.n_input == self.testing.n_input
-        assert self.training.n_classes == self.testing.n_classes
-        self.n_input = self.training.n_input
-        self.n_classes = self.training.n_classes
+        if self.args.train:
+            train_dataset_args = merge_two_dicts(self.args.CreateDataset.dataset_args,
+                                                 {"mode": 0, "verbose": self.args.verbose})
+            self.training = self.Dataset(self.training_files, **train_dataset_args)
+            self.validation = self.Dataset(self.validation_files, **train_dataset_args)
+        if self.args.test:
+            test_dataset_args = merge_two_dicts(self.args.CreateDataset.dataset_args,
+                                                {"mode": 1, "verbose": self.args.verbose})
+            self.testing = self.Dataset(self.test_files, **test_dataset_args)
+        if self.args.inference:
+            inference_dataset_args = merge_two_dicts(self.args.CreateDataset.dataset_args,
+                                                     {"mode": 2, "verbose": self.args.verbose})
+            self.inference = self.Dataset(self.inference_files, **inference_dataset_args)
         return 0
 
     # @profile
-    def run_training(self, intra_op_parallelism_threads=8, log_device_placement=True, allow_soft_placement=True):
+    def train_model(self, intra_op_parallelism_threads=8, log_device_placement=True, allow_soft_placement=True):
         """Run training steps
         use `dmesg` to get error message if training is killed
         """
@@ -209,7 +270,9 @@ class TrainModel(object):
                                 allow_soft_placement=allow_soft_placement)
         # shows gpu memory usage
         config.gpu_options.allow_growth = True
+        run_metadata = tf.RunMetadata()
 
+        # with tf.train.MonitoredTrainingSession(config=config) as sess:
         with tf.Session(config=config) as sess:
             # create logs
             run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
@@ -217,53 +280,125 @@ class TrainModel(object):
             if self.args.load_trained_model:
                 writer = tf.summary.FileWriter(self.args.trained_model, sess.graph)
                 saver = tf.train.Saver(max_to_keep=4, keep_checkpoint_every_n_hours=2)
-                saver.restore(sess, self.trained_model_path)
-                # TODO could have a bug here if using wrong config file with wrong model name
-                save_model_path = os.path.join(self.args.trained_model, self.args.model_name)
+                saver.restore(sess, self.model_path)
             else:
                 # initialize
                 writer = tf.summary.FileWriter(self.args.output_dir, sess.graph)
                 sess.run(tf.global_variables_initializer())
-                save_model_path = os.path.join(self.args.output_dir, self.args.model_name)
-                saver = tf.train.Saver()
-                saver.save(sess, save_model_path,
-                           global_step=self.global_step)
+                self.model_path = os.path.join(self.args.output_dir, self.args.model_name)
                 saver = tf.train.Saver(max_to_keep=4, keep_checkpoint_every_n_hours=2)
-            # start queue
-            coord = tf.train.Coordinator()
-            threads = tf.train.start_queue_runners(sess=sess, coord=coord)
-            self.training.start_threads(sess, n_threads=self.args.num_threads)
-            run_metadata = tf.RunMetadata()
+                saver.save(sess, self.model_path,
+                           global_step=self.global_step)
+            log.info("Model Path: {}".format(self.model_path))
+
+            # load data into placeholders
+            sess.run(self.training.iterator.initializer,
+                     feed_dict={self.training.place_X: self.training.data.input,
+                                self.training.place_Y: self.training.data.label,
+                                self.training.place_Seq: self.training.data.seq_len})
+            sess.run(self.validation.iterator.initializer,
+                     feed_dict={self.validation.place_X: self.validation.data.input,
+                                self.validation.place_Y: self.validation.data.label,
+                                self.validation.place_Seq: self.validation.data.seq_len})
+
             # Keep training until reach max iterations
-            # print("Training Has Started!")
-            while step < self.args.training_iters:
-                for _ in range(self.args.record_step):
-                    # Run optimization training step
-                    _ = sess.run([self.train_op])
-                    step += 1
-                # get training accuracy stats
-                self.report_summary_stats(sess, writer, run_metadata, run_options)
-                # if it has been enough time save model and print training stats
-                if self.test_time() and self.args.profile:
-                    # very expensive profiling steps to add time statistics
-                    self.profile_training(sess, writer, run_metadata, run_options)
+            print("Training Has Started!", file=sys.stderr)
+            try:
+                # TODO have a better termination method
+                while step < self.args.training_iters:
+                    for _ in range(self.args.record_step):
+                        # Run optimization training step
+                        _ = sess.run([self.train_op])
+                        step += 1
+                    # get training accuracy stats
+                    self.report_summary_stats(sess, writer)
+                    # if it has been enough time save model and print training stats
+                    if self.test_time() and self.args.profile:
+                        # very expensive profiling steps to add time statistics
+                        self.profile_training(sess, writer, run_metadata, run_options)
 
-            saver.save(sess, save_model_path,
-                       global_step=self.global_step, write_meta_graph=False)
-
-        coord.request_stop()
-        # coord.join(threads)
-        self.training.join()
+                    saver.save(sess, self.model_path,
+                               global_step=self.global_step, write_meta_graph=False)
+            except tf.errors.OutOfRangeError:
+                print("End of dataset")  # ==> "End of dataset"
         sess.close()
         writer.close()
 
         print("Training Finished!")
 
+    # TODO refactor to work correctly
+    def run_model(self, intra_op_parallelism_threads=8, log_device_placement=False, allow_soft_placement=True):
+        """Run a model from a saved model path"""
+        config = tf.ConfigProto(log_device_placement=log_device_placement,
+                                intra_op_parallelism_threads=intra_op_parallelism_threads,
+                                allow_soft_placement=allow_soft_placement)
+
+        with tf.Session(config=config) as sess:
+            saver = tf.train.Saver(max_to_keep=4, keep_checkpoint_every_n_hours=2)
+            saver.restore(sess, self.model_path)
+            for file_path in self.inference_files:
+                self.inference.file_path = file_path
+                sess.run(self.inference.iterator.initializer)
+                prediction_list = []
+                try:
+                    while True:
+                        evaluate_pred = sess.run([self.inference_opts])
+                        prediction_list.extend((evaluate_pred[0]))
+                        self.inference.process_output(evaluate_pred[0], "lala")
+                except tf.errors.OutOfRangeError or StopIteration:  # and tf.errors.StopIteration:
+                    self.inference.process_output(prediction_list, file_path)
+                    log.info(file_path)
+                    continue
+            print("Finished Inference", file=sys.stderr)
+        sess.close()
+
+    def test_model(self, intra_op_parallelism_threads=8, log_device_placement=False, allow_soft_placement=True):
+        """Get testing accuracy and save model along with configuration file on s3"""
+        if self.args.save_s3:
+            aws_test = test_aws_connection(self.args.s3bucket)
+            assert aws_test is True, "Selected save to s3 option but cannot connect to specified bucket"
+        # testing_accuracy = tf.group(self.testing_opts)
+        with tf.Session(config=tf.ConfigProto(log_device_placement=log_device_placement,
+                                              intra_op_parallelism_threads=intra_op_parallelism_threads,
+                                              allow_soft_placement=allow_soft_placement)) as sess:
+            # restore model
+            saver = tf.train.Saver()
+            saver.restore(sess, self.model_path)
+            acc_sum = 0
+            # Keep training until reach max iterations
+            step = 0
+            sess.run(self.testing.iterator.initializer,
+                     feed_dict={self.testing.place_X: self.testing.data.input,
+                                self.testing.place_Seq: self.testing.data.seq_len,
+                                self.testing.place_Y: self.testing.data.label})
+
+            try:
+                while True:
+                    acc = sess.run(self.testing_opts)
+                    a = iter(acc)
+                    zips = izip(a, a)
+                    for acc, batch_size in zips:
+                        acc_sum += acc * batch_size
+                        step += batch_size
+                        log.info("Iter " + str(step) + ", Testing Accuracy= " + "{:.5f}".format(acc))
+            except tf.errors.OutOfRangeError:
+                print("End of dataset", file=sys.stderr)
+
+            sess.close()
+            # Calculate average accuracy
+            print("Average Accuracy = {:.3f}".format(acc_sum / step * 100), file=sys.stderr)
+
+        if self.args.save:
+            file_list = self.get_model_files(args.config_path)
+            final_acc = str(acc_sum / step * 100)[:5] + "%" + datetime.now().strftime("%m%b-%d-%Hh-%Mm")
+            # print(file_list)
+            print("Uploading Model to neuralnet-accuracy s3 Bucket", file=sys.stderr)
+            upload_model("neuralnet-accuracy", file_list, final_acc)
+
     def profile_training(self, sess, writer, run_metadata, run_options):
         """Expensive profile step so we can track speed of operations of the model"""
-        _, acc, summary, cost, global_step = sess.run(
-            [self.train_op, self.model.accuracy, self.model.train_summary,
-             self.model.cost, self.global_step],
+        _, summary, global_step = sess.run(
+            [self.train_op, self.summaries, self.global_step],
             run_metadata=run_metadata, options=run_options)
         # add summary statistics
         writer.add_summary(summary, global_step)
@@ -271,21 +406,8 @@ class TrainModel(object):
         if self.args.save_trace:
             self.chrome_trace(run_metadata, self.args.trace_name)
 
-    def report_summary_stats(self, sess, writer, run_metadata, run_options):
-        # Calculate batch loss and accuracy for training
-        summary, global_step, train_acc, train_cost = sess.run([self.model.train_summary,
-                                                                self.global_step,
-                                                                self.model.accuracy, self.model.cost],
-                                                               run_metadata=run_metadata,
-                                                               options=run_options)
-        # add summary statistics
-        writer.add_summary(summary, global_step)
-        # print summary stats
-        print("Iter " + str(global_step) + ", Training Cost= " +
-              "{:.6f}".format(train_cost) + ", Training Accuracy= " +
-              "{:.5f}".format(train_acc), file=sys.stderr)
-
-    def chrome_trace(self, metadata_proto, f_name):
+    @staticmethod
+    def chrome_trace(metadata_proto, f_name):
         """Save a chrome trace json file.
         To view json vile go to - chrome://tracing/
         """
@@ -293,6 +415,24 @@ class TrainModel(object):
         ctf = time_line.generate_chrome_trace_format()
         with open(f_name, 'w') as file1:
             file1.write(ctf)
+
+    def report_summary_stats(self, sess, writer):
+        # Calculate batch loss and accuracy for training
+        sum_stats, global_step, val_acc, val_cost, train_acc, train_cost = sess.run([self.summaries, self.global_step,
+                                                                                     self.validation_model.accuracy,
+                                                                                     self.validation_model.cost,
+                                                                                     self.training_model.accuracy,
+                                                                                     self.training_model.cost])
+
+        # add summary stats to tensorboard
+        writer.add_summary(sum_stats, global_step)
+        # print summary stats
+        print("Iter " + str(global_step) + ", Training Cost= " +
+              "{:.6f}".format(train_cost) + ", Validation Cost= " +
+              "{:.5f}".format(val_cost), file=sys.stderr)
+        print("Iter " + str(global_step) + ", Training Accuracy= " +
+              "{:.6f}".format(train_acc) + ",  Validation Accuracy= " +
+              "{:.5f}".format(val_acc), file=sys.stderr)
 
     def test_time(self):
         """Return true if it is time to save the model"""
@@ -302,75 +442,9 @@ class TrainModel(object):
             return True
         return False
 
-    # TODO refactor to work correctly
-    def call(self):
-        """Run a model from a saved model path"""
-        new_saver = tf.train.Saver()
-        translate = TrainingData.getkmer_dict(alphabet=self.args.alphabet, length=self.args.kmer_len, flip=True)
-        translate[1024] = "NNNNN"
-        with tf.Session() as sess:
-            # new_saver = tf.train.import_meta_graph(
-            # '/Users/andrewbailey/nanopore-RNN/logs/06Jun-26-18h-04m/my_test_model-0.meta')
-            new_saver.restore(sess, self.trained_model_path)
-            # graph = tf.get_default_graph()
-            coord = tf.train.Coordinator()
-            threads = tf.train.start_queue_runners(sess=sess, coord=coord)
-            self.testing.start_threads(sess)
-            evaluate_pred = sess.run([self.model.evaluate_pred])
-            kmers = [translate[index] for index in evaluate_pred[0]]
-            with open(self.args.inference_output, "w+") as f1:
-                f1.write("{}".format(kmers))
-
-            # print([translate[index] for index in evaluate_pred[0]])
-            # add summary statistics
-            coord.request_stop()
-            coord.join(threads)
-            sess.close()
-
-    def testing_accuracy(self, config_path, save=True, intra_op_parallelism_threads=8, log_device_placement=False):
-        """Get testing accuracy and save model along with configuration file on s3"""
-        if save:
-            aws_test = test_aws_connection(self.args.s3bucket)
-            assert aws_test is True, "Selected save to s3 option but cannot connect to specified bucket"
-        with tf.Session(config=tf.ConfigProto(log_device_placement=log_device_placement,
-                                              intra_op_parallelism_threads=intra_op_parallelism_threads)) as sess:
-            # restore model
-            saver = tf.train.Saver(max_to_keep=4, keep_checkpoint_every_n_hours=2)
-            saver.restore(sess, self.trained_model_path)
-
-            # save_model_path = os.path.join(self.args.trained_model, self.args.model_name)
-            # start queue
-            coord = tf.train.Coordinator()
-            threads = tf.train.start_queue_runners(sess=sess, coord=coord)
-            self.testing.start_threads(sess)
-
-            acc_sum = 0
-            # Keep training until reach max iterations
-            step = 0
-
-            while self.testing.files_left:
-                # Calculate batch loss and accuracy
-                acc = sess.run([self.model.accuracy])
-                # print(acc)
-                acc_sum += acc[0]
-                print("Iter " + str(step * self.args.batch_size) + ", Testing Accuracy= " + "{:.5f}".format(acc[0]))
-                step += 1
-
-            coord.request_stop()
-            coord.join(threads)
-            sess.close()
-            final_acc = str(acc_sum / step * 100)[:5] + "%" + datetime.now().strftime("%m%b-%d-%Hh-%Mm")
-            print("Average Accuracy = {:.3f}".format(acc_sum / step * 100))
-
-        if save:
-            file_list = self.get_model_files(config_path)
-            # print(file_list)
-            print("Uploading Model to neuralnet-accuracy s3 Bucket", file=sys.stderr)
-            upload_model("neuralnet-accuracy", file_list, final_acc)
-
     def get_model_files(self, *files):
         """Collect neccessary model files for upload"""
-        file_list = [self.trained_model_path + ".data-00000-of-00001", self.trained_model_path + ".index"]
+        file_list = [self.model_path + ".data-00000-of-00001", self.model_path + ".index"]
         for file1 in files:
             file_list.append(file1)
         return file_list
@@ -396,7 +470,7 @@ def average_gradients(tower_grads):
         grads = []
         for g, v in grad_and_vars:
             # print(g)
-            print(v)
+            # print(v)
             # print("Another gradient and variable")
             # Add 0 dimension to the gradients to represent the tower.
             expanded_g = tf.expand_dims(g, 0)
@@ -426,55 +500,66 @@ def test_for_nvidia_gpu(num_gpu):
             utilization = re.findall(r"Utilization.*?Gpu.*?(\d+).*?Memory.*?(\d+)",
                                      subprocess.check_output(["nvidia-smi", "-q"]),
                                      flags=re.MULTILINE | re.DOTALL)
-            assert len(utilization) >= num_gpu, "Not enough GPUs are available"
             indices = [i for i, x in enumerate(utilization) if x == ('0', '0')]
-            assert len(indices) >= num_gpu, "Only {0} GPU's are not being used,  change num_gpu parameter to {0}".format(
+            assert len(indices) >= num_gpu, "Only {0} GPU's are available, change num_gpu parameter to {0}".format(
                 len(indices))
-            return indices
+            return indices[:num_gpu]
         except OSError:
+            log.info("No GPU's found. Using CPU.")
             return False
 
 
-def main(in_opts=None):
+def optimistic_restore(session, save_file):
+    """ Implementation from: https://github.com/tensorflow/tensorflow/issues/312 """
+    print('Restoring model from:', save_file)
+    reader = tf.train.NewCheckpointReader(save_file)
+    saved_shapes = reader.get_variable_to_shape_map()
+    var_names = sorted([(var.name, var.name.split(':')[0]) for var in tf.global_variables()
+                        if var.name.split(':')[0] in saved_shapes])
+    restore_vars = []
+    name2var = dict(zip(map(lambda x:x.name.split(':')[0], tf.global_variables()), tf.global_variables()))
+    with tf.variable_scope('', reuse=True):
+        for var_name, saved_var_name in var_names:
+            curr_var = name2var[saved_var_name]
+            var_shape = curr_var.get_shape().as_list()
+            if var_shape == saved_shapes[saved_var_name]:
+                restore_vars.append(curr_var)
+    saver = tf.train.Saver(restore_vars)
+    saver.restore(session, save_file)
+
+def main():
     """Main docstring"""
     start = timer()
 
-    if in_opts is None:
-        # get arguments from command line or config file
-        command_line = CommandLine()
-        # get config and log files
-        config = command_line.args["config"]
-        print("Using config file {}".format(config), file=sys.stderr)
-        # define arguments with config or arguments
-        args = load_json(config)
-    else:
-        # if feeding arguments from main function
-        command_line = CommandLine(in_opts=in_opts)
-        args = command_line.args
-
-    # debug = command_line.debug
-
+    # get arguments from command line or config file
+    command_line = CommandLine()
+    # get config and log files
+    config_path = command_line.args["config"]
+    print("Using config file {}".format(config_path), file=sys.stderr)
+    # define arguments with config or arguments
+    args = load_json(config_path)
     try:
         # check arguments and define
-        args = command_line.check_args(args)
+        log.basicConfig(format='%(levelname)s:%(message)s', level=log.DEBUG)
+        args = command_line.check_args(args, config_path)
         config = args.config_path
+        debug(verbose=args.verbose)
         # Parameters
         if args.train:
-
-            train = TrainModel(args)
-            train.run_training(intra_op_parallelism_threads=8, log_device_placement=False, allow_soft_placement=True)
+            train = RunTensorflow(args)
+            train.train_model(intra_op_parallelism_threads=8, log_device_placement=False, allow_soft_placement=True)
             print("\n#  nanotensor - finished training \n", file=sys.stderr)
             print("\n#  nanotensor - finished training \n", file=sys.stderr)
 
         elif args.inference:
-            infer = TrainModel(args)
-            infer.call()
+            infer = RunTensorflow(args)
+            infer.run_model()
             print("\n#  nanotensor - finished inference \n", file=sys.stderr)
             print("\n#  nanotensor - finished inference \n", file=sys.stderr)
 
-        elif args.testing_accuracy:
-            test = TrainModel(args)
-            test.testing_accuracy(config, save=args.save_s3)
+        elif args.test:
+            test = RunTensorflow(args)
+            test.test_model(config)
             print("\n#  nanotensor - finished testing accuracy \n", file=sys.stderr)
             print("\n#  nanotensor - finished testing accuracy \n", file=sys.stderr)
 
@@ -489,7 +574,6 @@ def main(in_opts=None):
 
     except Usage as err:
         command_line.do_usage_and_die(err.msg)
-
 
 
 if __name__ == "__main__":

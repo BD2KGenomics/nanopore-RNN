@@ -1,0 +1,74 @@
+{
+  "CreateDataset": {
+    "dataset": "FullSignalSequence",
+    "training_dir": "/Users/andrewbailey/CLionProjects/nanopore-RNN/chiron/data/raw",
+    "validation_dir": "/Users/andrewbailey/CLionProjects/nanopore-RNN/chiron/data/raw",
+    "test_dir": "/Users/andrewbailey/CLionProjects/nanopore-RNN/chiron/data/raw",
+    "inference_dir": "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/signal_rna_data/10_reads",
+    "dataset_args": {
+      "batch_size": 20,
+      "n_epochs": 5,
+      "seq_len": 100,
+      "shuffle_buffer_size": 10000,
+      "prefetch_buffer_size": 4,
+      "inference_output_dir": "/Users/andrewbailey/CLionProjects/nanopore-RNN/test_files/test_inference_output",
+      "alphabet": 5,
+      "max_event_len": 50
+    }
+  },
+  "BuildGraph": {
+    "graph": "CtcLoss",
+    "graph_args": {
+    }
+  },
+  "network": [
+    {
+      "type": "residual_layer",
+      "name": "residual_layer_1",
+      "out_channel": 256,
+      "batchnorm": true
+    },
+    {
+      "type": "residual_layer",
+      "name": "residual_layer_2",
+      "out_channel": 256,
+      "batchnorm": false
+    },
+    {
+      "bias": 5.0,
+      "type": "blstm",
+      "name": "blstm_layer1",
+      "size": 100,
+      "concat": true
+
+    },
+    {
+      "bias": 1.0,
+      "type": "chiron_fnn",
+      "name": "chiron_fnn_layer",
+      "size": 64
+    }
+  ],
+  "train": true,
+  "inference": false,
+  "test": false,
+  "load_trained_model": true,
+  "use_checkpoint": true,
+  "trained_model": "/Users/andrewbailey/CLionProjects/nanopore-RNN/tensorboard/11Nov-19-01h-33m",
+  "trained_model_path": "/Users/andrewbailey/CLionProjects/nanopore-RNN/tensorboard/11Nov-19-01h-33m/small_test",
+  "trace_name": "timeline.json",
+  "save_trace": false,
+  "profile": false,
+  "save_s3": false,
+  "s3bucket": "neuralnet-accuracy",
+  "verbose": true,
+  "output_dir": "/Users/andrewbailey/CLionProjects/nanopore-RNN/logs",
+  "model_name": "small_test",
+  "num_gpu": 2,
+  "num_threads": 2,
+  "training_iters": 50,
+  "save_model": 1,
+  "record_step": 10,
+  "learning_rate": 0.001,
+  "file_ext": "signal"
+}

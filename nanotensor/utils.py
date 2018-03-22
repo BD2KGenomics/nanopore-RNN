@@ -14,7 +14,6 @@ This is a place for small scripts and utility functions
 # Author: Andrew Bailey, Rojin Safavi
 # History: 5/16/2017 Created
 from __future__ import print_function
-from timeit import default_timer as timer
 import sys
 import os
 import collections
@@ -27,6 +26,8 @@ from nanotensor.error import PathError
 import numpy as np
 from multiprocessing import Process, current_process, Manager
 import tarfile
+import logging as log
+from timeit import default_timer as timer
 
 
 def no_skipped_events(file_path):
@@ -226,7 +227,7 @@ def save_json(dict1, path):
     """Save a python object as a json file"""
     path = os.path.abspath(path)
     with open(path, 'w') as outfile:
-        json.dump(dict1, outfile, indent=4)
+        json.dump(dict1, outfile)
     assert os.path.isfile(path)
     return path
 
@@ -326,8 +327,26 @@ def tarball_files(tar_name, file_paths, output_dir='.', prefix=''):
     return tar_path
 
 
-# def main():
-#     """Test the methods"""
+def time_it(funct, *args):
+    """Basic timing function"""
+    start = datetime.now()
+    funct(*args)
+    end = datetime.now()
+    return end-start
+
+
+def debug(verbose=False):
+    """Method for setting log statements with verbose or not verbose"""
+    assert type(verbose) is bool, "Verbose needs to be a boolean"
+    if verbose:
+        log.basicConfig(format="%(levelname)s: %(message)s", level=log.DEBUG)
+    else:
+        log.basicConfig(format="%(levelname)s: %(message)s")
+        log.info("This should not print.")
+
+
+def main():
+    """Test the methods"""
 #     start = timer()
 #     if test_aws_connection("neuralnet-accuracy"):
 #         print("True")
@@ -341,7 +360,9 @@ def tarball_files(tar_name, file_paths, output_dir='.', prefix=''):
 #     # dir_name = "06Jun-29-11h-30m-11.0%"
 #     # upload_file_to_s3("nanotensor-data", "/Users/andrewbailey/nanopore-RNN/test_files/create_training_files/07Jul-19-16h-48m/create_training_data.config.json", "create_training_data.config.json")
 #     # upload_model(bucket, file_list, dir_name)
-#
+    a = DotDict({"a": {"a": 2}})
+    a.a = DotDict(a.a)
+    print(a.a.a)
 #     stop = timer()
 #     print("Running Time = {} seconds".format(stop - start), file=sys.stderr)
 

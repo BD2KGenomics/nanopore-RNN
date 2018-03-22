@@ -3,8 +3,8 @@
 Place unit tests in this file
 """
 ########################################################################
-# File: tests.py
-#  executable: tests.py
+# File: utils_test.py
+#  executable: utils_test.py
 # Purpose: test functions
 #
 # Author: Andrew Bailey
@@ -27,12 +27,16 @@ class UtilsTest(unittest.TestCase):
 
     def test_list_dir(self):
         """Test if list_dir is working"""
-        canonical = '/'.join(os.path.abspath(__file__).split("/")[:-3])
-        canonical = os.path.join(canonical, "test_files/reference-sequences/")
-        expected = ["CCAGG_modified.bed", "ecoli_k12_mg1655.fa", "ecoli_k12_mg1655_modified.fa"]
+        canonical = '/'.join(os.path.abspath(__file__).split("/")[:-1])
+        canonical = os.path.join(canonical, "test_files/minion-reads/canonical")
+        # expected = ["CCAGG_modified.bed", "ecoli_k12_mg1655.fa", "ecoli_k12_mg1655_modified.fa"]
+        expected = \
+            ["miten_PC_20160820_FNFAD20259_MN17223_sequencing_run_AMS_158_R9_WGA_Ecoli_08_20_16_43623_ch100_read207_strand.fast5",
+            "miten_PC_20160820_FNFAD20259_MN17223_sequencing_run_AMS_158_R9_WGA_Ecoli_08_20_16_43623_ch100_read214_strand.fast5",
+            "miten_PC_20160820_FNFAD20259_MN17223_sequencing_run_AMS_158_R9_WGA_Ecoli_08_20_16_43623_ch100_read280_strand.fast5"]
         expected_files = sorted([os.path.join(canonical, x) for x in expected])
         self.assertEqual(sorted(list_dir(canonical)), expected_files)
-        self.assertEqual(list_dir(canonical, ext="bed"), expected_files[0:1])
+        self.assertEqual(sorted(list_dir(canonical, ext="fast5")), expected_files)
 
     def test_dot_dict(self):
         """Test DotDict class"""
@@ -75,16 +79,16 @@ class UtilsTest(unittest.TestCase):
         self.assertEqual(dict1["a"], merge_dict["a"])
         self.assertEqual(dict2["b"], merge_dict["b"])
 
-    def test_create_log_file(self):
-        """Test create_log_file"""
-        bad_log_file = os.path.join(self.HOME, "test_files/test_log_files/test.paths.log.txt")
-        old_log_file = os.path.join(self.HOME, "test_files/test_log_files/canonical.log.txt")
-        new_log_path = os.path.join(self.HOME, "test_files/test_log_files/test.canonical.log.txt")
-        self.assertRaises(AssertionError, create_log_file, self.HOME, bad_log_file, new_log_path)
-        log_path = create_log_file(self.HOME, old_log_file, new_log_path)
-        self.assertTrue(os.path.exists(log_path))
-        print(log_path)
-        os.remove(log_path)
+    # def test_create_log_file(self):
+    #     """Test create_log_file"""
+    #     bad_log_file = os.path.join(self.HOME, "test_files/test_log_files/test.paths.log.txt")
+    #     old_log_file = os.path.join(self.HOME, "test_files/test_log_files/canonical.log.txt")
+    #     new_log_path = os.path.join(self.HOME, "test_files/test_log_files/test.canonical.log.txt")
+    #     self.assertRaises(AssertionError, create_log_file, self.HOME, bad_log_file, new_log_path)
+    #     log_path = create_log_file(self.HOME, old_log_file, new_log_path)
+    #     self.assertTrue(os.path.exists(log_path))
+    #     print(log_path)
+    #     os.remove(log_path)
 
 if __name__ == '__main__':
     unittest.main()
