@@ -45,12 +45,13 @@ class DataPreparationTest(unittest.TestCase):
     def setUpClass(cls):
         super(DataPreparationTest, cls).setUpClass()
         cls.HOME = '/'.join(os.path.abspath(__file__).split("/")[:-3])
-        canonical_fast5 = os.path.join(cls.HOME,
+        cls.test_files = '/'.join(os.path.abspath(__file__).split("/")[:-1])
+        canonical_fast5 = os.path.join(cls.test_files,
                                        "test_files/minion-reads/canonical"
                                        "/miten_PC_20160820_FNFAD20259_MN17223_mux_scan_AMS_158_R9_WGA_Ecoli_08_20_16_83098_ch467_read35_strand.fast5")
         # canonical_fast5 = os.path.join(cls.HOME,\
         # "test_files/minion-reads/canonical/miten_PC_20160820_FNFAD20259_MN17223_sequencing_run_AMS_158_R9_WGA_Ecoli_08_20_16_43623_ch100_read104_strand.fast5")
-        canonical_tsv = os.path.join(cls.HOME,
+        canonical_tsv = os.path.join(cls.test_files,
                                      'test_files/signalalignment_files/test_canonical/3c6e13d8-2ecb-475a-9499'
                                      '-d0d5c48dd1c8_Basecall_2D_2d.sm.forward.short.tsv')
         # canonical_tsv = os.path.join(cls.HOME, \
@@ -201,13 +202,13 @@ class DataPreparationTest(unittest.TestCase):
         """test_create_kmer_labels"""
         # Template strand
         test_6999 = self.T.create_kmer_labels()[6999]
-        labels = os.path.join(self.HOME,
+        labels = os.path.join(self.test_files,
                               "test_files/data_prep_test_files/pos6999-template-label-prob.pkl")
         pos6999 = load_pickle(labels)
         self.assertEqual(sorted(pos6999), sorted(test_6999))
         # Complement strand
         test_55 = self.C.create_kmer_labels()[55]
-        labels = os.path.join(self.HOME,
+        labels = os.path.join(self.test_files,
                               "test_files/data_prep_test_files/pos55-complement-label-prob.pkl")
         pos55 = load_pickle(labels)
         self.assertEqual(sorted(pos55), sorted(test_55))
@@ -215,7 +216,7 @@ class DataPreparationTest(unittest.TestCase):
         self.assertRaises(AssertionError, self.DEEPNANO.create_kmer_labels)
         # # CATEGORICAL
         test_6998 = self.CATEGORICAL.create_kmer_labels()[6998]
-        labels = os.path.join(self.HOME,
+        labels = os.path.join(self.test_files,
                               "test_files/data_prep_test_files/pos6998-CATEGORICAL-label-prob.pkl")
         pos6998 = load_pickle(labels)
         self.assertEqual(sorted(pos6998), sorted(test_6998))
