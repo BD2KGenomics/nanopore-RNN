@@ -33,7 +33,8 @@ class UtilsTest(unittest.TestCase):
         expected = \
             ["miten_PC_20160820_FNFAD20259_MN17223_sequencing_run_AMS_158_R9_WGA_Ecoli_08_20_16_43623_ch100_read207_strand.fast5",
             "miten_PC_20160820_FNFAD20259_MN17223_sequencing_run_AMS_158_R9_WGA_Ecoli_08_20_16_43623_ch100_read214_strand.fast5",
-            "miten_PC_20160820_FNFAD20259_MN17223_sequencing_run_AMS_158_R9_WGA_Ecoli_08_20_16_43623_ch100_read280_strand.fast5"]
+            "miten_PC_20160820_FNFAD20259_MN17223_sequencing_run_AMS_158_R9_WGA_Ecoli_08_20_16_43623_ch100_read280_strand.fast5",
+            "miten_PC_20160820_FNFAD20259_MN17223_mux_scan_AMS_158_R9_WGA_Ecoli_08_20_16_83098_ch467_read35_strand.fast5"]
         expected_files = sorted([os.path.join(canonical, x) for x in expected])
         self.assertEqual(sorted(list_dir(canonical)), expected_files)
         self.assertEqual(sorted(list_dir(canonical, ext="fast5")), expected_files)
