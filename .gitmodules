@@ -6,22 +6,12 @@
 	path = chiron
 	url = https://github.com/adbailey4/chiron.git
     branch = debug-dev
-[submodule "nanonet"]
-	path = nanonet
-	url = https://github.com/adbailey4/nanonet.git
-	branch = bailey_dev
-[submodule "python_utils"]
-	path = python_utils
-	url = https://github.com/adbailey4/python_utils
 [submodule "signalAlign_notebook"]
 	path = signalAlign_notebook
 	url = https://github.com/ArtRand/signalAlign_notebook
 [submodule "CytosineMethylationAnalysis"]
 	path = CytosineMethylationAnalysis
 	url = https://github.com/ArtRand/CytosineMethylationAnalysis
-[submodule "PyPore"]
-	path = PyPore
-	url = https://github.com/UCSC-nanopore-cgl/PyPore
 [submodule "BaseTensor"]
 	path = BaseTensor
 	url = https://github.com/adbailey4/BaseTensor.git
