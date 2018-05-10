@@ -24,6 +24,5 @@ clean:
 test:
 	cd signalAlign && make test
 	cd nanotensor && pytest
-	cd python_utils && pytest
 
 .PHONY: nanonet nanotensor signalalign python-recs marginAlign pypore chiron

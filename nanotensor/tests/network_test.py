@@ -3,23 +3,22 @@
 Place unit tests for network.py
 """
 ########################################################################
-# File: data_preparation_test.py
-#  executable: data_preparation_test.py
-# Purpose: data_preparation test functions
+# File: network_test.py
+#  executable: network_test.py
+# Purpose: network test functions
 #
-# Author: Rojin Safavi
+# Author: Rojin Safavi / Andrew Bailey
 # History: 08/01/2017 Created
 ########################################################################
 
-# import unittest
-# import os
-# import numpy as np
-# import threading
-# import time
-# from nanotensor.queue import DataQueue
-# from nanotensor.utils import list_dir
-# import tensorflow as tf
-# from nanotensor.network import BuildGraph
+import unittest
+import os
+import numpy as np
+import threading
+import time
+from nanotensor.utils import list_dir
+import tensorflow as tf
+from nanotensor.network import BuildGraph
 import unittest
 
 #
@@ -45,23 +44,15 @@ import unittest
 #                                network=[{"bias": 5.0, 'type': 'blstm', 'name': 'blstm_layer1', 'size': 128},
 #                                         {"bias": 1.0, 'type': 'tanh', 'name': 'subsample_level_1', 'size': 64},
 #                                         {"bias": 1.0, 'type': 'blstm', 'name': 'blstm_layer2', 'size': 128},
-#                                         {"bias": 1.0, 'type': 'tanh', 'name': 'subsample_level_2', 'size': 64}],
-#                                binary_cost=True)
-#         # cls.model2 = BuildGraph(n_input=cls.n_input, n_classes=cls.n_classes, learning_rate=0.001, n_steps=3,
-#         #                         forget_bias=5.0, x=cls.images_batch, y=cls.labels_batch,
-#         #                         network=[{"bias": 5.0, 'type': 'blstm', 'name': 'blstm_layer1', 'size': 128},
-#         #                                  {"bias": 1.0, 'type': 'tanh', 'name': 'subsample_level_1', 'size': 64},
-#         #                                  {"bias": 1.0, 'type': 'blstm', 'name': 'blstm_layer2', 'size': 128},
-#         #                                  {"bias": 1.0, 'type': 'tanh', 'name': 'subsample_level_2', 'size': 64}],
-#         #                         binary_cost=False)
+#                                         {"bias": 1.0, 'type': 'tanh', 'name': 'subsample_level_2', 'size': 64}])
 #
 #     def test_init(self):
 #         """Test init of BuildGraph class"""
 #         self.assertIsInstance(self.model, BuildGraph)
 #
 #     def test_prediction_function(self):
-#         self.model.pred = tf.constant([[1, 4, 3], [15, 5, 5]])  # 1,0
-#         self.model.y_flat = tf.constant([[1, 4, 1], [7, 1, 1]])  # 1,0
+#         # self.model.pred = tf.constant([[1, 4, 3], [15, 5, 5]])  # 1,0
+#         # self.model.y_flat = tf.constant([[1, 4, 1], [7, 1, 1]])  # 1,0
 #         init = tf.global_variables_initializer()
 #         sess = tf.Session()
 #         sess.run(init)
