@@ -107,6 +107,7 @@ def project_folder():
         PathError("Path to directory does not exist!")
 
 
+# TODO this does not work
 def get_project_file(local_path):
     """Get the path to an internal project file"""
     if local_path != "":

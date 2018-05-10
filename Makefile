@@ -1,5 +1,5 @@
 
-all : python-recs signalalign chiron nanotensor
+all : python-recs basetensor signalalign chiron nanonet nanotensor
 
 python-recs:
 	pip install -U setuptools
@@ -9,20 +9,27 @@ marginAlign:
 	pip install -U numpy
 	pip install -U h5py
 
-signalalign:
-	cd signalAlign && make && python setup.py install
 
 nanotensor:
 	python setup.py install
 
 chiron:
-	cd chiron && python setup.py install
+	cd submodules && cd chiron && python setup.py install
+
+nanonet:
+	cd submodules && cd nanonet && python setup.py install
+
+signalalign:
+	cd submodules && cd signalAlign && make && python setup.py install
+
+basetensor:
+	cd submodules && cd basetensor && python setup.py install
 
 clean:
-	cd signalAlign && make clean
+	cd submodules && cd signalAlign && make clean
 
 test:
-	cd signalAlign && make test
+	cd submodules && cd signalAlign && make test
 	cd nanotensor && pytest
 
 .PHONY: nanonet nanotensor signalalign python-recs marginAlign pypore chiron

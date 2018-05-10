@@ -15,7 +15,7 @@ import subprocess
 import collections
 import re
 from timeit import default_timer as timer
-from nanonet.fast5 import Fast5
+from signalalign.fast5 import Fast5
 from nanotensor.utils import list_dir, DotDict
 
 alignment_stats = collections.namedtuple('alignment_stats', ['total_reads', 'unaligned_reads', 'deletion_rate',

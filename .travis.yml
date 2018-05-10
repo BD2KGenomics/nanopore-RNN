@@ -64,6 +64,7 @@ install:
 #- make test
 - export PATH=$PATH:$PWD/signalAlign/bin
 - export BOTO_CONFIG=/dev/null
+- export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$PWD/signalAlign/htslib
 - make test
 #- pip install -U numpy
 #- pip install -U h5py

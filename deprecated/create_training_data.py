@@ -15,7 +15,7 @@ import os
 import sys
 from timeit import default_timer as timer
 
-from nanotensor.data_preparation import TrainingData
+from nanotensor.deprecated.data_preparation import TrainingData
 from nanotensor.error import Usage
 from nanotensor.utils import merge_two_dicts, load_json, DotDict, multiprocess_data, create_time_directory, \
     save_config_file, tarball_files, list_dir, upload_file_to_s3

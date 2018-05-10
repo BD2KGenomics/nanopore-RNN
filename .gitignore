@@ -263,7 +263,6 @@ test_files/test_minion.fa
 test_files/test_minion.fastq
 test_files/train_signal_align/
 test_files/unique.sorted.bam
-nanonet/
 test_files/create_training_files1/
 test_files/fake_rna.bed
 test_files/reference-sequences/buggy_references.fa

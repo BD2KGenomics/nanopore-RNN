@@ -21,7 +21,7 @@ import random
 import re
 import numpy as np
 from Bio.Seq import Seq
-from utils import get_project_file, project_folder
+from nanotensor.utils import get_project_file, project_folder
 from pandas import DataFrame
 # from Bio.Alphabet import generic_dna
 

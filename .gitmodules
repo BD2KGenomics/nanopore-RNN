@@ -1,17 +1,20 @@
 [submodule "signalAlign"]
-	path = signalAlign
+	path = submodules/signalAlign
 	url = https://github.com/UCSC-nanopore-cgl/signalAlign.git
 	branch = bailey_dev
 [submodule "chiron"]
-	path = chiron
+	path = submodules/chiron
 	url = https://github.com/adbailey4/chiron.git
     branch = debug-dev
 [submodule "signalAlign_notebook"]
-	path = signalAlign_notebook
+	path = submodules/signalAlign_notebook
 	url = https://github.com/ArtRand/signalAlign_notebook
 [submodule "CytosineMethylationAnalysis"]
-	path = CytosineMethylationAnalysis
+	path = submodules/CytosineMethylationAnalysis
 	url = https://github.com/ArtRand/CytosineMethylationAnalysis
 [submodule "BaseTensor"]
-	path = BaseTensor
+	path = submodules/BaseTensor
 	url = https://github.com/adbailey4/BaseTensor.git
+[submodule "submodules/nanonet"]
+	path = submodules/nanonet
+	url = https://github.com/adbailey4/nanonet

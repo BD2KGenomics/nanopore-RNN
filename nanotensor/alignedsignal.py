@@ -17,10 +17,10 @@ from collections import defaultdict, namedtuple
 from py3helpers.utils import check_numpy_table
 from py3helpers.seq_tools import ReferenceHandler, initialize_pysam_wrapper, ReverseComplement, get_minimap_alignment
 
-from nanotensor.fast5 import Fast5
-from nanotensor.mea_algorithm import maximum_expected_accuracy_alignment, mea_slow, \
-    mea_slower, create_random_prob_matrix, get_mea_params_from_events, match_events_with_signalalign
-from nanotensor.event_detection import time_to_index
+from signalalign.fast5 import Fast5
+# from signalalign.mea_algorithm import maximum_expected_accuracy_alignment, mea_slow, \
+#     mea_slower, create_random_prob_matrix, get_mea_params_from_events, match_events_with_signalalign
+from signalalign.event_detection import time_to_index
 from itertools import islice
 
 
