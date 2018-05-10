@@ -17,6 +17,7 @@ chiron:
 	cd submodules && cd chiron && python setup.py install
 
 nanonet:
+	cd submodules && cd nanonet && head -500 setup.py
 	cd submodules && cd nanonet && python setup.py install
 
 signalalign:
