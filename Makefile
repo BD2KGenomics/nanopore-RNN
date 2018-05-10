@@ -23,7 +23,7 @@ signalalign:
 	cd submodules && cd signalAlign && make && python setup.py install
 
 basetensor:
-	cd submodules && cd basetensor && python setup.py install
+	cd submodules && cd BaseTensor && python setup.py install
 
 clean:
 	cd submodules && cd signalAlign && make clean
