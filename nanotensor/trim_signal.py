@@ -19,7 +19,7 @@ from nanotensor.utils import list_dir
 from Bio import pairwise2
 from Bio.pairwise2 import format_alignment
 from collections import defaultdict
-from py3helpers.mappers import read_fasta
+from py3helpers.seq_tools import read_fasta
 
 raw_labels = collections.namedtuple('raw_labels', ['start', 'length', 'base'])
 

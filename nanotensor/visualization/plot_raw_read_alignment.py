@@ -20,8 +20,8 @@ import scipy.stats as stats
 import seaborn as sns
 from py3helpers.utils import list_dir
 from PyPore.parsers import SpeedyStatSplit
-from nanonet.eventdetection.filters import minknow_event_detect
-from nanotensor.fast5 import Fast5
+from signalalign.event_detection import minknow_event_detect
+from signalalign.fast5 import Fast5
 from nanotensor.event_detection import resegment_reads, create_anchor_kmers, index_to_time_rna_basecall
 
 

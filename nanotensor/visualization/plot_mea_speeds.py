@@ -19,7 +19,7 @@ import numpy as np
 import scipy.stats as stats
 from py3helpers.utils import list_dir, time_it
 
-from nanotensor.mea_algorithm import maximum_expected_accuracy_alignment, mea_slow, \
+from signalalign.mea_algorithm import maximum_expected_accuracy_alignment, mea_slow, \
     mea_slower, create_random_prob_matrix
 
 

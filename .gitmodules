@@ -1,7 +1,6 @@
 [submodule "signalAlign"]
 	path = submodules/signalAlign
 	url = https://github.com/UCSC-nanopore-cgl/signalAlign.git
-	branch = bailey_dev
 [submodule "chiron"]
 	path = submodules/chiron
 	url = https://github.com/adbailey4/chiron.git
